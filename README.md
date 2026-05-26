@@ -57,6 +57,8 @@ The backend runs on `http://localhost:3001`.
 The example env files document required and optional values. Keep real secrets
 out of git; frontend values must be public `VITE_` values only.
 
+For the **full list of `VITE_` variables the client reads** — including required values, contract IDs, optional integrations, and a production deployment checklist — see [docs/frontend-env-reference.md](./docs/frontend-env-reference.md).
+
 ### API Documentation
 
 The backend provides OpenAPI documentation:
