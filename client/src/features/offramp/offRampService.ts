@@ -33,6 +33,7 @@ export class OffRampService {
             bankAccount: request.bankAccount,
             memo: this.generateMemo(request),
             createdAt: Date.now(),
+            request, // Store request for potential retries
         };
 
         // Validate destination address and memo
@@ -41,10 +42,42 @@ export class OffRampService {
         // Store transaction locally
         this.saveTransaction(transaction);
 
-        // Call off-ramp provider API
-        await this.submitToProvider(transaction, request);
+        try {
+            // Call off-ramp provider API
+            await this.submitToProvider(transaction, request);
+        } catch (error) {
+            transaction.status = "failed";
+            transaction.errorMessage = error instanceof Error ? error.message : "Submission failed";
+            transaction.isRetryable = this.checkIfRetryable(error);
+            this.saveTransaction(transaction);
+            throw error;
+        }
 
         return transaction;
+    }
+
+    /**
+     * Retry a failed transaction
+     */
+    async retryTransaction(txId: string): Promise<OffRampTransaction> {
+        const tx = this.loadTransaction(txId);
+        if (!tx || !tx.request) throw new Error("Transaction not found or missing request data");
+
+        tx.status = "pending";
+        tx.errorMessage = undefined;
+        tx.isRetryable = undefined;
+        this.saveTransaction(tx);
+
+        try {
+            await this.submitToProvider(tx, tx.request);
+            return tx;
+        } catch (error) {
+            tx.status = "failed";
+            tx.errorMessage = error instanceof Error ? error.message : "Retry failed";
+            tx.isRetryable = this.checkIfRetryable(error);
+            this.saveTransaction(tx);
+            throw error;
+        }
     }
 
     /**
@@ -54,12 +87,19 @@ export class OffRampService {
         const tx = this.loadTransaction(txId);
         if (!tx) return null;
 
+        // Don't poll if already in a terminal success state
+        if (tx.status === "completed") return tx;
+
         try {
             const response = await fetch(`${this.baseUrl}/transactions/${txId}`, {
                 headers: { Authorization: `Bearer ${this.apiKey}` },
             });
 
-            if (!response.ok) throw new Error(`Status code: ${response.status}`);
+            if (!response.ok) {
+                // If 404, maybe it's not yet indexed by the provider, stay pending
+                if (response.status === 404) return tx;
+                throw new Error(`Status code: ${response.status}`);
+            }
 
             const data = (await response.json()) as { status: string; error?: string };
             const status = this.mapProviderStatus(data.status);
@@ -67,18 +107,42 @@ export class OffRampService {
             tx.status = status;
             if (status === "completed") {
                 tx.completedAt = Date.now();
+                tx.isRetryable = false;
             } else if (status === "failed") {
-                tx.errorMessage = data.error || "Unknown error";
+                tx.errorMessage = data.error || "Provider reported failure";
+                tx.isRetryable = false; // Usually terminal once provider says "failed"
             }
 
             this.saveTransaction(tx);
             return tx;
         } catch (error) {
-            tx.status = "failed";
-            tx.errorMessage = error instanceof Error ? error.message : "Poll failed";
+            // If it's a transient error (e.g. network), keep status as is but log error
+            const isRetryable = this.checkIfRetryable(error);
+            if (!isRetryable) {
+                tx.status = "failed";
+                tx.errorMessage = error instanceof Error ? error.message : "Poll failed";
+            }
+            tx.isRetryable = isRetryable;
             this.saveTransaction(tx);
             return tx;
         }
+    }
+
+    private checkIfRetryable(error: unknown): boolean {
+        if (!(error instanceof Error)) return true;
+        const msg = error.message.toLowerCase();
+        
+        // Terminal errors
+        if (msg.includes("invalid") || msg.includes("forbidden") || msg.includes("unauthorized")) {
+            return false;
+        }
+        
+        // Transient errors
+        if (msg.includes("timeout") || msg.includes("network") || msg.includes("500") || msg.includes("429")) {
+            return true;
+        }
+        
+        return true; // Default to retryable for safety
     }
 
     /**
@@ -87,7 +151,7 @@ export class OffRampService {
     getAllTransactions(): OffRampTransaction[] {
         try {
             const stored = localStorage.getItem(STORAGE_KEY);
-            return stored ? (JSON.parse(stored) as OffRampTransaction[]) : [];
+            return stored ? (JSON.parse(stored, this.bigIntReviver) as OffRampTransaction[]) : [];
         } catch {
             return [];
         }
@@ -168,7 +232,18 @@ export class OffRampService {
         } else {
             all.push(tx);
         }
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(all, this.bigIntReplacer));
+    }
+
+    private bigIntReplacer(_key: string, value: any): any {
+        return typeof value === "bigint" ? value.toString() + "n" : value;
+    }
+
+    private bigIntReviver(_key: string, value: any): any {
+        if (typeof value === "string" && /^\d+n$/.test(value)) {
+            return BigInt(value.slice(0, -1));
+        }
+        return value;
     }
 
     private loadTransaction(txId: string): OffRampTransaction | null {

@@ -23,6 +23,8 @@ export interface OffRampTransaction {
     createdAt: number;
     completedAt?: number;
     errorMessage?: string;
+    isRetryable?: boolean;
+    request?: WithdrawalRequest;
 }
 
 export interface WithdrawalRequest {
