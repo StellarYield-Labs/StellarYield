@@ -15,6 +15,8 @@ export interface GovernanceForecastInput {
     exposurePct: number;
     feeRatePct: number;
     tvlUsd: number;
+    riskScore?: number;
+    vaultCount?: number;
   };
 }
 
@@ -32,6 +34,13 @@ export interface GovernanceForecastResult {
   parameters: Record<string, number>;
   baseline: GovernanceForecastInput["baseline"];
   forecast: ForecastDelta;
+  impactSummary: {
+    headline: string;
+    riskLevel: "low" | "medium" | "high";
+    noOp: boolean;
+    irreversible: boolean;
+    affectedVaults: string[];
+  };
   warnings: string[];
   disclaimer: string;
 }
@@ -168,6 +177,62 @@ function forecastRewardChange(
   };
 }
 
+function buildImpactSummary(
+  input: GovernanceForecastInput,
+  delta: ForecastDelta,
+  warnings: string[],
+): GovernanceForecastResult["impactSummary"] {
+  const noOp =
+    Math.abs(delta.yieldDeltaPct) < 0.0001 &&
+    Math.abs(delta.exposureDeltaPct) < 0.0001 &&
+    Math.abs(delta.feeRevenueDeltaUsd) < 0.01 &&
+    Math.abs(delta.projectedFeeRatePct - input.baseline.feeRatePct) < 0.0001;
+
+  const irreversible =
+    (input.proposalType === "fee_change" &&
+      (delta.projectedFeeRatePct === 0 || delta.projectedFeeRatePct === 100)) ||
+    (input.proposalType === "allocation_limit" &&
+      delta.projectedExposurePct === 0);
+
+  const baselineRisk = input.baseline.riskScore ?? 50;
+  const projectedRisk =
+    baselineRisk +
+    Math.max(0, delta.projectedExposurePct - input.baseline.exposurePct) * 0.6 +
+    (input.proposalType === "strategy_param" ? 8 : 0) +
+    (input.proposalType === "reward_change" ? 4 : 0);
+
+  const riskLevel =
+    warnings.length > 0 || projectedRisk >= 75
+      ? "high"
+      : projectedRisk >= 55
+        ? "medium"
+        : "low";
+
+  const affectedVaultCount = Math.max(1, input.baseline.vaultCount ?? 3);
+  const affectedVaults = Array.from(
+    { length: Math.min(affectedVaultCount, 4) },
+    (_, index) => `Vault-${index + 1}`,
+  );
+
+  let headline = "Proposal impact appears manageable.";
+  if (noOp) {
+    headline = "Proposal is effectively a no-op against the current baseline.";
+  } else if (riskLevel === "high") {
+    headline =
+      "Proposal may materially increase user risk or reduce reversibility.";
+  } else if (delta.yieldDeltaPct > 0) {
+    headline = "Proposal projects a positive yield change with bounded risk.";
+  }
+
+  return {
+    headline,
+    riskLevel,
+    noOp,
+    irreversible,
+    affectedVaults,
+  };
+}
+
 export function forecastGovernanceProposal(
   input: GovernanceForecastInput,
 ): GovernanceForecastResult {
@@ -205,6 +270,7 @@ export function forecastGovernanceProposal(
     parameters: input.parameters,
     baseline: input.baseline,
     forecast: result.delta,
+    impactSummary: buildImpactSummary(input, result.delta, result.warnings),
     warnings: result.warnings,
     disclaimer: DISCLAIMER,
   };

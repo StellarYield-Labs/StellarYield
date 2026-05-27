@@ -28,6 +28,18 @@ export function formatSummary(event: NotificationEvent): string {
     }
     case 'watchlist': {
       const e = event as WatchlistEvent;
+      if (e.trigger === 'apy_change') {
+        return `Watchlist APY moved from ${e.previousValue} to ${e.currentValue} for vault ${e.vaultId}`;
+      }
+      if (e.trigger === 'risk_change') {
+        return `Watchlist risk score changed from ${e.previousValue} to ${e.currentValue} for vault ${e.vaultId}`;
+      }
+      if (e.trigger === 'freshness_change') {
+        return `Watchlist freshness lag changed from ${e.previousValue}h to ${e.currentValue}h for vault ${e.vaultId}`;
+      }
+      if (e.trigger === 'alert_triggered') {
+        return `Watchlist alert triggered for vault ${e.vaultId}`;
+      }
       return `Watchlist condition '${e.conditionDescription}' met for vault ${e.vaultId}`;
     }
   }

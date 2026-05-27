@@ -1,14 +1,17 @@
+import "@testing-library/jest-dom";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import AlertsModal from "./AlertsModal";
 import * as api from "./alertsApi";
-import type { UserAlert } from "./types";
+import type { UserAlert, WatchlistDigestPreference } from "./types";
 
 vi.mock("./alertsApi");
 
 const mockFetch = vi.mocked(api.fetchAlerts);
 const mockCreate = vi.mocked(api.createAlert);
 const mockDelete = vi.mocked(api.deleteAlert);
+const mockFetchDigestPreference = vi.mocked(api.fetchDigestPreference);
+const mockSaveDigestPreference = vi.mocked(api.saveDigestPreference);
 
 const SAMPLE_ALERT: UserAlert = {
   id: "a1",
@@ -23,6 +26,16 @@ const SAMPLE_ALERT: UserAlert = {
 };
 
 const VAULT_OPTIONS = ["Blend", "Soroswap"];
+
+const DEFAULT_DIGEST_PREFERENCE: WatchlistDigestPreference = {
+  enabled: false,
+  scheduleMode: "weekly",
+  eventThreshold: 2,
+  watchedVaultIds: ["Blend"],
+  minApyDeltaPct: 0.5,
+  minRiskDelta: 5,
+  maxFreshnessHours: 12,
+};
 
 function renderModal(isOpen = true) {
   const onClose = vi.fn();
@@ -43,6 +56,8 @@ describe("AlertsModal", () => {
     mockFetch.mockResolvedValue([]);
     mockCreate.mockResolvedValue(SAMPLE_ALERT);
     mockDelete.mockResolvedValue(undefined);
+    mockFetchDigestPreference.mockResolvedValue(DEFAULT_DIGEST_PREFERENCE);
+    mockSaveDigestPreference.mockResolvedValue(DEFAULT_DIGEST_PREFERENCE);
   });
 
   it("renders nothing when closed", () => {
@@ -72,8 +87,8 @@ describe("AlertsModal", () => {
     mockFetch.mockResolvedValue([SAMPLE_ALERT]);
     renderModal();
     await waitFor(() => expect(mockFetch).toHaveBeenCalledWith("GTEST"));
+    await waitFor(() => expect(mockFetchDigestPreference).toHaveBeenCalledWith("GTEST"));
     const blendItems = await screen.findAllByText("Blend");
-    // At least one should be the alert list item (p tag), not just the option
     expect(blendItems.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -142,5 +157,47 @@ describe("AlertsModal", () => {
     renderModal();
     await waitFor(() => expect(mockFetch).toHaveBeenCalled());
     expect(await screen.findByText("triggered")).toBeTruthy();
+  });
+
+  it("loads and displays watchlist digest preferences", async () => {
+    mockFetchDigestPreference.mockResolvedValue({
+      ...DEFAULT_DIGEST_PREFERENCE,
+      enabled: true,
+      watchedVaultIds: ["Blend", "Soroswap"],
+    });
+
+    renderModal();
+
+    expect(await screen.findByLabelText("Enable watchlist digest")).toBeChecked();
+    expect(screen.getByLabelText("Watch vault Blend")).toBeChecked();
+    expect(screen.getByLabelText("Watch vault Soroswap")).toBeChecked();
+  });
+
+  it("saves watchlist digest preferences", async () => {
+    renderModal();
+
+    await waitFor(() => expect(mockFetchDigestPreference).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByLabelText("Enable watchlist digest"));
+    fireEvent.change(screen.getByLabelText("Digest schedule mode"), {
+      target: { value: "daily" },
+    });
+    fireEvent.change(screen.getByLabelText("Digest event threshold"), {
+      target: { value: "4" },
+    });
+    fireEvent.click(screen.getByLabelText("Watch vault Soroswap"));
+    fireEvent.click(screen.getByText("Save Digest Preferences"));
+
+    await waitFor(() =>
+      expect(mockSaveDigestPreference).toHaveBeenCalledWith(
+        "GTEST",
+        expect.objectContaining({
+          enabled: true,
+          scheduleMode: "daily",
+          eventThreshold: 4,
+          watchedVaultIds: expect.arrayContaining(["Blend", "Soroswap"]),
+        }),
+      ),
+    );
   });
 });

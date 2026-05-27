@@ -49,6 +49,8 @@ function makeWatchlist(overrides: Partial<WatchlistEvent> = {}): WatchlistEvent 
     eventType: 'watchlist',
     walletAddress: '0xWallet',
     vaultId: 'vault-1',
+    trigger: 'alert_triggered',
+    severity: 'warning',
     conditionDescription: 'TVL below threshold',
     triggeredAt: new Date().toISOString(),
     recordedAt: new Date().toISOString(),
@@ -280,7 +282,7 @@ describe('DigestFormatter', () => {
 
   test('formatSummary for WatchlistEvent matches exact format', () => {
     const event = makeWatchlist({ conditionDescription: 'TVL below threshold', vaultId: 'vault-7' });
-    expect(formatSummary(event)).toBe("Watchlist condition 'TVL below threshold' met for vault vault-7");
+    expect(formatSummary(event)).toBe('Watchlist alert triggered for vault vault-7');
   });
 
   test('formatDigest returns DigestPayload with correct walletAddress, scheduleMode, clusters', () => {

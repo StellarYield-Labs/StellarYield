@@ -11,6 +11,7 @@ import { YieldFlowCanvas } from "../visualizations";
 import PortfolioVisualizer from "../visualizer/PortfolioVisualizer";
 import { ExposureMap } from "../../portfolio/ExposureMap";
 import PresetsPanel from "../../features/presets/PresetsPanel";
+import UnifiedActivityTimeline from "./UnifiedActivityTimeline";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -238,6 +239,8 @@ export default function PortfolioDashboard({ walletAddress }: PortfolioDashboard
       <div className="glass-panel p-6">
         <PresetsPanel walletAddress={walletAddress} />
       </div>
+
+      <UnifiedActivityTimeline walletAddress={walletAddress} />
 
       {/* Transaction History */}
       <div className="glass-panel p-6">

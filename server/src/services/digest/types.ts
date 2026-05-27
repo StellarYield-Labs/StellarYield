@@ -7,6 +7,11 @@ export type EventType = 'alert' | 'recommendation' | 'watchlist';
 export type ScheduleMode = 'daily' | 'weekly' | 'event_threshold';
 
 export type Decision = 'MIGRATE' | 'HOLD' | 'DEFER';
+export type WatchlistDigestTrigger =
+  | 'apy_change'
+  | 'risk_change'
+  | 'freshness_change'
+  | 'alert_triggered';
 
 // ─── Notification Event types ─────────────────────────────────────────────────
 
@@ -39,7 +44,11 @@ export interface WatchlistEvent {
   eventType: 'watchlist';
   walletAddress: string;
   vaultId: string;
+  trigger: WatchlistDigestTrigger;
+  severity: 'info' | 'warning' | 'critical';
   conditionDescription: string;
+  previousValue?: number | null;
+  currentValue?: number | null;
   triggeredAt: string; // ISO 8601
   recordedAt: string;  // ISO 8601
 }
@@ -86,6 +95,16 @@ export interface ScheduleConfig {
   dayOfWeek?: number;       // 0–6, for weekly
   eventThreshold?: number;  // 1–100, for event_threshold
   updatedAt: string;        // ISO 8601
+}
+
+export interface WatchlistDigestPreference {
+  enabled: boolean;
+  scheduleMode: ScheduleMode;
+  eventThreshold: number;
+  watchedVaultIds: string[];
+  minApyDeltaPct: number;
+  minRiskDelta: number;
+  maxFreshnessHours: number;
 }
 
 // ─── Result types ─────────────────────────────────────────────────────────────

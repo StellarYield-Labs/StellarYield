@@ -1,5 +1,10 @@
 import { RewardScheduleModel } from "../models/RewardSchedule";
 import { RewardSchedule } from "../types/rewards";
+import {
+  summarizeRewardScheduleHealth,
+  type RewardScheduleHealthSummary,
+  type RewardScheduleMonitorInput,
+} from "./rewardScheduleHealth";
 
 export class RewardScheduleRegistry {
   /**
@@ -123,6 +128,25 @@ export class RewardScheduleRegistry {
     if (protocolTvl <= 0) return 0;
 
     return (totalYearlyValue / protocolTvl) * 100;
+  }
+
+  static summarizeSchedulesForMaintainers(
+    schedules: RewardScheduleMonitorInput[],
+    date: Date = new Date()
+  ): RewardScheduleHealthSummary[] {
+    return schedules
+      .map((schedule) => summarizeRewardScheduleHealth(schedule, { now: date }))
+      .sort((left, right) => left.daysUntilEnd - right.daysUntilEnd);
+  }
+
+  static async getMaintainerScheduleSummary(
+    date: Date = new Date()
+  ): Promise<RewardScheduleHealthSummary[]> {
+    const schedules = await RewardScheduleModel.find({}).lean();
+    return this.summarizeSchedulesForMaintainers(
+      schedules as RewardScheduleMonitorInput[],
+      date,
+    );
   }
 
   private static getConfidenceLevels(min: string): string[] {

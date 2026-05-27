@@ -28,3 +28,13 @@ export interface AlertPreferences {
   quietHoursStart: number;
   quietHoursEnd: number;
 }
+
+export interface WatchlistDigestPreference {
+  enabled: boolean;
+  scheduleMode: "daily" | "weekly" | "event_threshold";
+  eventThreshold: number;
+  watchedVaultIds: string[];
+  minApyDeltaPct: number;
+  minRiskDelta: number;
+  maxFreshnessHours: number;
+}

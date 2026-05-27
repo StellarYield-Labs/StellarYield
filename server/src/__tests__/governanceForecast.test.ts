@@ -103,6 +103,35 @@ describe("forecastGovernanceProposal — strategy_param", () => {
   });
 });
 
+describe("forecastGovernanceProposal — reward_change", () => {
+  it("flags incomplete reward changes as high risk", () => {
+    const result = forecastGovernanceProposal(
+      makeInput({
+        proposalType: "reward_change",
+        parameters: { rewardApyDelta: 1.2, isHighConfidence: 0 },
+      }),
+    );
+    expect(result.impactSummary.riskLevel).toBe("high");
+    expect(result.warnings.length).toBeGreaterThan(0);
+  });
+});
+
+describe("forecastGovernanceProposal — impact summary", () => {
+  it("marks fee proposals with unchanged inputs as no-op", () => {
+    const result = forecastGovernanceProposal(
+      makeInput({ parameters: { feeRatePct: baseBaseline.feeRatePct } }),
+    );
+    expect(result.impactSummary.noOp).toBe(true);
+  });
+
+  it("marks extreme fee changes as irreversible", () => {
+    const result = forecastGovernanceProposal(
+      makeInput({ parameters: { feeRatePct: 0 } }),
+    );
+    expect(result.impactSummary.irreversible).toBe(true);
+  });
+});
+
 describe("forecastGovernanceProposal — result structure", () => {
   it("includes proposalType, parameters, baseline, and forecast", () => {
     const result = forecastGovernanceProposal(makeInput());

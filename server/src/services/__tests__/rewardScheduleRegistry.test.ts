@@ -102,5 +102,51 @@ describe("RewardScheduleRegistry", () => {
         isActive: true
       }));
     });
+
+    it("summarizeSchedulesForMaintainers marks mixed schedule health states", () => {
+      const base = {
+        protocolName: "TestProtocol",
+        tokenSymbol: "TEST",
+        dailyEmission: 100,
+        startDate: new Date("2026-01-01T00:00:00Z"),
+        sourceProvenance: "Test source",
+        confidence: "high" as const,
+        events: [],
+      };
+
+      const summaries = RewardScheduleRegistry.summarizeSchedulesForMaintainers(
+        [
+          {
+            ...base,
+            isActive: true,
+            endDate: new Date("2026-07-01T00:00:00Z"),
+            lastClaimAt: new Date("2026-05-26T00:00:00Z"),
+          },
+          {
+            ...base,
+            isActive: true,
+            endDate: new Date("2026-05-30T00:00:00Z"),
+            lastClaimAt: new Date("2026-05-20T00:00:00Z"),
+          },
+          {
+            ...base,
+            isActive: true,
+            endDate: new Date("2026-05-01T00:00:00Z"),
+            lastClaimAt: new Date("2026-04-01T00:00:00Z"),
+          },
+          {
+            ...base,
+            isActive: false,
+            endDate: new Date("2026-07-01T00:00:00Z"),
+            lastClaimAt: new Date("2026-05-26T00:00:00Z"),
+          },
+        ],
+        new Date("2026-05-27T00:00:00Z"),
+      );
+
+      expect(summaries.map((summary) => summary.status)).toEqual(
+        expect.arrayContaining(["active", "expiring", "expired", "inactive"]),
+      );
+    });
   });
 });

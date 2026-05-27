@@ -11,6 +11,7 @@ const VALID_PROPOSAL_TYPES: ProposalType[] = [
   "fee_change",
   "allocation_limit",
   "strategy_param",
+  "reward_change",
 ];
 
 /**

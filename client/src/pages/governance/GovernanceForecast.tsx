@@ -2,7 +2,11 @@ import React, { useState } from "react";
 import { FlaskConical, AlertTriangle, TrendingUp, TrendingDown } from "lucide-react";
 import { apiUrl } from "../../lib/api";
 
-type ProposalType = "fee_change" | "allocation_limit" | "strategy_param";
+type ProposalType =
+  | "fee_change"
+  | "allocation_limit"
+  | "strategy_param"
+  | "reward_change";
 
 interface ForecastResult {
   proposalType: ProposalType;
@@ -12,6 +16,8 @@ interface ForecastResult {
     exposurePct: number;
     feeRatePct: number;
     tvlUsd: number;
+    riskScore?: number;
+    vaultCount?: number;
   };
   forecast: {
     yieldDeltaPct: number;
@@ -21,6 +27,13 @@ interface ForecastResult {
     projectedExposurePct: number;
     projectedFeeRatePct: number;
   };
+  impactSummary: {
+    headline: string;
+    riskLevel: "low" | "medium" | "high";
+    noOp: boolean;
+    irreversible: boolean;
+    affectedVaults: string[];
+  };
   warnings: string[];
   disclaimer: string;
 }
@@ -29,39 +42,44 @@ const PROPOSAL_TYPES: { value: ProposalType; label: string }[] = [
   { value: "fee_change", label: "Fee Change" },
   { value: "allocation_limit", label: "Allocation Limit" },
   { value: "strategy_param", label: "Strategy Parameter" },
+  { value: "reward_change", label: "Reward Schedule Change" },
 ];
+
+const PARAM_HINTS: Record<ProposalType, string> = {
+  fee_change: "feeRatePct",
+  allocation_limit: "maxConcentrationPct",
+  strategy_param: "apyMultiplier",
+  reward_change: "rewardApyDelta",
+};
 
 const GovernanceForecast: React.FC = () => {
   const [proposalType, setProposalType] = useState<ProposalType>("fee_change");
-  const [paramKey, setParamKey] = useState("feeRatePct");
+  const [paramKey, setParamKey] = useState(PARAM_HINTS.fee_change);
   const [paramValue, setParamValue] = useState("3");
   const [baseYield, setBaseYield] = useState("8");
   const [baseExposure, setBaseExposure] = useState("40");
   const [baseFeeRate, setBaseFeeRate] = useState("2");
   const [baseTvl, setBaseTvl] = useState("10000000");
+  const [baseRisk, setBaseRisk] = useState("52");
+  const [vaultCount, setVaultCount] = useState("4");
   const [result, setResult] = useState<ForecastResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const PARAM_HINTS: Record<ProposalType, string> = {
-    fee_change: "feeRatePct",
-    allocation_limit: "maxConcentrationPct",
-    strategy_param: "apyMultiplier",
-  };
-
-  function handleTypeChange(t: ProposalType) {
-    setProposalType(t);
-    setParamKey(PARAM_HINTS[t]);
+  function handleTypeChange(type: ProposalType) {
+    setProposalType(type);
+    setParamKey(PARAM_HINTS[type]);
     setResult(null);
   }
 
   async function handleForecast() {
     setError("");
-    const pv = parseFloat(paramValue);
-    if (!Number.isFinite(pv)) {
+    const parsedValue = parseFloat(paramValue);
+    if (!Number.isFinite(parsedValue)) {
       setError("Parameter value must be a number");
       return;
     }
+
     setLoading(true);
     try {
       const res = await fetch(apiUrl("/api/governance/forecast"), {
@@ -69,20 +87,23 @@ const GovernanceForecast: React.FC = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           proposalType,
-          parameters: { [paramKey]: pv },
+          parameters: { [paramKey]: parsedValue },
           baseline: {
             yieldPct: parseFloat(baseYield) || 0,
             exposurePct: parseFloat(baseExposure) || 0,
             feeRatePct: parseFloat(baseFeeRate) || 0,
             tvlUsd: parseFloat(baseTvl) || 0,
+            riskScore: parseFloat(baseRisk) || 0,
+            vaultCount: parseFloat(vaultCount) || 0,
           },
         }),
       });
+
       if (!res.ok) {
-        const body = await res.json();
+        const body = (await res.json()) as { error?: string };
         setError(body.error ?? "Forecast failed");
       } else {
-        setResult(await res.json());
+        setResult((await res.json()) as ForecastResult);
       }
     } catch {
       setError("Network error");
@@ -100,12 +121,11 @@ const GovernanceForecast: React.FC = () => {
         <div>
           <h3 className="text-2xl font-bold">Proposal Impact Forecast</h3>
           <p className="text-gray-400 text-sm">
-            Model expected changes to yield, exposure, and fees before voting.
+            Model expected changes to yield, exposure, fees, and proposal risk before voting.
           </p>
         </div>
       </div>
 
-      {/* Proposal type selector */}
       <div className="glass-card p-5 space-y-4">
         <div className="flex gap-2 flex-wrap">
           {PROPOSAL_TYPES.map((pt) => (
@@ -151,19 +171,21 @@ const GovernanceForecast: React.FC = () => {
           <summary className="text-gray-400 cursor-pointer hover:text-white transition-colors">
             Baseline Parameters
           </summary>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-3">
             {[
               { label: "Yield %", value: baseYield, set: setBaseYield },
               { label: "Exposure %", value: baseExposure, set: setBaseExposure },
               { label: "Fee Rate %", value: baseFeeRate, set: setBaseFeeRate },
               { label: "TVL (USD)", value: baseTvl, set: setBaseTvl },
-            ].map((f) => (
-              <div key={f.label}>
-                <label className="block text-xs text-gray-500 mb-1">{f.label}</label>
+              { label: "Risk Score", value: baseRisk, set: setBaseRisk },
+              { label: "Vault Count", value: vaultCount, set: setVaultCount },
+            ].map((field) => (
+              <div key={field.label}>
+                <label className="block text-xs text-gray-500 mb-1">{field.label}</label>
                 <input
                   type="number"
-                  value={f.value}
-                  onChange={(e) => f.set(e.target.value)}
+                  value={field.value}
+                  onChange={(e) => field.set(e.target.value)}
                   className="w-full bg-black/50 border border-gray-700 rounded px-2 py-1 text-white text-sm"
                 />
               </div>
@@ -185,12 +207,53 @@ const GovernanceForecast: React.FC = () => {
         className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2"
       >
         <FlaskConical size={18} />
-        {loading ? "Forecasting…" : "Run Impact Forecast"}
+        {loading ? "Forecasting..." : "Run Impact Forecast"}
       </button>
 
       {result && delta && (
         <div className="glass-card p-6 space-y-5 border border-purple-500/20">
           <h4 className="text-lg font-bold text-white">Forecast Results</h4>
+
+          <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/10 p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-white">
+                  {result.impactSummary.headline}
+                </p>
+                <p className="mt-1 text-xs uppercase tracking-[0.2em] text-indigo-200">
+                  Risk level: {result.impactSummary.riskLevel}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {result.impactSummary.noOp && (
+                  <span className="rounded-full bg-white/10 px-2 py-1 text-gray-200">
+                    No-op
+                  </span>
+                )}
+                {result.impactSummary.irreversible && (
+                  <span className="rounded-full bg-red-500/20 px-2 py-1 text-red-200">
+                    Hard to reverse
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-gray-400">
+                Affected vaults
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {result.impactSummary.affectedVaults.map((vaultId) => (
+                  <span
+                    key={vaultId}
+                    className="rounded-full bg-black/20 px-2 py-1 text-xs text-gray-200"
+                  >
+                    {vaultId}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <MetricCard
@@ -214,7 +277,7 @@ const GovernanceForecast: React.FC = () => {
               neutral
             />
             <MetricCard
-              label="Fee Revenue Δ"
+              label="Fee Revenue Delta"
               value={`$${delta.feeRevenueDeltaUsd.toLocaleString()}`}
               positive={delta.feeRevenueDeltaUsd >= 0}
             />
@@ -227,10 +290,13 @@ const GovernanceForecast: React.FC = () => {
 
           {result.warnings.length > 0 && (
             <div className="space-y-2">
-              {result.warnings.map((w, i) => (
-                <div key={i} className="flex items-center gap-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded">
+              {result.warnings.map((warning, index) => (
+                <div
+                  key={index}
+                  className="flex items-center gap-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded"
+                >
                   <AlertTriangle size={13} className="text-yellow-400 shrink-0" />
-                  <span className="text-xs text-yellow-300">{w}</span>
+                  <span className="text-xs text-yellow-300">{warning}</span>
                 </div>
               ))}
             </div>
@@ -253,6 +319,7 @@ interface MetricCardProps {
 function MetricCard({ label, value, positive, neutral }: MetricCardProps) {
   const color = neutral ? "text-white" : positive ? "text-green-400" : "text-red-400";
   const Icon = neutral ? null : positive ? TrendingUp : TrendingDown;
+
   return (
     <div className="bg-white/5 rounded-lg p-3">
       <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">{label}</p>

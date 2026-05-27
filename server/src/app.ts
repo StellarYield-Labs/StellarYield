@@ -36,10 +36,12 @@ import correlationRouter from "./routes/correlation";
 import strategiesRouter from "./routes/strategies";
 import treasuryRouter from "./routes/treasury";
 import governanceRouter from "./routes/governance";
+import activityTimelineRouter from "./routes/activityTimeline";
 import presetsRouter from "./routes/presets";
 import analyticsRouter from "./routes/analytics";
 import fragmentationRouter from "./routes/fragmentation";
 import indexerRouter from "./routes/indexer";
+import rewardsRouter from "./routes/rewards";
 import { createAuthChallenge, verifyAuthChallenge } from "./utils/stellarAuth";
 import {
   getRecommendationTimeline,
@@ -122,10 +124,12 @@ export function createApp() {
   app.use("/api/strategies", strategiesRouter);
   app.use("/api/treasury", treasuryRouter);
   app.use("/api/governance", governanceRouter);
+  app.use("/api/portfolio/activity", activityTimelineRouter);
   app.use("/api/presets", presetsRouter);
   app.use("/api/analytics", analyticsRouter);
   app.use("/api/liquidity", fragmentationRouter);
   app.use("/api/indexer", indexerRouter);
+  app.use("/api/rewards", rewardsRouter);
 
   // Legacy JSON metrics (internal tooling)
   app.get("/api/metrics", getMetrics);
