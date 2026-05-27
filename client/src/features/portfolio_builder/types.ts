@@ -2,6 +2,8 @@
  * Multi-Vault Portfolio Builder Types
  */
 
+export type PortfolioPreset = "conservative" | "balanced" | "aggressive" | "stablecoin-heavy";
+
 export interface VaultAllocation {
     vaultContractId: string;
     vaultName: string;

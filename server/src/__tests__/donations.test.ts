@@ -97,3 +97,37 @@ describe("GET /api/donations/total", () => {
         expect(typeof res.body.totalDonated).toBe("number");
     });
 });
+
+describe("GET /api/donations/summary", () => {
+    it("returns zero metrics when store is empty", async () => {
+        const res = await request(createApp()).get("/api/donations/summary");
+        expect(res.status).toBe(200);
+        expect(res.body.totalDonated).toBe(0);
+        expect(res.body.participatingVaults).toBe(0);
+        expect(res.body.projectedMonthlyImpact).toBe(0);
+    });
+
+    it("reflects participating vaults after POST /set", async () => {
+        const app = createApp();
+        await request(app).post("/api/donations/set").send({
+            address: "USER1",
+            bps: 500,
+            charityAddress: "CHARITY1",
+        });
+        await request(app).post("/api/donations/set").send({
+            address: "USER2",
+            bps: 1000,
+            charityAddress: "CHARITY2",
+        });
+        await request(app).post("/api/donations/set").send({
+            address: "USER3",
+            bps: 0, // Should not count
+            charityAddress: "CHARITY1",
+        });
+
+        const res = await request(app).get("/api/donations/summary");
+        expect(res.status).toBe(200);
+        expect(res.body.participatingVaults).toBe(2);
+        expect(res.body.projectedMonthlyImpact).toBeGreaterThan(0);
+    });
+});

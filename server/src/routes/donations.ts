@@ -87,6 +87,27 @@ donationsRouter.get("/total", (_req: Request, res: Response): void => {
     res.json({ totalDonated });
 });
 
+/**
+ * GET /api/donations/summary
+ *
+ * Returns aggregate donation metrics: total donated, active vaults, and monthly projection.
+ */
+donationsRouter.get("/summary", (_req: Request, res: Response): void => {
+    const participatingVaults = Array.from(userConfigs.values()).filter(
+        (c) => c.bps > 0,
+    ).length;
+
+    // Mocked projected monthly impact based on active donors
+    // In a real app, this would use current TVL and yield data.
+    const projectedMonthlyImpact = participatingVaults * 150.5;
+
+    res.json({
+        totalDonated,
+        participatingVaults,
+        projectedMonthlyImpact,
+    });
+});
+
 /** Exposed for testing: reset in-memory state. */
 export function _resetDonationsStore() {
     userConfigs.clear();

@@ -229,7 +229,7 @@ export class ProtocolCompatibilityEngine {
         recommendations,
         autoUpdateAvailable,
       };
-    } catch {
+    } catch (error) {
       console.error('Failed to fetch protocol version:', { protocolName });
       return {
         protocolName,
@@ -302,12 +302,12 @@ export class ProtocolCompatibilityEngine {
         });
       }
 
-    } catch {
+    } catch (error) {
       issues.push({
         severity: 'medium',
         component: requirements.component,
         issue: 'Compatibility check failed',
-        impact: 'Unable to verify component compatibility',
+        impact: `Unable to verify component compatibility: ${error instanceof Error ? error.message : 'Unknown error'}`,
         recommendation: 'Manual verification required',
         affectedStrategies: [],
       });

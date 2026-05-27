@@ -536,7 +536,7 @@ export class YieldReliabilityEngine {
   /**
    * Get all provider IDs (mock implementation)
    */
-  private async getAllProviderIds(): Promise<Array<{id: string, name: string, source: string}>> {
+  public async getAllProviderIds(): Promise<Array<{id: string, name: string, source: string}>> {
     return [
       { id: 'blend_api', name: 'Blend Protocol', source: 'api' },
       { id: 'soroswap_api', name: 'Soroswap', source: 'api' },

@@ -3,15 +3,14 @@
  * Handles all communication with the backend for contact management
  */
 
-import { 
-  Contact, 
-  ContactData, 
-  EncryptedContactResponse, 
-  CreateContactRequest, 
+import {
+  Contact,
+  ContactData,
+  EncryptedContactResponse,
+  CreateContactRequest,
   UpdateContactRequest,
-  ContactsResponse 
 } from '../types';
-import { decryptContactData, encryptContactData } from './encryption';
+import { encryptContactData } from './encryption';
 import { getApiBaseUrl } from '../../../lib/api';
 
 /**
@@ -41,12 +40,11 @@ async function apiRequest<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}/api/contacts${endpoint}`;
-  
+
   const defaultHeaders: Record<string, string> = {
     'Content-Type': 'application/json',
   };
 
-  // Add auth token if available
   const token = localStorage.getItem('authToken');
   if (token) {
     defaultHeaders['Authorization'] = `Bearer ${token}`;
@@ -84,10 +82,7 @@ async function apiRequest<T>(
 /**
  * Transform encrypted API response to internal Contact format
  */
-function transformContactResponse(
-  contact: EncryptedContactResponse,
-  decrypt: (data: string) => Promise<ContactData>
-): Contact {
+function transformContactResponse(contact: EncryptedContactResponse): Contact {
   return {
     id: contact.id,
     encryptedName: contact.encrypted_name,
@@ -107,7 +102,7 @@ export async function getContacts(decryptKey: CryptoKey): Promise<Contact[]> {
   const response = await apiRequest<{ contacts: EncryptedContactResponse[] }>('');
   
   return response.contacts.map(contact => 
-    transformContactResponse(contact, (data) => decryptContactData(data, decryptKey))
+    transformContactResponse(contact)
   );
 }
 
@@ -121,7 +116,7 @@ export async function getContacts(decryptKey: CryptoKey): Promise<Contact[]> {
 export async function getContact(id: string, decryptKey: CryptoKey): Promise<Contact> {
   const response = await apiRequest<{ contact: EncryptedContactResponse }>(`/${id}`);
   
-  return transformContactResponse(response.contact, (data) => decryptContactData(data, decryptKey));
+  return transformContactResponse(response.contact);
 }
 
 /**
@@ -154,7 +149,7 @@ export async function createContact(
     body: JSON.stringify(request),
   });
 
-  return transformContactResponse(response.contact, (data) => decryptContactData(data, encryptKey));
+  return transformContactResponse(response.contact);
 }
 
 /**
@@ -193,7 +188,7 @@ export async function updateContact(
     body: JSON.stringify(request),
   });
 
-  return transformContactResponse(response.contact, (data) => decryptContactData(data, encryptKey));
+  return transformContactResponse(response.contact);
 }
 
 /**
@@ -223,7 +218,7 @@ export async function searchContacts(
   const response = await apiRequest<{ contacts: EncryptedContactResponse[] }>(`/search?q=${encodedQuery}`);
   
   return response.contacts.map(contact => 
-    transformContactResponse(contact, (data) => decryptContactData(data, decryptKey))
+    transformContactResponse(contact)
   );
 }
 
@@ -244,7 +239,7 @@ export async function importContacts(
   });
 
   return response.contacts.map(contact => 
-    transformContactResponse(contact, (data) => decryptContactData(data, decryptKey))
+    transformContactResponse(contact)
   );
 }
 

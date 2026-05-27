@@ -126,7 +126,7 @@ export default function WalletConnectionModal({
           type="button"
           onClick={handleClose}
           className="absolute right-4 top-4 text-gray-400 transition-colors hover:text-white"
-          aria-label="Close wallet dialog"
+          aria-label="Close wallet connection dialog"
         >
           <X size={18} aria-hidden="true" />
         </button>
@@ -190,8 +190,8 @@ export default function WalletConnectionModal({
                   type="button"
                   onClick={() => void handleConnect("freighter")}
                   disabled={isConnecting}
-                  className="btn-primary flex items-center justify-center gap-2 py-3 disabled:cursor-not-allowed disabled:opacity-70"
                   aria-label="Connect with Freighter wallet"
+                  className="btn-primary flex items-center justify-center gap-2 py-3 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   <Wallet size={16} aria-hidden="true" />
                   Freighter
@@ -201,8 +201,8 @@ export default function WalletConnectionModal({
                 type="button"
                 onClick={() => void handleConnect("xbull")}
                 disabled={isConnecting}
-                className="btn-secondary flex items-center justify-center gap-2 py-3 disabled:cursor-not-allowed disabled:opacity-70"
                 aria-label="Connect with xBull wallet"
+                className="btn-secondary flex items-center justify-center gap-2 py-3 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 <Zap size={16} aria-hidden="true" />
                 xBull
@@ -211,8 +211,8 @@ export default function WalletConnectionModal({
                 type="button"
                 onClick={() => void handleConnect("albedo")}
                 disabled={isConnecting}
-                className="btn-secondary flex items-center justify-center gap-2 py-3 disabled:cursor-not-allowed disabled:opacity-70"
                 aria-label="Connect with Albedo wallet"
+                className="btn-secondary flex items-center justify-center gap-2 py-3 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 <Shield size={16} aria-hidden="true" />
                 Albedo

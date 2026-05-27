@@ -8,6 +8,7 @@ import {
     isValidAllocation,
     distributeAmount,
     normalizeWeights,
+    applyPreset,
 } from "./portfolioUtils";
 import type { VaultAllocation } from "./types";
 
@@ -62,7 +63,7 @@ describe("Portfolio Utils", () => {
         expect(sum).toBe(total);
     });
 
-    it("should normalize weights to 100%", () => {
+    it("should normalize weights to exactly 100%", () => {
         const unbalanced = [
             { ...mockAllocations[0], weight: 40 },
             { ...mockAllocations[1], weight: 40 },
@@ -71,7 +72,7 @@ describe("Portfolio Utils", () => {
         const normalized = normalizeWeights(unbalanced);
         const totalWeight = normalized.reduce((sum, a) => sum + a.weight, 0);
 
-        expect(Math.abs(totalWeight - 100)).toBeLessThan(0.01);
+        expect(totalWeight).toBe(100);
     });
 
     it("should handle three vaults", () => {
@@ -84,5 +85,46 @@ describe("Portfolio Utils", () => {
         expect(isValidAllocation(threeVaults)).toBe(true);
         const apy = calculateBlendedApy(threeVaults);
         expect(apy).toBeCloseTo(10.0002, 2);
+    });
+
+    describe("applyPreset", () => {
+        const availableVaults = [
+            { contractId: "v1", name: "Safe", apy: 5 },
+            { contractId: "v2", name: "Mid", apy: 10 },
+            { contractId: "v3", name: "Aggro", apy: 20 },
+        ];
+
+        it("should apply conservative preset", () => {
+            const allocations = applyPreset(availableVaults, "conservative");
+            expect(isValidAllocation(allocations)).toBe(true);
+            // v1 is safest (lowest APY)
+            const safe = allocations.find(a => a.vaultContractId === "v1");
+            expect(safe?.weight).toBe(60);
+        });
+
+        it("should apply aggressive preset", () => {
+            const allocations = applyPreset(availableVaults, "aggressive");
+            expect(isValidAllocation(allocations)).toBe(true);
+            // v3 is riskiest (highest APY)
+            const aggro = allocations.find(a => a.vaultContractId === "v3");
+            expect(aggro?.weight).toBe(60);
+        });
+
+        it("should apply balanced preset", () => {
+            const allocations = applyPreset(availableVaults, "balanced");
+            expect(isValidAllocation(allocations)).toBe(true);
+            allocations.forEach(a => expect(a.weight).toBeCloseTo(33.33, 1));
+        });
+
+        it("should apply stablecoin-heavy preset", () => {
+            const allocations = applyPreset(availableVaults, "stablecoin-heavy");
+            expect(isValidAllocation(allocations)).toBe(true);
+            const safe = allocations.find(a => a.vaultContractId === "v1");
+            expect(safe?.weight).toBe(100);
+        });
+
+        it("should handle empty vaults", () => {
+            expect(applyPreset([], "balanced")).toEqual([]);
+        });
     });
 });

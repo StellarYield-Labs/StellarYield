@@ -7,7 +7,7 @@
  * Located at: /client/src/features/donations/YieldForGood.tsx
  */
 import { useState, useEffect, useCallback } from "react";
-import { Heart, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { Heart, Loader2, CheckCircle, AlertCircle, Users, TrendingUp } from "lucide-react";
 import { useWallet } from "../../context/useWallet";
 import { getApiBaseUrl } from "../../lib/api";
 
@@ -25,6 +25,12 @@ export interface Charity {
 interface DonationConfig {
     bps: number;
     charityId: string | null;
+}
+
+interface DonationSummary {
+    totalDonated: number;
+    participatingVaults: number;
+    projectedMonthlyImpact: number;
 }
 
 // ── Whitelisted charities ─────────────────────────────────────────────────
@@ -72,37 +78,39 @@ export default function YieldForGood() {
     const { isConnected, walletAddress } = useWallet();
 
     const [config, setConfig] = useState<DonationConfig>({ bps: 0, charityId: null });
+    const [summary, setSummary] = useState<DonationSummary | null>(null);
     const [selectedBps, setSelectedBps] = useState<number>(500);
     const [selectedCharityId, setSelectedCharityId] = useState<string>(CHARITIES[0].id);
-    const [totalDonated, setTotalDonated] = useState<number | null>(null);
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // ── Fetch current config & global counter ────────────────────────────
+    // ── Fetch current config & global summary ────────────────────────────
 
     const fetchConfig = useCallback(async () => {
-        if (!walletAddress) return;
         setLoading(true);
         try {
-            const [configRes, statsRes] = await Promise.all([
-                fetch(
-                    `${API_BASE}/api/donations/config/${encodeURIComponent(walletAddress)}`,
-                ),
-                fetch(`${API_BASE}/api/donations/total`),
-            ]);
+            const requests = [
+                fetch(`${API_BASE}/api/donations/summary`),
+            ];
+            
+            if (walletAddress) {
+                requests.push(fetch(`${API_BASE}/api/donations/config/${encodeURIComponent(walletAddress)}`));
+            }
 
-            if (configRes.ok) {
+            const [summaryRes, configRes] = await Promise.all(requests);
+
+            if (summaryRes.ok) {
+                const data: DonationSummary = await summaryRes.json();
+                setSummary(data);
+            }
+
+            if (configRes && configRes.ok) {
                 const data: DonationConfig = await configRes.json();
                 setConfig(data);
                 if (data.bps > 0) setSelectedBps(data.bps);
                 if (data.charityId) setSelectedCharityId(data.charityId);
-            }
-
-            if (statsRes.ok) {
-                const stats: { totalDonated: number } = await statsRes.json();
-                setTotalDonated(stats.totalDonated);
             }
         } catch {
             // Non-fatal — show empty state
@@ -112,10 +120,8 @@ export default function YieldForGood() {
     }, [walletAddress]);
 
     useEffect(() => {
-        if (isConnected && walletAddress) {
-            void fetchConfig();
-        }
-    }, [isConnected, walletAddress, fetchConfig]);
+        void fetchConfig();
+    }, [fetchConfig]);
 
     // ── Save handler ────────────────────────────────────────────────────────
 
@@ -149,6 +155,9 @@ export default function YieldForGood() {
             setConfig({ bps: selectedBps, charityId: selectedCharityId });
             setSaved(true);
             setTimeout(() => setSaved(false), 3000);
+            
+            // Refresh summary to reflect new participating vault
+            void fetchConfig();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save donation config.");
         } finally {
@@ -175,6 +184,9 @@ export default function YieldForGood() {
 
             if (!res.ok) throw new Error("Failed to disable donation.");
             setConfig({ bps: 0, charityId: null });
+            
+            // Refresh summary
+            void fetchConfig();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to disable donation.");
         } finally {
@@ -182,21 +194,9 @@ export default function YieldForGood() {
         }
     };
 
-    // ── Not connected ──────────────────────────────────────────────────────
+    // ── Loading state ──────────────────────────────────────────────────────
 
-    if (!isConnected) {
-        return (
-            <div className="glass-panel rounded-2xl p-6 flex flex-col items-center text-center gap-3">
-                <Heart size={32} className="text-pink-400" />
-                <h3 className="font-semibold text-white">Yield for Good</h3>
-                <p className="text-sm text-gray-400">
-                    Connect your wallet to enable automatic yield donations.
-                </p>
-            </div>
-        );
-    }
-
-    if (loading) {
+    if (loading && !summary) {
         return (
             <div className="glass-panel rounded-2xl p-6 flex items-center justify-center gap-3">
                 <Loader2 size={20} className="animate-spin text-pink-400" />
@@ -206,118 +206,151 @@ export default function YieldForGood() {
     }
 
     return (
-        <div className="glass-panel rounded-2xl p-6 space-y-5">
+        <div className="glass-panel rounded-2xl p-6 space-y-6">
             {/* Header */}
             <div className="flex items-center gap-3">
                 <span className="w-10 h-10 rounded-full bg-pink-500/20 flex items-center justify-center">
                     <Heart size={20} className="text-pink-400" />
                 </span>
                 <div>
-                    <h3 className="font-semibold text-white">Yield for Good</h3>
+                    <h3 className="font-semibold text-white text-lg">Yield for Good</h3>
                     <p className="text-xs text-gray-400">
-                        Auto-donate a slice of your generated yield.
+                        Join the movement to auto-donate yield to verified charities.
                     </p>
                 </div>
                 {config.bps > 0 && (
-                    <span className="ml-auto text-xs bg-pink-500/20 text-pink-400 px-2 py-1 rounded-full">
+                    <span className="ml-auto text-xs bg-pink-500/20 text-pink-400 px-3 py-1 rounded-full border border-pink-500/20 font-bold animate-pulse">
                         Active — {config.bps / 100}%
                     </span>
                 )}
             </div>
 
-            {/* Global counter */}
-            {totalDonated !== null && (
-                <div className="rounded-xl bg-pink-500/10 border border-pink-500/20 px-4 py-3 text-center">
-                    <p className="text-xs text-gray-400">Protocol-wide total donated</p>
-                    <p className="text-xl font-extrabold text-pink-300">
-                        {new Intl.NumberFormat("en-US").format(totalDonated)} YIELD
+            {/* Impact Summary Cards */}
+            {summary && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="rounded-xl bg-gray-800/40 border border-gray-700/50 p-4 flex flex-col items-center text-center transition-all hover:bg-gray-800/60">
+                        <Heart size={16} className="text-pink-400 mb-2" />
+                        <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-1">Total Donated</p>
+                        <p className="text-xl font-black text-white">
+                            {new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(summary.totalDonated)}
+                            <span className="text-[10px] text-gray-500 ml-1">YIELD</span>
+                        </p>
+                    </div>
+                    <div className="rounded-xl bg-gray-800/40 border border-gray-700/50 p-4 flex flex-col items-center text-center transition-all hover:bg-gray-800/60">
+                        <Users size={16} className="text-blue-400 mb-2" />
+                        <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold mb-1">Active Donors</p>
+                        <p className="text-xl font-black text-white">
+                            {summary.participatingVaults}
+                            <span className="text-[10px] text-gray-500 ml-1">VAULTS</span>
+                        </p>
+                    </div>
+                    <div className="rounded-xl bg-pink-500/5 border border-pink-500/20 p-4 flex flex-col items-center text-center transition-all hover:bg-pink-500/10">
+                        <TrendingUp size={16} className="text-pink-400 mb-2" />
+                        <p className="text-[10px] uppercase tracking-widest text-pink-500/60 font-bold mb-1">Monthly Impact</p>
+                        <p className="text-xl font-black text-pink-400">
+                            +${new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(summary.projectedMonthlyImpact)}
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {!isConnected ? (
+                <div className="bg-gray-900/40 rounded-xl p-6 border border-gray-800 text-center space-y-3">
+                    <Heart size={32} className="text-gray-600 mx-auto" />
+                    <p className="text-sm text-gray-400 max-w-[240px] mx-auto">
+                        Connect your wallet to configure your personal yield donation split.
                     </p>
                 </div>
-            )}
+            ) : (
+                <div className="space-y-6 pt-2">
+                    {/* Percentage selector */}
+                    <div>
+                        <div className="flex justify-between items-end mb-3">
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">Yield Split</p>
+                            <span className="text-xs text-pink-400 font-medium">{selectedBps / 100}% of your yield</span>
+                        </div>
+                        <div className="flex gap-2 flex-wrap">
+                            {BPS_OPTIONS.map((opt) => (
+                                <button
+                                    key={opt.bps}
+                                    onClick={() => setSelectedBps(opt.bps)}
+                                    className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex-1 min-w-[60px] ${selectedBps === opt.bps
+                                            ? "bg-pink-500 text-white shadow-lg shadow-pink-500/20 scale-105"
+                                            : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200"
+                                        }`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
 
-            {/* Percentage selector */}
-            <div>
-                <p className="text-xs text-gray-400 mb-2">Yield split</p>
-                <div className="flex gap-2 flex-wrap">
-                    {BPS_OPTIONS.map((opt) => (
-                        <button
-                            key={opt.bps}
-                            onClick={() => setSelectedBps(opt.bps)}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${selectedBps === opt.bps
-                                    ? "bg-pink-500 text-white"
-                                    : "bg-gray-800 text-gray-300 hover:bg-gray-700"
-                                }`}
-                        >
-                            {opt.label}
-                        </button>
-                    ))}
-                </div>
-            </div>
+                    {/* Charity selector */}
+                    <div>
+                        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Choose Impact Area</p>
+                        <div className="space-y-2">
+                            {CHARITIES.map((charity) => (
+                                <label
+                                    key={charity.id}
+                                    className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${selectedCharityId === charity.id
+                                            ? "border-pink-500/50 bg-pink-500/10"
+                                            : "border-gray-800 bg-gray-800/40 hover:border-gray-700"
+                                        }`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="charity"
+                                        value={charity.id}
+                                        checked={selectedCharityId === charity.id}
+                                        onChange={() => setSelectedCharityId(charity.id)}
+                                        className="mt-1 accent-pink-500 h-4 w-4"
+                                    />
+                                    <div>
+                                        <p className="text-sm font-bold text-white">{charity.name}</p>
+                                        <p className="text-xs text-gray-400 leading-relaxed mt-0.5">{charity.description}</p>
+                                    </div>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
 
-            {/* Charity selector */}
-            <div>
-                <p className="text-xs text-gray-400 mb-2">Choose charity</p>
-                <div className="space-y-2">
-                    {CHARITIES.map((charity) => (
-                        <label
-                            key={charity.id}
-                            className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${selectedCharityId === charity.id
-                                    ? "border-pink-500/50 bg-pink-500/10"
-                                    : "border-gray-700 bg-gray-800/40 hover:border-gray-600"
-                                }`}
-                        >
-                            <input
-                                type="radio"
-                                name="charity"
-                                value={charity.id}
-                                checked={selectedCharityId === charity.id}
-                                onChange={() => setSelectedCharityId(charity.id)}
-                                className="mt-0.5 accent-pink-500"
-                            />
-                            <div>
-                                <p className="text-sm font-medium text-white">{charity.name}</p>
-                                <p className="text-xs text-gray-400">{charity.description}</p>
-                            </div>
-                        </label>
-                    ))}
-                </div>
-            </div>
-
-            {/* Error */}
-            {error && (
-                <div className="flex items-center gap-2 text-red-400 text-sm">
-                    <AlertCircle size={16} />
-                    {error}
-                </div>
-            )}
-
-            {/* Actions */}
-            <div className="flex gap-3">
-                <button
-                    onClick={() => void handleSave()}
-                    disabled={saving}
-                    className="flex-1 py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-400 hover:to-rose-500 text-white transition-all active:scale-95 disabled:opacity-40 flex items-center justify-center gap-2"
-                >
-                    {saving ? (
-                        <Loader2 size={16} className="animate-spin" />
-                    ) : saved ? (
-                        <CheckCircle size={16} />
-                    ) : (
-                        <Heart size={16} />
+                    {/* Error */}
+                    {error && (
+                        <div className="flex items-center gap-2 text-red-400 text-sm bg-red-400/10 p-3 rounded-lg border border-red-400/20">
+                            <AlertCircle size={16} />
+                            {error}
+                        </div>
                     )}
-                    {saved ? "Saved!" : saving ? "Saving…" : "Save Donation"}
-                </button>
 
-                {config.bps > 0 && (
-                    <button
-                        onClick={() => void handleDisable()}
-                        disabled={saving}
-                        className="px-4 py-2.5 rounded-xl font-semibold text-sm bg-gray-700 hover:bg-gray-600 text-gray-300 transition-all active:scale-95 disabled:opacity-40"
-                    >
-                        Disable
-                    </button>
-                )}
-            </div>
+                    {/* Actions */}
+                    <div className="flex gap-3 pt-2">
+                        <button
+                            onClick={() => void handleSave()}
+                            disabled={saving}
+                            className="flex-[2] py-3.5 rounded-xl font-black text-sm bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-400 hover:to-rose-500 text-white transition-all active:scale-95 disabled:opacity-40 flex items-center justify-center gap-2 shadow-xl shadow-pink-500/20"
+                        >
+                            {saving ? (
+                                <Loader2 size={18} className="animate-spin" />
+                            ) : saved ? (
+                                <CheckCircle size={18} />
+                            ) : (
+                                <Heart size={18} />
+                            )}
+                            {saved ? "Split Saved!" : saving ? "Saving…" : "Activate Donation"}
+                        </button>
+
+                        {config.bps > 0 && (
+                            <button
+                                onClick={() => void handleDisable()}
+                                disabled={saving}
+                                className="flex-1 py-3.5 rounded-xl font-bold text-sm bg-gray-800 hover:bg-gray-700 text-gray-400 transition-all active:scale-95 disabled:opacity-40 border border-gray-700"
+                            >
+                                Disable
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

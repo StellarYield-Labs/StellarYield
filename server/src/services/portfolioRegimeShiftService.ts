@@ -53,14 +53,14 @@ export async function detectAndNotifyRegimeShift(
   const classification = regimeService.classifyRegime(snapshots, timeWindow);
   const currentRegime = classification.regime;
 
-  const lastAlert = await prisma.portfolioRegimeShiftAlert.findFirst({
+  const lastAlert = await (prisma as any).portfolioRegimeShiftAlert.findFirst({
     where: { walletAddress: wallet },
     orderBy: { createdAt: "desc" },
   });
 
   // Seed initial state on first detection — no notification yet
   if (lastAlert === null) {
-    await prisma.portfolioRegimeShiftAlert.create({
+    await (prisma as any).portfolioRegimeShiftAlert.create({
       data: {
         walletAddress: wallet,
         previousRegime: currentRegime,
@@ -95,7 +95,7 @@ export async function detectAndNotifyRegimeShift(
 
   // Deduplication: block if same transition already alerted within cooldown window
   const cooldownCutoff = new Date(Date.now() - REGIME_SHIFT_COOLDOWN_MS);
-  const recentDuplicate = await prisma.portfolioRegimeShiftAlert.findFirst({
+  const recentDuplicate = await (prisma as any).portfolioRegimeShiftAlert.findFirst({
     where: {
       walletAddress: wallet,
       previousRegime,
@@ -115,7 +115,7 @@ export async function detectAndNotifyRegimeShift(
     };
   }
 
-  const alert = await prisma.portfolioRegimeShiftAlert.create({
+  const alert = await (prisma as any).portfolioRegimeShiftAlert.create({
     data: {
       walletAddress: wallet,
       previousRegime,
@@ -143,7 +143,7 @@ export async function detectAndNotifyRegimeShift(
         subject: buildEmailSubject(currentRegime),
         html: buildEmailHtml(classification, previousRegime),
       });
-      await prisma.portfolioRegimeShiftAlert.update({
+      await (prisma as any).portfolioRegimeShiftAlert.update({
         where: { id: alert.id },
         data: { notified: true, notifiedAt: new Date() },
       });
@@ -168,7 +168,7 @@ export async function getShiftHistory(
   walletAddress: string,
   limit = 20
 ) {
-  return prisma.portfolioRegimeShiftAlert.findMany({
+  return (prisma as any).portfolioRegimeShiftAlert.findMany({
     where: { walletAddress: walletAddress.toLowerCase() },
     orderBy: { createdAt: "desc" },
     take: limit,

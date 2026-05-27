@@ -50,6 +50,13 @@ interface UseContactsReturn extends UseContactsState {
   isDuplicate: (name: string, address: string, excludeId?: string) => boolean;
 }
 
+function validateContactData(data: ContactData): { isValid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  if (!isValidContactName(data.name)) errors.push('Name must be between 1 and 100 characters');
+  if (!isValidWalletAddress(data.address)) errors.push('Invalid wallet address format');
+  return { isValid: errors.length === 0, errors };
+}
+
 /**
  * Main contacts hook
  */
@@ -157,10 +164,6 @@ export function useContacts(): UseContactsReturn {
     const validation = validateContactData(data);
     if (!validation.isValid) {
       throw new Error(validation.errors.join(', '));
-    }
-
-    if (isDuplicate(data.name, data.address)) {
-      throw new Error('A contact with this name or address already exists');
     }
 
     setState(prev => ({ ...prev, loading: true, error: null }));
@@ -312,25 +315,6 @@ export function useContacts(): UseContactsReturn {
     }
   }, [encryptionKey]);
 
-  /**
-   * Validate contact data
-   */
-  const validateContactData = useCallback((data: ContactData): { isValid: boolean; errors: string[] } => {
-    const errors: string[] = [];
-
-    if (!isValidContactName(data.name)) {
-      errors.push('Name must be between 1 and 100 characters');
-    }
-
-    if (!isValidWalletAddress(data.address)) {
-      errors.push('Invalid wallet address format');
-    }
-
-    return {
-      isValid: errors.length === 0,
-      errors,
-    };
-  }, []);
 
   /**
    * Check for duplicate contacts

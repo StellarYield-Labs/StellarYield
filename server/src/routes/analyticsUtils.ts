@@ -1,3 +1,8 @@
+import { AttributionReport } from '../services/portfolioAttributionService';
+import { CompatibilityReport } from '../services/protocolCompatibilityService';
+import { StrategyHealthScore } from '../services/strategyHealthService';
+import { DataSourceReliability } from '../services/yieldReliabilityService';
+
 // Analytics Helper Functions
 import type { AttributionReport } from '../services/portfolioAttributionService';
 import type { CompatibilityReport, CompatibilityIssue } from '../services/protocolCompatibilityService';
@@ -22,6 +27,29 @@ export function validateAttributionRequest(walletAddress: string, startTime: str
   return { valid: true };
 }
 
+interface ProtocolReport {
+  protocols?: Array<{ protocolName: string; status: string; criticalIssues?: number }>;
+  issues?: Array<{ severity: string }>;
+}
+
+export function formatAttributionReport(report: AttributionReport): any {
+  return {
+    ...report,
+    formattedDate: new Date().toISOString(),
+    totalAttribution: (report as any).breakdown?.reduce((sum: number, item: { contribution: number }) => sum + item.contribution, 0) || 0,
+  };
+}
+
+export function formatCompatibilityReport(report: CompatibilityReport): any {
+  return {
+    ...report,
+    formattedDate: new Date().toISOString(),
+    criticalIssues: (report as any).issues?.filter((issue: { severity: string }) => issue.severity === 'critical') || [],
+  };
+}
+
+export function formatHealthScore(score: StrategyHealthScore): any {
+  const overallScore = score.overallScore;
 // Extended interfaces for utility functions
 interface ExtendedAttributionReport extends AttributionReport {
   formattedDate?: string;
@@ -66,7 +94,7 @@ export function formatCompatibilityReport(report: CompatibilityReport): Extended
 export function formatHealthScore(score: StrategyHealthScore): ExtendedHealthScore {
   return {
     ...score,
-    status: score.overallScore >= 80 ? 'healthy' : score.overallScore >= 60 ? 'degraded' : 'critical',
+    status: overallScore >= 80 ? 'healthy' : overallScore >= 60 ? 'degraded' : 'critical',
     formattedDate: new Date().toISOString(),
   };
 }

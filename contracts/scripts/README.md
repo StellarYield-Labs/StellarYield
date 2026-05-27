@@ -67,6 +67,21 @@ Deployed contract IDs are written to `contracts/scripts/deployed.json`:
 
 This file can be consumed by other scripts or CI pipelines.
 
+## Registry Validation
+
+The project maintains a global contract registry in `contracts/registry.json`. This file must be validated to ensure all required contracts have valid addresses for each supported network.
+
+To run the validator:
+```bash
+node contracts/scripts/validate-registry.js
+```
+
+The validator checks for:
+- Presence of required networks (`testnet`, `mainnet`).
+- Presence of required contract aliases (`vault`, `zap`, etc.).
+- Correct address format (Stellar/Soroban `C...` or `G...` addresses).
+- Duplicate addresses within a single network.
+
 ## Secrets
 
 `.env.deploy` is listed in `.gitignore`. Never commit private keys or secret accounts.

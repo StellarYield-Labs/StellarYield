@@ -7,12 +7,13 @@ import { useState, useCallback, useMemo } from "react";
 import { Zap, AlertCircle, CheckCircle2 } from "lucide-react";
 import TxStatusTimeline from "../../components/transaction/TxStatusTimeline";
 import type { TxPhase } from "../../services/transactionPhase";
-import type { VaultAllocation } from "./types";
+import type { VaultAllocation, PortfolioPreset } from "./types";
 import {
   calculateBlendedApy,
   isValidAllocation,
   distributeAmount,
   normalizeWeights,
+  applyPreset,
 } from "./portfolioUtils";
 import RebalancePreview from "./RebalancePreview";
 
@@ -47,6 +48,13 @@ export default function PortfolioBuilder({
   );
   const [txPhase, setTxPhase] = useState<TxPhase>("idle");
   const [error, setError] = useState("");
+
+  const handlePresetApply = useCallback(
+    (preset: PortfolioPreset) => {
+      setAllocations(applyPreset(availableVaults, preset));
+    },
+    [availableVaults],
+  );
 
   const isValid = useMemo(() => isValidAllocation(allocations), [allocations]);
 
@@ -126,6 +134,29 @@ export default function PortfolioBuilder({
             placeholder="Enter amount to allocate"
             className="w-full bg-black/50 border border-gray-600 rounded-lg px-3 py-2 text-white"
           />
+        </div>
+
+        {/* Presets */}
+        <div className="space-y-2">
+          <label className="block text-sm text-gray-400">Allocation Presets</label>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                "conservative",
+                "balanced",
+                "aggressive",
+                "stablecoin-heavy",
+              ] as PortfolioPreset[]
+            ).map((p) => (
+              <button
+                key={p}
+                onClick={() => handlePresetApply(p)}
+                className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-xs font-medium rounded-md capitalize transition-colors border border-gray-700"
+              >
+                {p.replace("-", " ")}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Blended APY Display */}
