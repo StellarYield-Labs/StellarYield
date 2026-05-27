@@ -164,6 +164,7 @@ bash scripts/smoke-test.sh
 🌊 Contributing via Drips Wave
 We are proudly participating in the Stellar Wave Program via Drips! We are actively looking for Web3 full-stack and Rust developers.
 Check our open issues labeled `Stellar Wave`, apply via the Drips App, and submit your PR to earn rewards funded by the Stellar Development Foundation!
+- [Metrics token rotation guide](./docs/metrics-token-rotation.md)
 - [Contributing Guide](./CONTRIBUTING.md)
 - [Contributor guide: CI checks, local verification, and getting help](./docs/contributor-guide.md)
 - [Release Checklist](./docs/release-checklist.md)

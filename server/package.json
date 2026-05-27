@@ -9,6 +9,7 @@
     "build": "tsc",
     "lint": "npx eslint \"src/**/*.ts\"",
     "test": "jest",
+    "check:metrics-token": "node scripts/check-metrics-token.js",
     "seed": "ts-node scripts/seed.ts"
   },
   "dependencies": {
