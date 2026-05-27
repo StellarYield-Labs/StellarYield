@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from "react";
-import { Trophy, Medal, TrendingUp, Filter, AlertCircle, RefreshCw, BarChart3 } from "lucide-react";
+import { Trophy, Medal, TrendingUp, Filter, AlertCircle, RefreshCw, BarChart3, RotateCcw } from "lucide-react";
 import { apiUrl } from "../../lib/api";
 import { ConfidenceBadge } from "../../components/AIAdvisor/ConfidenceBadge";
+import {
+  useLeaderboardFilters,
+  TIME_WINDOWS,
+  STRATEGY_TYPES,
+} from "../../hooks/useLeaderboardFilters";
 
 interface RankedStrategy {
   rank: number;
@@ -22,15 +27,19 @@ interface LeaderboardResponse {
   scoringMethodology: string;
 }
 
-const TIME_WINDOWS = ["all", "24h", "7d", "30d"] as const;
-const STRATEGY_TYPES = ["all", "blend", "soroswap", "defindex"] as const;
-
 const StrategyLeaderboard: React.FC = () => {
   const [data, setData] = useState<LeaderboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeWindow, setTimeWindow] = useState<string>("all");
-  const [strategyType, setStrategyType] = useState<string>("all");
+
+  const {
+    timeWindow,
+    strategyType,
+    setTimeWindow,
+    setStrategyType,
+    resetFilters,
+    isDefault,
+  } = useLeaderboardFilters();
 
   // #375 Rotation Confidence Explorer
   const [rotationData, setRotationData] = useState<{
@@ -149,6 +158,16 @@ const StrategyLeaderboard: React.FC = () => {
             </button>
           ))}
         </div>
+        {!isDefault && (
+          <button
+            onClick={resetFilters}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
+            title="Reset filters to defaults"
+          >
+            <RotateCcw size={12} />
+            Reset
+          </button>
+        )}
       </div>
 
       {loading ? (
