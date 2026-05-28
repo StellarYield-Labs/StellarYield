@@ -155,15 +155,30 @@ router.get("/rotation", (req: Request, res: Response) => {
  */
 router.get("/export", async (req: Request, res: Response) => {
   try {
-    const bundle = await exportService.generateSnapshotBundle();
+    const bundle = await exportService.generateSnapshotBundle(req.query);
     const filename = `stellar-yield-snapshot-${new Date().toISOString().split('T')[0]}.json`;
-    
+
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
     res.json(bundle);
   } catch (error) {
     console.error("Export failed:", error);
     res.status(500).json({ error: "Failed to generate export bundle" });
+  }
+});
+
+/**
+ * GET /api/strategies/export/preview
+ * Returns only the metadata for the current export bundle.
+ */
+router.get("/export/preview", async (req: Request, res: Response) => {
+  try {
+    const bundle = await exportService.generateSnapshotBundle(req.query);
+    const { opportunities, ...metadata } = bundle;
+    res.json(metadata);
+  } catch (error) {
+    console.error("Export preview failed:", error);
+    res.status(500).json({ error: "Failed to generate export preview" });
   }
 });
 

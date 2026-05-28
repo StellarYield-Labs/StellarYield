@@ -1,11 +1,40 @@
-import React, { useState } from 'react';
-import { Download, FileJson, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Download, FileJson, Loader2, CheckCircle2, AlertCircle, Clock, Info, ShieldCheck } from 'lucide-react';
 import { buildExportFilename } from './exportFilename';
+
+interface ExportMetadata {
+  generatedAt: string;
+  appVersion: string;
+  metadata: {
+    totalOpportunities: number;
+    scoringMethodology: string;
+    sourceFreshness: number;
+    filtersApplied: Record<string, any>;
+  };
+}
 
 export const ExportBundle: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [lastExport, setLastExport] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<ExportMetadata | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(true);
+
+  useEffect(() => {
+    const fetchPreview = async () => {
+      try {
+        const response = await fetch('/api/strategies/export/preview');
+        if (!response.ok) throw new Error('Failed to fetch preview');
+        const data = await response.json();
+        setPreview(data);
+      } catch (err) {
+        console.error('Preview fetch error:', err);
+      } finally {
+        setIsLoadingPreview(false);
+      }
+    };
+    fetchPreview();
+  }, []);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -47,11 +76,48 @@ export const ExportBundle: React.FC = () => {
       </div>
 
       <div className="space-y-4">
+        {isLoadingPreview ? (
+          <div className="flex items-center justify-center py-4 text-slate-400">
+            <Loader2 size={20} className="animate-spin mr-2" />
+            Loading bundle details...
+          </div>
+        ) : preview ? (
+          <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl space-y-3">
+            <div className="flex items-center justify-between text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700 pb-2 mb-2">
+              <span className="flex items-center gap-1">
+                <Clock size={12} /> 
+                Refreshed {new Date(preview.generatedAt).toLocaleTimeString()}
+              </span>
+              <span>v{preview.appVersion}</span>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Opportunities</p>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{preview.metadata.totalOpportunities} entries</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Source Freshness</p>
+                <p className="text-sm font-semibold text-green-600 dark:text-green-400">
+                  {Math.round(preview.metadata.sourceFreshness * 100)}%
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">Active Methodology</p>
+              <code className="text-[10px] block bg-slate-200/50 dark:bg-slate-900/50 p-2 rounded border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400">
+                {preview.metadata.scoringMethodology}
+              </code>
+            </div>
+          </div>
+        ) : null}
+
         <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl text-sm text-slate-600 dark:text-slate-300">
           <ul className="space-y-2">
             <li className="flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-green-500" />
-              APY & Liquidity Metrics
+              <ShieldCheck size={16} className="text-blue-500" />
+              Private wallet data excluded
             </li>
             <li className="flex items-center gap-2">
               <CheckCircle2 size={16} className="text-green-500" />

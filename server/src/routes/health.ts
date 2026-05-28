@@ -220,4 +220,146 @@ router.get("/queues", async (_req: Request, res: Response) => {
   }
 });
 
+export type DependencyStatus = "up" | "down" | "warning";
+
+export interface DependencyDetail {
+  status: DependencyStatus;
+  latencyMs?: number;
+  hint?: string;
+}
+
+export interface DependenciesResponse {
+  database: DependencyDetail;
+  horizon: DependencyDetail & { latestLedger?: number };
+  indexer: DependencyDetail & { syncedLedger?: number; lagLedgers?: number };
+  cache: DependencyDetail;
+  timestamp: string;
+  overallStatus: DependencyStatus;
+}
+
+async function checkDatabaseWithLatency(): Promise<DependencyDetail> {
+  const start = Date.now();
+  try {
+    await withTimeout(prisma.$queryRaw`SELECT 1`, HEALTH_TIMEOUT_MS);
+    return { status: "up", latencyMs: Date.now() - start };
+  } catch {
+    return { status: "down", hint: "Database unreachable — check DATABASE_URL and Postgres availability" };
+  }
+}
+
+async function checkHorizonWithLatency(): Promise<DependencyDetail & { latestLedger?: number }> {
+  const start = Date.now();
+  try {
+    const horizon = new Horizon.Server(HORIZON_URL);
+    const resp = await withTimeout(
+      horizon.ledgers().limit(1).order("desc").call(),
+      HEALTH_TIMEOUT_MS,
+    );
+    return {
+      status: "up",
+      latencyMs: Date.now() - start,
+      latestLedger: resp.records[0]?.sequence,
+    };
+  } catch {
+    return {
+      status: "down",
+      hint: "Horizon unreachable — check STELLAR_HORIZON_URL or network connectivity",
+    };
+  }
+}
+
+async function checkIndexerWithLatency(
+  latestLedger?: number,
+): Promise<DependencyDetail & { syncedLedger?: number; lagLedgers?: number }> {
+  const start = Date.now();
+  try {
+    const state = await withTimeout(
+      prisma.indexerState.findFirst(),
+      HEALTH_TIMEOUT_MS,
+    );
+    const syncedLedger = state?.lastLedger ?? 0;
+    const lagLedgers = latestLedger ? latestLedger - syncedLedger : undefined;
+    const latencyMs = Date.now() - start;
+
+    if (lagLedgers !== undefined && lagLedgers >= 50) {
+      return {
+        status: "warning",
+        latencyMs,
+        syncedLedger,
+        lagLedgers,
+        hint: `Indexer is ${lagLedgers} ledgers behind — may indicate a stalled indexer process`,
+      };
+    }
+    return { status: "up", latencyMs, syncedLedger, lagLedgers };
+  } catch {
+    return {
+      status: "down",
+      hint: "Indexer state unavailable — check database connectivity and indexer process",
+    };
+  }
+}
+
+async function checkCacheWithLatency(): Promise<DependencyDetail> {
+  const redis = new Redis(REDIS_URL, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    lazyConnect: true,
+  });
+  const start = Date.now();
+  try {
+    await withTimeout(redis.ping(), HEALTH_TIMEOUT_MS);
+    return { status: "up", latencyMs: Date.now() - start };
+  } catch {
+    return {
+      status: "down",
+      hint: "Redis unreachable — check REDIS_URL and Redis availability",
+    };
+  } finally {
+    await redis.quit().catch(() => {});
+  }
+}
+
+/**
+ * GET /health/dependencies
+ *
+ * Returns a per-dependency breakdown of database, Horizon, indexer, and cache
+ * health. Includes safe latency hints where available. Never exposes credentials
+ * or private user data.
+ */
+router.get("/dependencies", async (_req: Request, res: Response) => {
+  const [database, horizon] = await Promise.all([
+    checkDatabaseWithLatency(),
+    checkHorizonWithLatency(),
+  ]);
+
+  const [indexer, cache] = await Promise.all([
+    checkIndexerWithLatency(horizon.latestLedger),
+    checkCacheWithLatency(),
+  ]);
+
+  const statuses: DependencyStatus[] = [
+    database.status,
+    horizon.status,
+    indexer.status,
+    cache.status,
+  ];
+
+  const overallStatus: DependencyStatus = statuses.includes("down")
+    ? "down"
+    : statuses.includes("warning")
+      ? "warning"
+      : "up";
+
+  const body: DependenciesResponse = {
+    database,
+    horizon,
+    indexer,
+    cache,
+    timestamp: new Date().toISOString(),
+    overallStatus,
+  };
+
+  res.status(overallStatus === "down" ? 503 : 200).json(body);
+});
+
 export default router;

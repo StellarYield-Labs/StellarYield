@@ -11,6 +11,7 @@ import {
 import { useWallet } from "../../context/useWallet";
 import { TrendingUp, TrendingDown, Loader2, DollarSign, BarChart3 } from "lucide-react";
 import { getApiBaseUrl } from "../../lib/api";
+import ApiErrorBanner from "../../components/ApiErrorBanner/ApiErrorBanner";
 
 interface DailyPnLSnapshot {
   date: string;
@@ -117,9 +118,8 @@ export default function PnLChart() {
 
   if (error) {
     return (
-      <div className="glass-panel p-8 text-center">
-        <p className="text-red-400 mb-2 font-semibold">Failed to Load PnL Data</p>
-        <p className="text-gray-400 text-sm">{error}</p>
+      <div className="glass-panel p-8">
+        <ApiErrorBanner message={error} onRetry={fetchPnL} />
       </div>
     );
   }
@@ -172,7 +172,7 @@ export default function PnLChart() {
         />
         <StatCard
           label="Absolute PnL"
-          value={`${isProfit ? "+" : ""}$${fmt(pnlData.absolutePnL)}`}
+          value={`${isProfit ? "+" : "-"}$${fmt(pnlData.absolutePnL)}`}
           className={pnlColor}
         />
       </div>

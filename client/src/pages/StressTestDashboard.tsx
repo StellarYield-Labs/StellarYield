@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { apiUrl } from "../lib/api";
+import ApiErrorBanner from "../components/ApiErrorBanner/ApiErrorBanner";
 
 type StressScenario = "apy-collapse" | "liquidity-drain" | "oracle-shock";
 
@@ -24,9 +25,11 @@ export default function StressTestDashboard() {
   const [days, setDays] = useState("90");
   const [result, setResult] = useState<StressScenarioResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const runScenario = async () => {
     setLoading(true);
+    setError(null);
     try {
       const response = await fetch(apiUrl("/api/stress-scenarios/run"), {
         method: "POST",
@@ -38,8 +41,11 @@ export default function StressTestDashboard() {
           days: Number(days),
         }),
       });
+      if (!response.ok) throw new Error("Failed to run scenario");
       const data = (await response.json()) as StressScenarioResponse;
       setResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to run scenario");
     } finally {
       setLoading(false);
     }
@@ -94,8 +100,12 @@ export default function StressTestDashboard() {
         {loading ? "Running..." : "Run Scenario"}
       </button>
 
+      {error && (
+        <ApiErrorBanner message={error} onRetry={runScenario} className="mt-4" />
+      )}
+
       {result && (
-        <div className="glass-panel p-6 space-y-2">
+        <div className="glass-panel p-6 space-y-2 mt-6">
           <div className="flex items-center gap-2 text-amber-400">
             <AlertTriangle size={16} />
             <span className="text-sm font-semibold uppercase tracking-widest">{result.scenario}</span>

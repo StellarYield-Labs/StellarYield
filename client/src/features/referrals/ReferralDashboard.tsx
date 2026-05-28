@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { getApiBaseUrl } from "../../lib/api";
 import { resolveAppBaseUrl, buildReferralLink } from "./referralLink";
+import ApiErrorBanner from "../../components/ApiErrorBanner/ApiErrorBanner";
 
 interface ReferralData {
   referredTvl: number;
@@ -204,10 +205,7 @@ export default function ReferralDashboard() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl p-3">
-          <AlertCircle className="text-red-400 shrink-0" size={18} />
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
+        <ApiErrorBanner message={error} onRetry={fetchReferralData} />
       )}
 
       {claimSuccess && (

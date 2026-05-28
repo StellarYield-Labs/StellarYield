@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { validateIconAssetOrThrow, DEFAULT_ICON_CONFIG } from "../../utils/iconValidator";
 
 export interface VaultMetadataInput {
   vaultName: string;
@@ -38,6 +39,9 @@ export function sanitizeSvg(svg: string): string {
   if (!normalized.includes("<svg")) {
     throw new Error("iconSvg must be a valid SVG string");
   }
+
+  // Validate icon asset before sanitization
+  validateIconAssetOrThrow(normalized, "image/svg+xml", DEFAULT_ICON_CONFIG);
 
   return normalized
     .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")

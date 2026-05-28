@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useWallet } from "../../context/useWallet";
-import { Gift, CheckCircle, Loader2, AlertCircle } from "lucide-react";
+import { Gift, CheckCircle, Loader2 } from "lucide-react";
 import { getApiBaseUrl } from "../../lib/api";
+import ApiErrorBanner from "../../components/ApiErrorBanner/ApiErrorBanner";
 
 interface ClaimData {
   index: number;
@@ -134,10 +135,7 @@ export default function ClaimRewards() {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-6">
-          <AlertCircle className="text-red-400 shrink-0" size={20} />
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
+        <ApiErrorBanner message={error} onRetry={fetchClaimData} className="mb-6" />
       )}
 
       {!claimData ? (

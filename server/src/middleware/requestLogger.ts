@@ -1,10 +1,7 @@
 import { NextFunction, Request, Response } from "express";
+import { getCorrelationId, getRequestId } from "./correlationId";
 
 type LogLevel = "info" | "warn" | "error";
-
-function getRequestId(req: Request): string | undefined {
-  return (req as unknown as { requestId?: string }).requestId;
-}
 
 function log(level: LogLevel, payload: Record<string, unknown>): void {
   const line = JSON.stringify({
@@ -28,6 +25,7 @@ export function requestLoggerMiddleware(
   res.on("finish", () => {
     const durationMs = Date.now() - start;
     log("info", {
+      correlationId: getCorrelationId(req),
       requestId: getRequestId(req),
       method: req.method,
       path: req.originalUrl ?? req.path,
@@ -45,6 +43,7 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ): void {
+  const correlationId = getCorrelationId(req);
   const requestId = getRequestId(req);
   const error =
     err instanceof Error
@@ -52,6 +51,7 @@ export function errorHandler(
       : { name: "Error", message: "Unexpected error" };
 
   log("error", {
+    correlationId,
     requestId,
     method: req.method,
     path: req.originalUrl ?? req.path,
@@ -63,6 +63,7 @@ export function errorHandler(
 
   res.status(500).json({
     error: "Internal server error.",
+    correlationId,
     requestId,
   });
 }

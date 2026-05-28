@@ -9,8 +9,26 @@ Thanks for contributing to StellarYield, a Stellar-native DeFi yield aggregator 
 * **Keep it Focused:** Keep pull requests limited to one specific feature, bug fix, or contract concern at a time.
 * **Discuss Major Changes:** Start a discussion in the issues tab before changing core architecture, smart contract storage models, or automated routing logic.
 
-### Local Setup
+### 🙋 How to Claim an Issue
 
+1. Find an open issue labelled `status: available` or `good-first-issue`.
+2. Post a comment using the **Claim an Issue** template (`.github/ISSUE_TEMPLATE/claim_issue.yml`) — no maintainer action needed to post.
+3. A maintainer will assign the issue to you, usually within 24 hours.
+4. Post a progress update at least every **7 days** using the template in `.github/PROGRESS_UPDATE.md`.
+5. If you need to drop the issue, post a comment so it can be re-claimed by someone else.
+
+**Label lifecycle:**
+
+| Label | Meaning |
+|-------|---------|
+| `status: available` | Unclaimed — anyone can pick it up |
+| `status: claimed` | A contributor has posted a claim; awaiting assignment |
+| `status: in-progress` | Assigned and actively being worked on |
+| `status: needs-update` | No update for 7+ days — contributor should check in |
+
+Issues with `status: needs-update` for more than 14 days may be re-opened for others.
+
+### 💻 Local Setup
 Since StellarYield is a full-stack monorepo, ensure you have the correct environments set up for the stack you are touching:
 
 * **Smart Contracts:** Install the stable Rust toolchain and the `soroban-cli`. Make sure `rustfmt` and `clippy` are available.

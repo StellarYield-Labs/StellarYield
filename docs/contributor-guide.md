@@ -228,3 +228,126 @@ If the name differs in your fork, run `gh workflow list` and use the **CI** work
 - [CONTRIBUTING.md](../CONTRIBUTING.md)
 - [Contract security checklist](./contract-security-checklist.md)
 - [Release checklist](./release-checklist.md)
+
+---
+
+## Stellar Wave: claiming issues and closing them
+
+The **Stellar Wave** is StellarYield's open-source contributor program hosted on
+[Drips](https://drips.network). Wave issues carry Drips points (complexity is set
+by the maintainer in the Drips dashboard, not by a GitHub label). This section
+explains the full lifecycle from claiming to merge.
+
+### 1. Finding a Wave issue
+
+Wave issues appear in the GitHub Issues tab. Look for the `stellar-wave` label or
+browse the Drips maintainer dashboard for the project. Each issue lists an
+**Expected Drips Points** value and a complexity tier (Low / Medium / High). The
+points value shown in the issue body is set by the maintainer in the Drips
+dashboard—do not attempt to change it by adding or removing GitHub labels, as that
+can override the Drips configuration.
+
+### 2. Claiming an issue
+
+Before writing any code:
+
+1. Verify the issue has the `status: available` label (or no active assignee).
+2. Open the issue and post a comment using the
+   [**Claim an Issue**](.github/ISSUE_TEMPLATE/claim_issue.yml) template.
+   Fill in your GitHub handle, issue type (`Stellar Wave issue`), a brief
+   planned approach, and an estimated completion date.
+3. A maintainer will assign the issue to you (usually within 24 hours) and
+   change the label to `status: in-progress`.
+4. You do **not** need any special permissions to post a claim comment—any
+   GitHub user can do it.
+
+> **One active claim per contributor.** Do not claim a second issue while
+> another is in progress. If you need to drop an issue, post a comment so a
+> maintainer can release it.
+
+### 3. Staying active: progress updates
+
+Post a progress update **at least every 7 days** using the template in
+[`.github/PROGRESS_UPDATE.md`](../.github/PROGRESS_UPDATE.md). Issues with no
+update for 14+ days may be labelled `status: needs-update` and eventually
+re-opened for others.
+
+### 4. Branch and PR naming
+
+Create a branch from the latest `main` of the **upstream** repository:
+
+```bash
+git fetch upstream
+git checkout -b feat/issue-<number>-short-description upstream/main
+```
+
+Examples:
+
+| Issue | Branch name |
+|-------|------------|
+| `#559` – contributor guide | `feat/issue-559-wave-contributor-docs` |
+| `#611` – correlation middleware | `feat/issue-611-correlation-id-middleware` |
+
+For PRs that address multiple related issues at once, list all numbers:
+
+```
+feat/issues-545-549-share-price-chart-and-manifest
+```
+
+### 5. Linking the issue in your PR
+
+The PR body **must** include a closing keyword so GitHub (and Drips) can
+automatically link and close the issue on merge. Use one of:
+
+```
+Closes #<issue-number>
+Fixes #<issue-number>
+Resolves #<issue-number>
+```
+
+If a single PR closes multiple issues, list each on its own line:
+
+```
+Closes #545
+Closes #549
+```
+
+Place these lines in the **Description** section of the PR body, not only in
+commit messages. GitHub only processes closing keywords in the PR body (or a
+commit message on the default branch after merge) when the PR targets the same
+repository's default branch.
+
+### 6. PR description checklist
+
+Use the [PR template](../.github/pull_request_template.md) and make sure to:
+
+- Fill in every section (Description, Type of Change, Verification Commands).
+- Check off `npm run lint` / `npm run test` (frontend/backend) or
+  `cargo fmt` / `cargo clippy` / `cargo test` (contracts) as appropriate.
+- Add UI snapshots (Desktop 1024px+ and Mobile 375px) if the PR touches
+  React components or CSS; otherwise state **"No visual changes"** explicitly.
+- Reference the issue number in the title (e.g. `feat: add correlation ID middleware (#611)`).
+
+### 7. Review and merge expectations
+
+- A maintainer will review your PR and may request changes. Address feedback
+  promptly; PRs with no response to review comments for 7+ days may be closed.
+- **Do not** force-push after a review has started—add new commits instead so
+  the reviewer can see what changed.
+- The maintainer merges via squash or merge commit (never rebase from a fork
+  PR). You do not need to squash your commits yourself.
+- Once the PR is merged to `main`, GitHub will automatically close the linked
+  issue(s).
+
+### 8. Drips points
+
+Drips points are managed entirely through the **Drips maintainer dashboard**, not
+by GitHub labels. Do **not** add or remove the `stellar-wave` label or change
+issue complexity labels yourself—doing so can reset the points value to a Drips
+default (typically 100 points) rather than the maintainer-set value. If you
+believe the complexity of an issue is mis-classified, leave a comment on the
+issue describing your reasoning and a maintainer will review it.
+
+Points are distributed after the PR is merged and the issue is closed. You do not
+need to do anything extra to receive them—Drips tracks the linked issue closure
+automatically.

@@ -3,6 +3,13 @@ import { render, screen, waitFor } from "@testing-library/react";
 import PnLChart from "./PnLChart";
 import { useWallet } from "../../context/useWallet";
 
+// Mock ResizeObserver
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
 // Mock the wallet context
 vi.mock("../../context/useWallet", () => ({
   useWallet: vi.fn(),
@@ -153,7 +160,7 @@ describe("PnLChart", () => {
       render(<PnLChart />);
 
       await waitFor(() => {
-        expect(screen.getByText(/failed to load pnl data/i)).toBeInTheDocument();
+        expect(screen.getByText(/network error/i)).toBeInTheDocument();
       });
     });
 

@@ -10,6 +10,7 @@ import { metricsMiddleware, getMetrics } from "./middleware/metrics";
 import { auditMiddleware } from "./middleware/audit";
 import { sendError } from "./utils/errorResponse";
 import { requestContextMiddleware } from "./middleware/requestContext";
+import { correlationIdMiddleware } from "./middleware/correlationId";
 import { errorHandler, requestLoggerMiddleware } from "./middleware/requestLogger";
 import yieldsRouter from "./routes/yields";
 import leaderboardRouter from "./routes/leaderboard";
@@ -42,7 +43,10 @@ import analyticsRouter from "./routes/analytics";
 import fragmentationRouter from "./routes/fragmentation";
 import indexerRouter from "./routes/indexer";
 import rewardsRouter from "./routes/rewards";
+import reliabilityRouter from "./routes/reliability";
+import relayerStatusRouter from "./routes/relayerStatus";
 import auditReplayRouter from "./routes/auditReplay";
+import sharePriceHistoryRouter from "./routes/sharePriceHistory";
 import { createAuthChallenge, verifyAuthChallenge } from "./utils/stellarAuth";
 import {
   getRecommendationTimeline,
@@ -89,6 +93,7 @@ export function createApp() {
   app.use(cors());
   app.use(express.json());
   app.use(requestContextMiddleware);
+  app.use(correlationIdMiddleware);
   app.use(requestLoggerMiddleware);
   app.use(metricsMiddleware);
   app.use(auditMiddleware);
@@ -131,7 +136,10 @@ export function createApp() {
   app.use("/api/liquidity", fragmentationRouter);
   app.use("/api/indexer", indexerRouter);
   app.use("/api/rewards", rewardsRouter);
+  app.use("/api/reliability", reliabilityRouter);
+  app.use("/api/relayer/status", relayerStatusRouter);
   app.use("/api/audit-replay", auditReplayRouter);
+  app.use("/api/vaults", sharePriceHistoryRouter);
 
   // Legacy JSON metrics (internal tooling)
   app.get("/api/metrics", getMetrics);

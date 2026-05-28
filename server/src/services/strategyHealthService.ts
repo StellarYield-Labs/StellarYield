@@ -4,6 +4,7 @@ import {
   strategyStateTransitionAuditService,
   type StrategyLifecycleState,
 } from "./strategyStateTransitionAuditService";
+import { evaluateHealthScoreChange } from "./healthScoreChangeAlertService";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -174,7 +175,17 @@ export class StrategyHealthEngine {
       
       // Cache the result
       cache.set(cacheKey, healthScore);
-      
+
+      // Evaluate health score change for alert dispatch (#527)
+      try {
+        evaluateHealthScoreChange(healthScore);
+      } catch (err) {
+        console.warn(
+          `Failed to evaluate health score change for ${strategyId}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+
       // Auto-disable if necessary
       if (overallScore < this.config.autoDisableThreshold && !suppressUntil) {
         await this.handleAutoDisable(strategyId, healthScore);

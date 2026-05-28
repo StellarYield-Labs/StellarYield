@@ -156,6 +156,7 @@ model Incident {
   resolved        Boolean  @default(false)
   startedAt       DateTime
   resolvedAt      DateTime?
+  postmortemUrl   String?  // Link to postmortem document
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

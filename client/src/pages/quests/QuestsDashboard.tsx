@@ -1,11 +1,12 @@
 import { useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { Trophy, RefreshCw, Star, Award, AlertCircle, Loader2 } from "lucide-react";
+import { Trophy, RefreshCw, Star, Award, Loader2 } from "lucide-react";
 import { useWallet } from "../../context/useWallet";
 import { useQuestStore } from "./useQuestStore";
 import QuestCard from "./QuestCard";
 import BadgeUnlockAnimation from "./BadgeUnlockAnimation";
 import type { QuestStatus } from "./types";
+import ApiErrorBanner from "../../components/ApiErrorBanner/ApiErrorBanner";
 
 const FILTERS: { label: string; value: QuestStatus | "all" }[] = [
   { label: "All", value: "all" },
@@ -112,16 +113,11 @@ export default function QuestsDashboard() {
         </header>
 
         {progressVerification.status === "error" && (
-          <div
-            role="alert"
-            className="glass-card border border-red-500/40 bg-red-950/30 px-4 py-3 flex items-start gap-3 text-sm text-red-100"
-          >
-            <AlertCircle size={18} className="shrink-0 mt-0.5 text-red-400" />
-            <div>
-              <p className="font-medium">Could not refresh quest progress</p>
-              <p className="text-red-200/80 mt-1">{progressVerification.message}</p>
-            </div>
-          </div>
+          <ApiErrorBanner
+            message={progressVerification.message}
+            onRetry={handleRefresh}
+            className="mb-6"
+          />
         )}
 
         {isProgressVerifying && (

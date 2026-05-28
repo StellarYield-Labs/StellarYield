@@ -26,6 +26,7 @@ import {
 } from "recharts";
 import { getApiBaseUrl } from "../../lib/api";
 import { parseSmokeRunResult } from "./smokeResults";
+import VaultReliabilityPanel from "./VaultReliabilityPanel";
 import AuditReplayReportPanel from "./AuditReplayReportPanel";
 import RegistryDiffPage from "./RegistryDiff";
 
@@ -304,6 +305,8 @@ export default function TransparencyDashboard() {
                 )}
             </div>
 
+            {/* Data Source Reliability */}
+            <VaultReliabilityPanel />
             <AuditReplayReportPanel />
             <RegistryDiffPage />
         </div>

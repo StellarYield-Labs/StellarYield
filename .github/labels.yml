@@ -96,3 +96,20 @@ labels:
   - name: "area: ci"
     color: "f9d0c4"
     description: "GitHub Actions workflows and CI configuration"
+
+  # Contributor Claim / Progress Labels (issue #428)
+  - name: "status: claimed"
+    color: "0e8a16"
+    description: "A contributor has claimed this issue and is actively working on it"
+
+  - name: "status: in-progress"
+    color: "e4b400"
+    description: "Work is actively underway on this issue"
+
+  - name: "status: needs-update"
+    color: "d93f0b"
+    description: "Claimed issue has had no update for 7+ days — contributor should check in"
+
+  - name: "status: available"
+    color: "0075ca"
+    description: "Issue is unclaimed and available for contributors to pick up"
