@@ -153,4 +153,212 @@ describe("recommendDepositRouting", () => {
       decimals: 7,
     });
   });
+
+  // ── Multi-pool optimisation (follow-up to PR #486) ──────────────────────
+
+  describe("multi-pool path optimisation", () => {
+    it("picks the route with the highest expected output across protocols", async () => {
+      // Two protocols, two different quotes — aquarius is better here.
+      mockGetZapQuote.mockReset();
+      mockGetZapQuote.mockImplementation(async (body) => ({
+        path: [
+          { contractId: "C_XLM", label: "XLM" },
+          { contractId: "C_USDC", label: "USDC" },
+        ],
+        expectedAmountOutStroops: "1000",
+        source: "router_simulation",
+        slippageApplied: body.protocol === "aquarius" ? 0.001 : 0.01,
+        amountOutAfterSlippage: body.protocol === "aquarius" ? "999" : "990",
+        quotedAt: "2026-01-01T00:00:00.000Z",
+        minAmountOutStroops: body.protocol === "aquarius" ? "999" : "990",
+        quoteAgeMs: 0,
+        isFallback: false,
+      }));
+
+      const result = await recommendDepositRouting(
+        [{ symbol: "XLM", amountInStroops: "1000000" }],
+        { quoteProtocols: ["soroswap", "aquarius"] },
+      );
+
+      expect(mockGetZapQuote).toHaveBeenCalledTimes(2);
+      const route = result.routes[0];
+      expect(route.action).toBe("convert");
+      expect(route.protocol).toBe("aquarius");
+      expect(route.expectedVaultAmountStroops).toBe("999");
+      expect(route.alternativeQuotes).toHaveLength(1);
+      expect(route.alternativeQuotes?.[0].protocol).toBe("soroswap");
+      expect(route.alternativeQuotes?.[0].expectedVaultAmountStroops).toBe("990");
+      expect(route.reasoning).toMatch(/Selected aquarius over 1 alternative quote/);
+    });
+
+    it("falls back to the working protocol when one throws", async () => {
+      mockGetZapQuote.mockReset();
+      mockGetZapQuote.mockImplementation(async (body) => {
+        if (body.protocol === "broken") {
+          throw new Error("rpc unreachable");
+        }
+        return {
+          path: [
+            { contractId: "C_XLM", label: "XLM" },
+            { contractId: "C_USDC", label: "USDC" },
+          ],
+          expectedAmountOutStroops: "1000",
+          source: "router_simulation",
+          slippageApplied: 0.005,
+          amountOutAfterSlippage: "995",
+          quotedAt: "2026-01-01T00:00:00.000Z",
+          minAmountOutStroops: "995",
+          quoteAgeMs: 0,
+          isFallback: false,
+        };
+      });
+
+      const result = await recommendDepositRouting(
+        [{ symbol: "XLM", amountInStroops: "1000000" }],
+        { quoteProtocols: ["broken", "aquarius"] },
+      );
+
+      expect(result.routes).toHaveLength(1);
+      expect(result.routes[0].protocol).toBe("aquarius");
+      expect(result.routes[0].alternativeQuotes).toBeUndefined();
+    });
+
+    it("warns and skips the asset when every protocol throws", async () => {
+      mockGetZapQuote.mockReset();
+      mockGetZapQuote.mockRejectedValue(new Error("all rpcs down"));
+
+      const result = await recommendDepositRouting(
+        [{ symbol: "XLM", amountInStroops: "1000000" }],
+        { quoteProtocols: ["broken", "also_broken"] },
+      );
+
+      expect(result.routes).toHaveLength(0);
+      expect(
+        result.warnings.some((w) =>
+          /Could not obtain a conversion quote for XLM/.test(w),
+        ),
+      ).toBe(true);
+    });
+
+    it("reads DEPOSIT_ROUTING_PROTOCOLS when no option is provided", async () => {
+      mockGetZapQuote.mockReset();
+      const seen: (string | undefined)[] = [];
+      mockGetZapQuote.mockImplementation(async (body) => {
+        seen.push(body.protocol);
+        return {
+          path: [
+            { contractId: "C_XLM", label: "XLM" },
+            { contractId: "C_USDC", label: "USDC" },
+          ],
+          expectedAmountOutStroops: "1000",
+          source: "router_simulation",
+          slippageApplied: 0.005,
+          amountOutAfterSlippage: "995",
+          quotedAt: "2026-01-01T00:00:00.000Z",
+          minAmountOutStroops: "995",
+          quoteAgeMs: 0,
+          isFallback: false,
+        };
+      });
+
+      const prev = process.env.DEPOSIT_ROUTING_PROTOCOLS;
+      process.env.DEPOSIT_ROUTING_PROTOCOLS = "soroswap, aquarius ,phoenix";
+      try {
+        await recommendDepositRouting([
+          { symbol: "XLM", amountInStroops: "1000000" },
+        ]);
+      } finally {
+        if (prev === undefined) delete process.env.DEPOSIT_ROUTING_PROTOCOLS;
+        else process.env.DEPOSIT_ROUTING_PROTOCOLS = prev;
+      }
+
+      // Three quotes attempted, in declared order.
+      expect(seen).toEqual(["soroswap", "aquarius", "phoenix"]);
+    });
+
+    it("treats the literal 'default' protocol as undefined", async () => {
+      mockGetZapQuote.mockReset();
+      const seen: (string | undefined)[] = [];
+      mockGetZapQuote.mockImplementation(async (body) => {
+        seen.push(body.protocol);
+        return {
+          path: [
+            { contractId: "C_XLM", label: "XLM" },
+            { contractId: "C_USDC", label: "USDC" },
+          ],
+          expectedAmountOutStroops: "1000",
+          source: "router_simulation",
+          slippageApplied: 0.005,
+          amountOutAfterSlippage: "995",
+          quotedAt: "2026-01-01T00:00:00.000Z",
+          minAmountOutStroops: "995",
+          quoteAgeMs: 0,
+          isFallback: false,
+        };
+      });
+
+      await recommendDepositRouting(
+        [{ symbol: "XLM", amountInStroops: "1000000" }],
+        { quoteProtocols: ["default"] },
+      );
+      expect(seen).toEqual([undefined]);
+    });
+  });
+
+  // ── Additional coverage for the existing surface (toward 90%) ────────────
+
+  it("accepts symbols with extra whitespace", async () => {
+    const result = await recommendDepositRouting([
+      { symbol: "  xlm  ", amountInStroops: "1000" },
+    ]);
+    expect(result.unsupportedAssets).toHaveLength(0);
+    expect(result.routes[0].symbol).toBe("XLM");
+  });
+
+  it("rejects assets with an empty symbol string", async () => {
+    const result = await recommendDepositRouting([
+      { symbol: "", amountInStroops: "1000" },
+    ]);
+    expect(result.routes).toHaveLength(0);
+    expect(result.unsupportedAssets).toHaveLength(1);
+  });
+
+  it("treats non-numeric amountInStroops as 0 in the sum without crashing", async () => {
+    mockGetZapQuote.mockResolvedValueOnce({
+      path: [
+        { contractId: "C_XLM", label: "XLM" },
+        { contractId: "C_USDC", label: "USDC" },
+      ],
+      expectedAmountOutStroops: "not-a-number",
+      source: "router_simulation",
+      slippageApplied: 0.005,
+      amountOutAfterSlippage: "not-a-number",
+      quotedAt: "2026-01-01T00:00:00.000Z",
+      minAmountOutStroops: "not-a-number",
+      quoteAgeMs: 0,
+      isFallback: false,
+    });
+    const result = await recommendDepositRouting([
+      { symbol: "XLM", amountInStroops: "1000000" },
+    ]);
+    expect(result.totals.expectedVaultAmountStroops).toBe("0");
+  });
+
+  it("returns an empty result with a single warning for an empty basket", async () => {
+    const result = await recommendDepositRouting([]);
+    expect(result.routes).toHaveLength(0);
+    expect(result.unsupportedAssets).toHaveLength(0);
+    expect(result.totals.routableAssets).toBe(0);
+    expect(result.warnings).toContain(
+      "No supported assets in request; nothing to route.",
+    );
+  });
+
+  it("stamps generatedAt as an ISO 8601 string", async () => {
+    const result = await recommendDepositRouting([
+      { symbol: "USDC", amountInStroops: "1000" },
+    ]);
+    // Round-trip through Date — invalid ISO would produce NaN.
+    expect(Number.isNaN(Date.parse(result.generatedAt))).toBe(false);
+  });
 });
