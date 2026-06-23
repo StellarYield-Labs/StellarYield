@@ -63,6 +63,9 @@ jobs:
       - name: Run backend tests
         run: npm test
 
+      - name: Run failure harness tests (backend)
+        run: npx jest --testPathPattern="failureHarness" --no-coverage
+
   frontend:
     name: Frontend Checks
     runs-on: ubuntu-latest
@@ -101,6 +104,18 @@ jobs:
         run: |
           set -o pipefail
           npm test 2>&1 | tee frontend-test.log
+
+      - name: Run failure harness tests (frontend)
+        id: frontend_harness_tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node ./node_modules/vitest/vitest.mjs run --reporter=verbose src/components/dashboard/__tests__/ApyDashboard.failure.test.tsx 2>&1 | tee frontend-harness.log
+
+      - name: Fail if failure harness tests failed
+        if: steps.frontend_harness_tests.outcome == 'failure'
+        run: exit 1
 
       - name: Build frontend and capture logs
         id: frontend_build
