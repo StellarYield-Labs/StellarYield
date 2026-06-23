@@ -24,3 +24,20 @@ const localStorageMock = (() => {
 if (typeof global !== "undefined" && !global.localStorage) {
     (global as any).localStorage = localStorageMock;
 }
+
+// Mock window.matchMedia — jsdom does not implement it
+if (typeof window !== "undefined" && !window.matchMedia) {
+    Object.defineProperty(window, "matchMedia", {
+        writable: true,
+        value: (query: string) => ({
+            matches: false,
+            media: query,
+            onchange: null,
+            addListener: () => {},
+            removeListener: () => {},
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            dispatchEvent: () => false,
+        }),
+    });
+}
