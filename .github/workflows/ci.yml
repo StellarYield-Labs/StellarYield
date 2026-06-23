@@ -87,6 +87,10 @@ jobs:
           npm config set fetch-retry-maxtimeout 120000
           npm config set fetch-timeout 120000
 
+      - name: Guard public frontend environment variables
+        working-directory: .
+        run: node scripts/check-vite-public-env.js
+
       - name: Install client dependencies
         run: npm ci --no-audit --prefer-offline
 

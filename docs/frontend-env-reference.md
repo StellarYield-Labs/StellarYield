@@ -63,8 +63,9 @@ These variables are safe to leave blank in development. Features that depend on 
 | `VITE_APP_URL` | `https://stellaryield.vercel.app` | Canonical site URL used for share links and OG metadata. |
 | `VITE_OFFRAMP_BASE_URL` | `https://api.moonpay.com` | Off-ramp provider base URL. Override when using a sandbox. |
 | `VITE_OFFRAMP_API_KEY` | _empty_ | Public off-ramp partner key. Note: even though "API key" sounds private, the off-ramp partner issues a publishable key intended for the browser; do not put a server-side secret here. |
-| `VITE_GOOGLE_CLIENT_ID` | _empty_ | Google OAuth client ID for Sheets export. |
-| `VITE_GOOGLE_CLIENT_SECRET` | _empty_ | Google OAuth client secret. **Only set this for local testing**; production builds must use a backend-mediated OAuth flow rather than shipping the secret in the bundle. |
+| `VITE_GOOGLE_CLIENT_ID` | _empty_ | Public Google OAuth client ID for Sheets export. |
+
+Google OAuth client secrets, refresh-token secrets, webhook URLs, signing keys, database URLs, and provider tokens must live in `server/.env` or the deployment secret store without a `VITE_` prefix. The browser starts the Google OAuth flow with the public client ID, then exchanges the authorization code through `/api/google-sheets/token` so the secret stays on the backend.
 
 ## Example `.env.local`
 
@@ -94,3 +95,4 @@ VITE_APP_URL=http://localhost:5173
 - Contract IDs must point at the network selected by `VITE_NETWORK_PASSPHRASE` and `VITE_SOROBAN_RPC_URL`. Mixing testnet contracts with mainnet RPC, or vice versa, is the most common deploy-time bug.
 - Do not promote a Preview build to Production without verifying the environment-specific values; Vercel scopes variables per environment so a missing Production override can cause confusing runtime behavior.
 - For rotation rollouts, change `VITE_VAULT_CONTRACT_ID` first, redeploy, then retire `VITE_CONTRACT_ID` in a follow-up release once the override has been verified.
+- CI runs `npm run check:frontend-env` from the repository root. The guard fails if a new `VITE_` variable name looks secret-like or is not listed as an intentional public frontend variable.

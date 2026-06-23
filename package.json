@@ -2,6 +2,7 @@
   "name": "stellaryield",
   "private": true,
   "scripts": {
+    "check:frontend-env": "node scripts/check-vite-public-env.js",
     "smoke-test": "bash scripts/smoke-test.sh",
     "smoke-test:node": "node scripts/smoke-test.js",
     "smoke-test:portable": "node scripts/smoke-test.js",

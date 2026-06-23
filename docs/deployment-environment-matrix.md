@@ -65,6 +65,8 @@ Backend runs at `http://localhost:3001`. The frontend's `VITE_API_BASE_URL` must
 
 Local development does not require a live Vercel project, external OAuth credentials, or an off-ramp API key. All optional integrations (Google Sheets export, MoonPay) gracefully disable themselves when their variables are absent.
 
+Never put OAuth client secrets, private keys, webhook URLs, provider tokens, or database credentials in `VITE_` variables. Vite embeds every `VITE_` value in the browser bundle. Secret-dependent integration flows must go through backend routes that read unprefixed server environment variables.
+
 ---
 
 ## Vercel Preview
