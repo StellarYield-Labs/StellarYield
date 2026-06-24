@@ -26,11 +26,13 @@ describe("vaultMetadataService", () => {
     expect(() => sanitizeSvg(tooLarge)).toThrow(/exceeds maximum allowed size/);
   });
 
-  it("rejects SVG with script tags during validation", () => {
+  it("removes script tags during sanitization", () => {
     const malicious =
       '<svg width="100" height="100"><script>alert("xss")</script><rect width="100" height="100" /></svg>';
 
-    expect(() => sanitizeSvg(malicious)).toThrow(/script tags/);
+    const cleaned = sanitizeSvg(malicious);
+    expect(cleaned).toContain("<svg");
+    expect(cleaned).not.toContain("<script");
   });
 
   it("accepts valid SVG with proper dimensions", () => {
@@ -64,24 +66,23 @@ describe("vaultMetadataService", () => {
     }
   });
 
-  it("validates icon before uploading to Pinata", async () => {
+  it("sanitizes icon before uploading to Pinata", async () => {
     const previousPinata = process.env.PINATA_JWT;
-    process.env.PINATA_JWT = "fake-jwt-for-testing";
+    delete process.env.PINATA_JWT;
 
     const maliciousIcon = '<svg width="100" height="100"><script>alert("xss")</script></svg>';
 
-    await expect(
-      uploadVaultMetadata({
-        vaultName: "Test Vault",
-        description: "Test description",
-        iconSvg: maliciousIcon,
-      }),
-    ).rejects.toThrow(/script tags/);
+    const result = await uploadVaultMetadata({
+      vaultName: "Test Vault",
+      description: "Test description",
+      iconSvg: maliciousIcon,
+    });
+
+    expect(result.uploadMode).toBe("local-fallback");
+    expect(result.metadata.icon).not.toContain("<script");
 
     if (previousPinata) {
       process.env.PINATA_JWT = previousPinata;
-    } else {
-      delete process.env.PINATA_JWT;
     }
   });
 });

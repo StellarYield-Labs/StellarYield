@@ -9,9 +9,9 @@ import {
   validateVaultMetadataInput,
   sanitizeSvg,
   type VaultMetadataInput,
-} from "../../services/ipfs/vaultMetadataService";
+} from "../services/ipfs/vaultMetadataService";
 
-const VALID_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>`;
+const VALID_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><circle cx="32" cy="32" r="30"/></svg>`;
 
 function makeValidInput(overrides: Partial<VaultMetadataInput> = {}): VaultMetadataInput {
   return {

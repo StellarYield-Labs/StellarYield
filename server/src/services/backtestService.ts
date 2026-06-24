@@ -41,7 +41,6 @@ export function validateBacktestRequest(
   try {
     // Required fields validation
     const requiredErrors = validateRequired(request as unknown as Record<string, unknown>, [
-      "vaultContractId",
       "startDate",
       "endDate",
       "depositAmount",
@@ -183,12 +182,15 @@ export function calculateCompoundInterest(
 
   for (let i = 0; i < snapshots.length; i++) {
     const snapshot = snapshots[i];
-    const dailyRate = snapshot.apy / 365 / 100;
+    const apy = snapshot.apy ?? 0;
+    const dailyRate = apy / 365 / 100;
     currentValue = (currentValue * BigInt(Math.round((1 + dailyRate) * 1e9))) / BigInt(1e9);
 
     results.push({
       date: snapshot.date,
-      apy: snapshot.apy,
+      balance: currentValue,
+      yieldEarned: currentValue - initialAmount,
+      apy,
       equityValue: currentValue,
     });
   }

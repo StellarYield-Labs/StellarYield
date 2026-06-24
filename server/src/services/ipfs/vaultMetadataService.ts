@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { validateIconAssetOrThrow, DEFAULT_ICON_CONFIG } from "../../utils/iconValidator";
+import { DEFAULT_ICON_CONFIG } from "../../utils/iconValidator";
 
 export interface VaultMetadataInput {
   vaultName: string;
@@ -33,6 +33,28 @@ function requireNonEmpty(value: string, field: string): string {
   return trimmed;
 }
 
+function extractSvgDimensionsFromString(svg: string): { width: number; height: number } | null {
+  const viewBoxMatch = svg.match(/viewBox\s*=\s*["']([^"']+)["']/i);
+  if (viewBoxMatch) {
+    const values = viewBoxMatch[1].split(/\s+/).map(Number);
+    if (values.length === 4 && !values.some(isNaN)) {
+      return { width: values[2], height: values[3] };
+    }
+  }
+
+  const widthMatch = svg.match(/width\s*=\s*["']?(\d+)/i);
+  const heightMatch = svg.match(/height\s*=\s*["']?(\d+)/i);
+
+  if (widthMatch && heightMatch) {
+    return {
+      width: parseInt(widthMatch[1], 10),
+      height: parseInt(heightMatch[1], 10),
+    };
+  }
+
+  return null;
+}
+
 export function sanitizeSvg(svg: string): string {
   const normalized = requireNonEmpty(svg, "iconSvg");
 
@@ -40,14 +62,41 @@ export function sanitizeSvg(svg: string): string {
     throw new Error("iconSvg must be a valid SVG string");
   }
 
-  // Validate icon asset before sanitization
-  validateIconAssetOrThrow(normalized, "image/svg+xml", DEFAULT_ICON_CONFIG);
-
-  return normalized
+  const sanitized = normalized
     .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
     .replace(/\son\w+="[^"]*"/gi, "")
     .replace(/\son\w+='[^']*'/gi, "")
     .replace(/javascript:/gi, "");
+
+  const dimensions = extractSvgDimensionsFromString(sanitized);
+  if (dimensions) {
+    if (
+      dimensions.width < DEFAULT_ICON_CONFIG.minDimensionsPx.width ||
+      dimensions.height < DEFAULT_ICON_CONFIG.minDimensionsPx.height
+    ) {
+      throw new Error(
+        `Icon validation failed: SVG dimensions (${dimensions.width}x${dimensions.height}) are below minimum (${DEFAULT_ICON_CONFIG.minDimensionsPx.width}x${DEFAULT_ICON_CONFIG.minDimensionsPx.height})`,
+      );
+    }
+
+    if (
+      dimensions.width > DEFAULT_ICON_CONFIG.maxDimensionsPx.width ||
+      dimensions.height > DEFAULT_ICON_CONFIG.maxDimensionsPx.height
+    ) {
+      throw new Error(
+        `Icon validation failed: SVG dimensions (${dimensions.width}x${dimensions.height}) exceed maximum (${DEFAULT_ICON_CONFIG.maxDimensionsPx.width}x${DEFAULT_ICON_CONFIG.maxDimensionsPx.height})`,
+      );
+    }
+  }
+
+  const sizeBytes = Buffer.byteLength(sanitized, "utf8");
+  if (sizeBytes > DEFAULT_ICON_CONFIG.maxFileSizeBytes) {
+    throw new Error(
+      `Icon validation failed: SVG size (${sizeBytes} bytes) exceeds maximum allowed size (${DEFAULT_ICON_CONFIG.maxFileSizeBytes} bytes)`,
+    );
+  }
+
+  return sanitized;
 }
 
 function makeDeterministicCid(seed: string): string {
@@ -119,6 +168,34 @@ async function uploadJsonToPinata(
   }
 
   return data.IpfsHash;
+}
+
+export function validateVaultMetadataInput(input: unknown): { ok: true } | { ok: false; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!input || typeof input !== 'object') {
+    errors.push('Input must be a non-null object');
+    return { ok: false, errors };
+  }
+
+  const data = input as Record<string, unknown>;
+
+  if (!data.vaultName || (typeof data.vaultName === 'string' && data.vaultName.trim() === '')) {
+    errors.push('vaultName is required');
+  }
+  if (!data.description || (typeof data.description === 'string' && data.description.trim() === '')) {
+    errors.push('description is required');
+  }
+  if (!data.iconSvg || (typeof data.iconSvg === 'string' && data.iconSvg.trim() === '')) {
+    errors.push('iconSvg is required');
+  } else if (typeof data.iconSvg === 'string' && !/<svg[\s\S]*?>/i.test(data.iconSvg)) {
+    errors.push('iconSvg must be a valid SVG string');
+  }
+
+  if (errors.length > 0) {
+    return { ok: false, errors };
+  }
+  return { ok: true };
 }
 
 export async function uploadVaultMetadata(

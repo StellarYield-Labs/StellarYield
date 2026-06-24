@@ -160,7 +160,7 @@ function validateSvgIcon(
   return {
     valid: errors.length === 0,
     errors,
-    warnings: warnings.length > 0 ? warnings : undefined,
+    warnings,
     metadata: {
       format: "svg",
       sizeBytes,
@@ -256,7 +256,7 @@ function validateRasterIcon(
   return {
     valid: errors.length === 0,
     errors,
-    warnings: warnings.length > 0 ? warnings : undefined,
+    warnings,
     metadata: {
       format,
       sizeBytes,
@@ -278,7 +278,7 @@ export function validateIconAsset(
   const detectedFormat = detectImageFormat(content);
   if (!detectedFormat) {
     errors.push("Could not detect image format. Ensure the file is a valid image.");
-    return { valid: false, errors };
+    return { valid: false, errors, warnings: [] };
   }
 
   // Validate format is allowed
@@ -286,7 +286,7 @@ export function validateIconAsset(
     errors.push(
       `Image format '${detectedFormat}' is not allowed. Allowed formats: ${config.allowedFormats.join(", ")}`,
     );
-    return { valid: false, errors };
+    return { valid: false, errors, warnings: [] };
   }
 
   // Validate MIME type if provided
