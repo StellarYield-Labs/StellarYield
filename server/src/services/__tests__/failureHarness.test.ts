@@ -86,11 +86,16 @@ beforeEach(() => {
 
 describe("Failure class: TIMEOUT", () => {
   it("harness races caller's promise against an injected timeout sentinel", async () => {
+    let timer: ReturnType<typeof setTimeout>;
     const slowFactory = () =>
-      new Promise<string>((resolve) => setTimeout(() => resolve("done"), 10_000));
+      new Promise<string>((resolve) => {
+        timer = setTimeout(() => resolve("done"), 10_000);
+      });
 
     const harness = buildHarnessFor(slowFactory);
     const result = await harness.inject(FailureMode.TIMEOUT, { delayMs: 50 });
+
+    clearTimeout(timer!);
 
     expect(result.timedOut).toBe(true);
     expect(result.value).toBeNull();

@@ -23,9 +23,7 @@ type PrismaLike = {
 
 async function loadPrismaClient(): Promise<PrismaLike | null> {
   try {
-    const prismaModule = (await import("@prisma/client")) as {
-      PrismaClient?: new () => PrismaLike;
-    };
+    const prismaModule = (await import("@prisma/client")) as any;
     if (!prismaModule.PrismaClient) return null;
     return new prismaModule.PrismaClient();
   } catch {
