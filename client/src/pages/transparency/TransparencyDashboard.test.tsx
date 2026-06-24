@@ -21,6 +21,12 @@ function makeFetchMock(incidents: unknown[]) {
         json: async () => ({ incidents }),
       });
     }
+    if (String(url).includes("reliability")) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => [],
+      });
+    }
     return Promise.resolve({
       ok: true,
       json: async () => mockTransparencyData,
