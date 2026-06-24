@@ -135,8 +135,11 @@ export default function TransactionBuilder({
 
       <div className="space-y-4">
         <div>
-          <label className="block text-sm text-gray-400 mb-1">Action</label>
+          <label htmlFor="action-select" className="block text-sm text-gray-400 mb-1">
+            Action
+          </label>
           <select
+            id="action-select"
             value={selectedAction}
             onChange={(e) => {
               setSelectedAction(e.target.value as AdminAction);

@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import TransparencyDashboard from "../TransparencyDashboard";
+import TransparencyDashboard from "./TransparencyDashboard";
 
 const mockTransparencyData = {
   totalRevenueLumens: 372000,

@@ -75,6 +75,7 @@ export class OffRampService {
             } else {
                 transaction.errorMessage = error instanceof Error ? error.message : "Unknown error";
             }
+            transaction.isRetryable = this.checkIfRetryable(error);
             this.saveTransaction(transaction);
             throw error;
         }

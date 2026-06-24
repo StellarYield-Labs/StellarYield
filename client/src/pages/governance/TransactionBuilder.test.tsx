@@ -94,11 +94,14 @@ describe("TransactionBuilder Validation", () => {
         />,
       );
 
+      const actionSelect = screen.getByRole("combobox", { name: /action/i });
+      fireEvent.change(actionSelect, { target: { value: "emergency_pause" } });
+
       const buildButton = screen.getByRole("button", { name: /build & propose/i });
       expect(buildButton).toBeDisabled();
     });
 
-    it("disables build button when no action is selected", () => {
+    it("does not render build button when no action is selected", () => {
       render(
         <TransactionBuilder
           threshold={2}
@@ -107,8 +110,8 @@ describe("TransactionBuilder Validation", () => {
         />,
       );
 
-      const buildButton = screen.getByRole("button", { name: /build & propose/i });
-      expect(buildButton).toBeDisabled();
+      const buildButton = screen.queryByRole("button", { name: /build & propose/i });
+      expect(buildButton).not.toBeInTheDocument();
     });
 
     it("shows validation errors for required fields", () => {
@@ -259,7 +262,8 @@ describe("TransactionBuilder Validation", () => {
       fireEvent.change(actionSelect, { target: { value: "emergency_pause" } });
 
       expect(screen.getByText("Action:")).toBeInTheDocument();
-      expect(screen.getByText("Emergency Pause")).toBeInTheDocument();
+      const actionElements = screen.getAllByText("Emergency Pause");
+      expect(actionElements.length).toBeGreaterThan(1); // One for option, one for summary
     });
 
     it("displays target information for keeper registration", () => {
@@ -276,11 +280,11 @@ describe("TransactionBuilder Validation", () => {
 
       const addressInput = screen.getByPlaceholderText("G...");
       fireEvent.change(addressInput, {
-        target: { value: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" },
+        target: { value: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" },
       });
 
       expect(screen.getByText("Target:")).toBeInTheDocument();
-      expect(screen.getByText(/GBBBBBB\.\.\./)).toBeInTheDocument();
+      expect(screen.getByText(/GBBBBBBB\.\.\./)).toBeInTheDocument();
     });
 
     it("displays critical risk level for emergency pause", () => {
@@ -311,6 +315,11 @@ describe("TransactionBuilder Validation", () => {
       const actionSelect = screen.getByRole("combobox", { name: /action/i });
       fireEvent.change(actionSelect, { target: { value: "remove_keeper" } });
 
+      const addressInput = screen.getByPlaceholderText("G...");
+      fireEvent.change(addressInput, {
+        target: { value: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" },
+      });
+
       expect(screen.getByText("Risk Level:")).toBeInTheDocument();
       expect(screen.getByText("HIGH")).toBeInTheDocument();
     });
@@ -329,7 +338,7 @@ describe("TransactionBuilder Validation", () => {
 
       const addressInput = screen.getByPlaceholderText("G...");
       fireEvent.change(addressInput, {
-        target: { value: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" },
+        target: { value: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" },
       });
 
       expect(screen.getByText("Risk Level:")).toBeInTheDocument();
@@ -383,7 +392,7 @@ describe("TransactionBuilder Validation", () => {
 
       const addressInput = screen.getByPlaceholderText("G...");
       fireEvent.change(addressInput, {
-        target: { value: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" },
+        target: { value: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" },
       });
 
       const buildButton = screen.getByRole("button", { name: /build & propose/i });
@@ -443,7 +452,7 @@ describe("TransactionBuilder Validation", () => {
 
       const addressInput = screen.getByPlaceholderText("G...");
       fireEvent.change(addressInput, {
-        target: { value: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" },
+        target: { value: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB" },
       });
 
       expect(screen.getByText(/ready to build/i)).toBeInTheDocument();
@@ -490,7 +499,7 @@ describe("TransactionBuilder Validation", () => {
       const amountInput = screen.getByPlaceholderText("1000000");
 
       fireEvent.change(targetInput, {
-        target: { value: "GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" },
+        target: { value: "GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" },
       });
       fireEvent.change(amountInput, { target: { value: "5000000" } });
 
@@ -580,7 +589,7 @@ describe("TransactionBuilder Validation", () => {
       const amountInput = screen.getByPlaceholderText("1000000");
 
       fireEvent.change(targetInput, {
-        target: { value: "GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" },
+        target: { value: "GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC" },
       });
       fireEvent.change(amountInput, { target: { value: "0" } });
 

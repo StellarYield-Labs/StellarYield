@@ -41,3 +41,12 @@ if (typeof window !== "undefined" && !window.matchMedia) {
         }),
     });
 }
+
+// Mock ResizeObserver — jsdom does not implement it, but recharts requires it
+if (typeof global !== "undefined" && !global.ResizeObserver) {
+    global.ResizeObserver = class ResizeObserver {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+    };
+}
