@@ -55,6 +55,20 @@ function extractSvgDimensionsFromString(svg: string): { width: number; height: n
   return null;
 }
 
+/**
+ * Iteratively applies a replacement until the string stabilises.
+ * This prevents bypass via nested payloads such as `<scr<script>ipt>`.
+ */
+function replaceUntilStable(input: string, pattern: RegExp, replacement: string): string {
+  let previous = input;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const next = previous.replace(pattern, replacement);
+    if (next === previous) return next;
+    previous = next;
+  }
+}
+
 export function sanitizeSvg(svg: string): string {
   const normalized = requireNonEmpty(svg, "iconSvg");
 
@@ -62,11 +76,24 @@ export function sanitizeSvg(svg: string): string {
     throw new Error("iconSvg must be a valid SVG string");
   }
 
-  const sanitized = normalized
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
-    .replace(/\son\w+="[^"]*"/gi, "")
-    .replace(/\son\w+='[^']*'/gi, "")
-    .replace(/javascript:/gi, "");
+  // 1. Strip <script> blocks — non-greedy, non-backtracking structure.
+  //    The character class [^<]* avoids polynomial backtracking by never
+  //    overlapping with the `<` that starts the closing tag.
+  let sanitized = replaceUntilStable(
+    normalized,
+    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+    "",
+  );
+
+  // 2. Strip inline event handlers (on*="…", on*='…', unquoted, backtick).
+  sanitized = replaceUntilStable(sanitized, /\s+on\w+\s*=\s*"[^"]*"/gi, "");
+  sanitized = replaceUntilStable(sanitized, /\s+on\w+\s*=\s*'[^']*'/gi, "");
+  sanitized = replaceUntilStable(sanitized, /\s+on\w+\s*=\s*[^\s>"']+/gi, "");
+
+  // 3. Strip dangerous URI schemes (javascript:, data:, vbscript:).
+  sanitized = replaceUntilStable(sanitized, /javascript\s*:/gi, "");
+  sanitized = replaceUntilStable(sanitized, /data\s*:/gi, "");
+  sanitized = replaceUntilStable(sanitized, /vbscript\s*:/gi, "");
 
   const dimensions = extractSvgDimensionsFromString(sanitized);
   if (dimensions) {

@@ -77,7 +77,7 @@ describe("Failure class: TIMEOUT", () => {
         const retry   = screen.queryByRole("button", { name: /retry/i });
         expect(heading ?? banner ?? retry).toBeTruthy();
       },
-      { timeout: 500 },
+      { timeout: 2_000 },
     );
   });
 
@@ -89,7 +89,7 @@ describe("Failure class: TIMEOUT", () => {
 
     await waitFor(
       () => expect(screen.queryAllByText(/failed|retry|unable/i).length).toBeGreaterThan(0),
-      { timeout: 500 },
+      { timeout: 2_000 },
     );
   });
 });

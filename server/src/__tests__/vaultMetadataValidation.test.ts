@@ -143,4 +143,32 @@ describe("sanitizeSvg", () => {
     expect(result).not.toContain("<script");
     expect(result).not.toContain("var x");
   });
+
+  it("handles nested script tag bypass attempts", () => {
+    // After stripping inner <script>, the outer fragments rejoin into a new <script> tag
+    const svg = `<svg><scr<script></script>ipt>alert(1)</script><circle r="5"/></svg>`;
+    const result = sanitizeSvg(svg);
+    expect(result).not.toContain("<script");
+    expect(result).not.toContain("alert");
+  });
+
+  it("strips event handlers revealed after script tag removal", () => {
+    // Removing the <script> block reveals ` onload="evil()"` on the <svg> tag
+    const svg = `<svg<script></script> onload="evil()"><circle r="5"/></svg>`;
+    const result = sanitizeSvg(svg);
+    expect(result).not.toContain("onload");
+    expect(result).not.toContain("evil");
+  });
+
+  it("strips data: URIs", () => {
+    const svg = `<svg><image href="data:text/html,<script>alert(1)</script>"/></svg>`;
+    const result = sanitizeSvg(svg);
+    expect(result.toLowerCase()).not.toContain("data:");
+  });
+
+  it("strips vbscript: URIs", () => {
+    const svg = `<svg><a href="vbscript:MsgBox('xss')"><circle r="5"/></a></svg>`;
+    const result = sanitizeSvg(svg);
+    expect(result.toLowerCase()).not.toContain("vbscript:");
+  });
 });
