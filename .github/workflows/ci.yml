@@ -64,7 +64,7 @@ jobs:
         run: npm test
 
       - name: Run failure harness tests (backend)
-        run: npx jest --testPathPattern="failureHarness" --no-coverage
+        run: npx jest --testPathPatterns="failureHarness" --no-coverage
 
   frontend:
     name: Frontend Checks
