@@ -25,13 +25,22 @@ export interface HistoricalDataPoint {
 export interface PredictionPoint {
   date: string;
   predictedApy: number;
+  lowerApy: number;
+  upperApy: number;
   confidence: number; // 0-1, decreases further into the future
+}
+
+export interface ConfidenceInputs {
+  volatilityPct: number;
+  dataCompleteness: number;
+  modelFit: number;
 }
 
 export interface ApyPrediction {
   protocol: string;
   historical: HistoricalDataPoint[];
   predictions: PredictionPoint[];
+  confidenceInputs: ConfidenceInputs;
   trend: "rising" | "falling" | "stable";
   generatedAt: string;
 }
@@ -118,10 +127,16 @@ export function predictApy(
   if (historical.length < 3) {
     // Not enough data; return flat projection from last known value
     const lastApy = historical[historical.length - 1]?.apy ?? 0;
+    const volatilityPct = computeVolatilityPct(historical.map((d) => d.apy));
     return {
       protocol,
       historical,
       predictions: generateFlatPredictions(lastApy, forecastDays),
+      confidenceInputs: {
+        volatilityPct,
+        dataCompleteness: Math.min(1, historical.length / 30),
+        modelFit: 0,
+      },
       trend: "stable",
       generatedAt: new Date().toISOString(),
     };
@@ -156,9 +171,13 @@ export function predictApy(
     // Confidence decreases with distance from known data
     const confidence = Math.max(0.1, Math.min(1, r2 * (1 - day / (forecastDays * 2))));
 
+    const halfWidth = Math.round(((1 - confidence) * predictedApy * 0.5 + 0.1 * day) * 100) / 100;
+
     predictions.push({
       date: futureDate.toISOString().split("T")[0],
       predictedApy: Math.round(predictedApy * 100) / 100,
+      lowerApy: Math.max(0, Math.round((predictedApy - halfWidth) * 100) / 100),
+      upperApy: Math.round((predictedApy + halfWidth) * 100) / 100,
       confidence: Math.round(confidence * 100) / 100,
     });
   }
@@ -167,13 +186,28 @@ export function predictApy(
   const trend: "rising" | "falling" | "stable" =
     slope > 0.05 ? "rising" : slope < -0.05 ? "falling" : "stable";
 
+  const volatilityPct = computeVolatilityPct(rawValues);
+
   return {
     protocol,
     historical,
     predictions,
+    confidenceInputs: {
+      volatilityPct,
+      dataCompleteness: Math.min(1, historical.length / 30),
+      modelFit: r2,
+    },
     trend,
     generatedAt: new Date().toISOString(),
   };
+}
+
+function computeVolatilityPct(values: number[]): number {
+  if (values.length < 2) return 0;
+  const mean = values.reduce((s, v) => s + v, 0) / values.length;
+  if (mean === 0) return 0;
+  const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / (values.length - 1);
+  return Math.sqrt(variance) / mean;
 }
 
 function generateFlatPredictions(apy: number, days: number): PredictionPoint[] {
@@ -182,9 +216,13 @@ function generateFlatPredictions(apy: number, days: number): PredictionPoint[] {
   for (let day = 1; day <= days; day++) {
     const d = new Date(now);
     d.setDate(d.getDate() + day);
+    const halfWidth = Math.round((apy * 0.35 + 0.1 * day) * 100) / 100;
+
     predictions.push({
       date: d.toISOString().split("T")[0],
       predictedApy: apy,
+      lowerApy: Math.max(0, Math.round((apy - halfWidth) * 100) / 100),
+      upperApy: Math.round((apy + halfWidth) * 100) / 100,
       confidence: 0.3,
     });
   }

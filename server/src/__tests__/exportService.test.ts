@@ -5,9 +5,9 @@ describe("ExportService", () => {
     const bundle = await exportService.generateSnapshotBundle();
 
     expect(bundle).toBeDefined();
-    expect(bundle.timestamp).toBeDefined();
-    expect(new Date(bundle.timestamp).getTime()).toBeGreaterThan(0);
-    expect(bundle.version).toBe("1.0.0");
+    expect(bundle.generatedAt).toBeDefined();
+    expect(new Date(bundle.generatedAt).getTime()).toBeGreaterThan(0);
+    expect(bundle.appVersion).toBe("1.0.0");
     expect(Array.isArray(bundle.opportunities)).toBe(true);
     expect(bundle.opportunities.length).toBeGreaterThan(0);
     expect(bundle.metadata.totalOpportunities).toBe(bundle.opportunities.length);

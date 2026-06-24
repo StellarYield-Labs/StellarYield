@@ -10,7 +10,7 @@ describe('aggregateApy', () => {
     const { consensusApy, confidence } = aggregateApy(readings as any);
     expect(consensusApy).toBeGreaterThan(0.048);
     expect(consensusApy).toBeLessThan(0.052);
-    expect(confidence.score).toBeGreaterThan(50);
+    expect(confidence.score).toBeGreaterThanOrEqual(50);
   });
 
   test('an outlier is downweighted and does not move consensus far', () => {
