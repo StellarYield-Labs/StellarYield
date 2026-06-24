@@ -16,3 +16,11 @@ if (typeof window !== "undefined") {
     }),
   });
 }
+
+if (typeof global !== "undefined" && !global.ResizeObserver) {
+  global.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}

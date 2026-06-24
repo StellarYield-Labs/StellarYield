@@ -48,13 +48,13 @@ describe("WalletConnectionModal accessibility", () => {
 
   it("close button has accessible label", () => {
     renderModal();
-    const closeBtn = screen.getByRole("button", { name: /close wallet dialog/i });
+    const closeBtn = screen.getByRole("button", { name: /close wallet connection dialog/i });
     expect(closeBtn).toBeInTheDocument();
   });
 
   it("calls onClose when the close button is clicked", () => {
     const { onClose } = renderModal();
-    fireEvent.click(screen.getByRole("button", { name: /close wallet dialog/i }));
+    fireEvent.click(screen.getByRole("button", { name: /close wallet connection dialog/i }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
