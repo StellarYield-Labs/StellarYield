@@ -116,9 +116,9 @@ export function sanitizeSvg(svg: string): string {
 
   // 2. Strip inline event handlers (on*="…", on*='…', unquoted).
   //    Each regex uses a bounded character class — no nested quantifiers.
-  sanitized = replaceUntilStable(sanitized, /\s+on\w+=\s*"[^"]*"/gi, "");
-  sanitized = replaceUntilStable(sanitized, /\s+on\w+=\s*'[^']*'/gi, "");
-  sanitized = replaceUntilStable(sanitized, /\s+on\w+=\s*[^\s>"']+/gi, "");
+  sanitized = replaceUntilStable(sanitized, /(?<=\s|^|['"\/])on\w+\s*=\s*"[^"]*"/gi, "");
+  sanitized = replaceUntilStable(sanitized, /(?<=\s|^|['"\/])on\w+\s*=\s*'[^']*'/gi, "");
+  sanitized = replaceUntilStable(sanitized, /(?<=\s|^|['"\/])on\w+\s*=\s*[^\s>"']+/gi, "");
 
   // 3. Strip dangerous URI schemes (javascript:, data:, vbscript:).
   sanitized = replaceUntilStable(sanitized, /javascript\s*:/gi, "");
