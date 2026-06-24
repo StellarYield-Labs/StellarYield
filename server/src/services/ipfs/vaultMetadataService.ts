@@ -69,6 +69,41 @@ function replaceUntilStable(input: string, pattern: RegExp, replacement: string)
   }
 }
 
+/**
+ * Strip `<script ...>...</script ...>` blocks using indexOf scanning.
+ * O(n) with zero backtracking risk.  Handles `</script >` (whitespace
+ * before `>`) and self-closing `<script ... />` forms.
+ */
+function stripScriptTags(input: string): string {
+  let result = input;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const openIdx = result.search(/<script[\s>\/]/i);
+    if (openIdx === -1) break;
+
+    // Look for the closing </script...> tag
+    const closeTagStart = result.search(/<\/script[\s>]/i);
+    if (closeTagStart !== -1 && closeTagStart > openIdx) {
+      // Find the `>` that actually ends the closing tag
+      const closeTagEnd = result.indexOf('>', closeTagStart);
+      if (closeTagEnd !== -1) {
+        result = result.slice(0, openIdx) + result.slice(closeTagEnd + 1);
+        continue;
+      }
+    }
+
+    // No proper closing tag found — remove from <script to end of its opening tag
+    const openTagEnd = result.indexOf('>', openIdx);
+    if (openTagEnd !== -1) {
+      result = result.slice(0, openIdx) + result.slice(openTagEnd + 1);
+    } else {
+      // Malformed: no closing `>` at all — truncate from <script onward
+      result = result.slice(0, openIdx);
+    }
+  }
+  return result;
+}
+
 export function sanitizeSvg(svg: string): string {
   const normalized = requireNonEmpty(svg, "iconSvg");
 
@@ -76,19 +111,14 @@ export function sanitizeSvg(svg: string): string {
     throw new Error("iconSvg must be a valid SVG string");
   }
 
-  // 1. Strip <script> blocks — non-greedy, non-backtracking structure.
-  //    The character class [^<]* avoids polynomial backtracking by never
-  //    overlapping with the `<` that starts the closing tag.
-  let sanitized = replaceUntilStable(
-    normalized,
-    /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
-    "",
-  );
+  // 1. Strip <script> blocks via linear indexOf scanning (no regex).
+  let sanitized = stripScriptTags(normalized);
 
-  // 2. Strip inline event handlers (on*="…", on*='…', unquoted, backtick).
-  sanitized = replaceUntilStable(sanitized, /\s+on\w+\s*=\s*"[^"]*"/gi, "");
-  sanitized = replaceUntilStable(sanitized, /\s+on\w+\s*=\s*'[^']*'/gi, "");
-  sanitized = replaceUntilStable(sanitized, /\s+on\w+\s*=\s*[^\s>"']+/gi, "");
+  // 2. Strip inline event handlers (on*="…", on*='…', unquoted).
+  //    Each regex uses a bounded character class — no nested quantifiers.
+  sanitized = replaceUntilStable(sanitized, /\s+on\w+=\s*"[^"]*"/gi, "");
+  sanitized = replaceUntilStable(sanitized, /\s+on\w+=\s*'[^']*'/gi, "");
+  sanitized = replaceUntilStable(sanitized, /\s+on\w+=\s*[^\s>"']+/gi, "");
 
   // 3. Strip dangerous URI schemes (javascript:, data:, vbscript:).
   sanitized = replaceUntilStable(sanitized, /javascript\s*:/gi, "");

@@ -40,6 +40,7 @@ import governanceRouter from "./routes/governance";
 import activityTimelineRouter from "./routes/activityTimeline";
 import presetsRouter from "./routes/presets";
 import analyticsRouter from "./routes/analytics";
+import sharePriceHistoryRouter from "./routes/sharePriceHistory";
 
 import { createAuthChallenge, verifyAuthChallenge } from "./utils/stellarAuth";
 import {
@@ -100,6 +101,7 @@ export function createApp() {
   });
 
   app.post("/api/relayer/fee-bump", relayerLimiter, signFeeBump);
+  app.use("/api/vaults", sharePriceHistoryRouter);
   app.use("/api/yields", yieldsRouter);
   app.use("/api/leaderboard", leaderboardRouter);
   app.use("/api/notifications", notificationsRouter);
