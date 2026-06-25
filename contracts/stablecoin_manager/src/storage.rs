@@ -36,17 +36,23 @@ pub const SCALAR_18: i128 = 1_000_000_000_000_000_000;
 /// Read a CDP and bump its TTL to prevent expiry.
 pub fn read_cdp(e: &Env, user: &Address) -> Option<Cdp> {
     let key = DataKey::Cdp(user.clone());
-    e.storage()
-        .persistent()
-        .extend_ttl(&key, TTL_LOW_WATERMARK_LEDGERS, TTL_BUMP_LEDGER_AMOUNT);
+    // Only bump TTL if the key exists to avoid MissingValue errors in tests
+    if e.storage().persistent().has(&key) {
+        e.storage().persistent().extend_ttl(
+            &key,
+            TTL_LOW_WATERMARK_LEDGERS,
+            TTL_BUMP_LEDGER_AMOUNT,
+        );
+    }
     e.storage().persistent().get(&key)
 }
 
 /// Write a CDP and bump its TTL.
 pub fn write_cdp(e: &Env, user: &Address, cdp: &Cdp) {
     let key = DataKey::Cdp(user.clone());
+    e.storage().persistent().set(&key, cdp);
+    // Bump TTL after writing to ensure it's persisted
     e.storage()
         .persistent()
         .extend_ttl(&key, TTL_LOW_WATERMARK_LEDGERS, TTL_BUMP_LEDGER_AMOUNT);
-    e.storage().persistent().set(&key, cdp);
 }

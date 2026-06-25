@@ -73,16 +73,22 @@ pub fn write_option_counter(e: &Env, counter: u32) {
 
 pub fn read_option(e: &Env, id: u32) -> OptionData {
     let key = DataKey::Option(id);
-    e.storage()
-        .persistent()
-        .extend_ttl(&key, TTL_LOW_WATERMARK_LEDGERS, TTL_BUMP_LEDGER_AMOUNT);
+    // Only bump TTL if the key exists to avoid MissingValue errors in tests
+    if e.storage().persistent().has(&key) {
+        e.storage().persistent().extend_ttl(
+            &key,
+            TTL_LOW_WATERMARK_LEDGERS,
+            TTL_BUMP_LEDGER_AMOUNT,
+        );
+    }
     e.storage().persistent().get(&key).unwrap()
 }
 
 pub fn write_option(e: &Env, id: u32, option: &OptionData) {
     let key = DataKey::Option(id);
+    e.storage().persistent().set(&key, option);
+    // Bump TTL after writing to ensure it's persisted
     e.storage()
         .persistent()
         .extend_ttl(&key, TTL_LOW_WATERMARK_LEDGERS, TTL_BUMP_LEDGER_AMOUNT);
-    e.storage().persistent().set(&key, option);
 }

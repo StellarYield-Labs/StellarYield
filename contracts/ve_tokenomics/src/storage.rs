@@ -31,35 +31,47 @@ pub const WEEK: u64 = 7 * 24 * 60 * 60; // 1 week in seconds
 /// Read a user lock and bump its TTL.
 pub fn read_user_lock(e: &Env, user: &Address) -> Option<UserLock> {
     let key = DataKey::UserLock(user.clone());
-    e.storage()
-        .persistent()
-        .extend_ttl(&key, TTL_LOW_WATERMARK_LEDGERS, TTL_BUMP_LEDGER_AMOUNT);
+    // Only bump TTL if the key exists to avoid MissingValue errors in tests
+    if e.storage().persistent().has(&key) {
+        e.storage().persistent().extend_ttl(
+            &key,
+            TTL_LOW_WATERMARK_LEDGERS,
+            TTL_BUMP_LEDGER_AMOUNT,
+        );
+    }
     e.storage().persistent().get(&key)
 }
 
 /// Write a user lock and bump its TTL.
 pub fn write_user_lock(e: &Env, user: &Address, lock: &UserLock) {
     let key = DataKey::UserLock(user.clone());
+    e.storage().persistent().set(&key, lock);
+    // Bump TTL after writing to ensure it's persisted
     e.storage()
         .persistent()
         .extend_ttl(&key, TTL_LOW_WATERMARK_LEDGERS, TTL_BUMP_LEDGER_AMOUNT);
-    e.storage().persistent().set(&key, lock);
 }
 
 /// Read a gauge vote and bump its TTL.
 pub fn read_gauge_vote(e: &Env, user: &Address) -> Option<soroban_sdk::Vec<(Address, i128)>> {
     let key = DataKey::GaugeVote(user.clone());
-    e.storage()
-        .persistent()
-        .extend_ttl(&key, TTL_LOW_WATERMARK_LEDGERS, TTL_BUMP_LEDGER_AMOUNT);
+    // Only bump TTL if the key exists to avoid MissingValue errors in tests
+    if e.storage().persistent().has(&key) {
+        e.storage().persistent().extend_ttl(
+            &key,
+            TTL_LOW_WATERMARK_LEDGERS,
+            TTL_BUMP_LEDGER_AMOUNT,
+        );
+    }
     e.storage().persistent().get(&key)
 }
 
 /// Write a gauge vote and bump its TTL.
 pub fn write_gauge_vote(e: &Env, user: &Address, votes: &soroban_sdk::Vec<(Address, i128)>) {
     let key = DataKey::GaugeVote(user.clone());
+    e.storage().persistent().set(&key, votes);
+    // Bump TTL after writing to ensure it's persisted
     e.storage()
         .persistent()
         .extend_ttl(&key, TTL_LOW_WATERMARK_LEDGERS, TTL_BUMP_LEDGER_AMOUNT);
-    e.storage().persistent().set(&key, votes);
 }

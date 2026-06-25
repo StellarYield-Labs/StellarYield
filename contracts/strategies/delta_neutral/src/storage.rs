@@ -133,18 +133,24 @@ pub fn set_paused(e: &Env, paused: bool) {
 
 pub fn read_position(e: &Env, owner: &Address) -> Option<Position> {
     let key = DataKey::Position(owner.clone());
-    e.storage()
-        .persistent()
-        .extend_ttl(&key, TTL_LOW_WATERMARK_LEDGERS, TTL_BUMP_LEDGER_AMOUNT);
+    // Only bump TTL if the key exists to avoid MissingValue errors in tests
+    if e.storage().persistent().has(&key) {
+        e.storage().persistent().extend_ttl(
+            &key,
+            TTL_LOW_WATERMARK_LEDGERS,
+            TTL_BUMP_LEDGER_AMOUNT,
+        );
+    }
     e.storage().persistent().get(&key)
 }
 
 pub fn write_position(e: &Env, owner: &Address, pos: &Position) {
     let key = DataKey::Position(owner.clone());
+    e.storage().persistent().set(&key, pos);
+    // Bump TTL after writing to ensure it's persisted
     e.storage()
         .persistent()
         .extend_ttl(&key, TTL_LOW_WATERMARK_LEDGERS, TTL_BUMP_LEDGER_AMOUNT);
-    e.storage().persistent().set(&key, pos);
 }
 
 pub fn read_total_deposited(e: &Env) -> i128 {
