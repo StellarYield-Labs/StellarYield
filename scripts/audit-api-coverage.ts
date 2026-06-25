@@ -6,7 +6,7 @@
  * to identify missing endpoints, mismatches, and potential drift.
  *
  * Usage:
- *   npx tsx scripts/audit-api-coverage.ts [--fix-report]
+ *   npx tsx scripts/audit-api-coverage.ts
  *
  * The script scans:
  * - client/src for apiUrl(...), getApiBaseUrl(), and direct fetch("/api/...") calls
@@ -16,7 +16,6 @@
 
 import fs from "fs";
 import path from "path";
-import { execSync } from "child_process";
 
 interface EndpointPattern {
   path: string;
@@ -60,6 +59,49 @@ const AUDIT_ALLOWLIST = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Utility: Recursive file finder
+// ─────────────────────────────────────────────────────────────────────────────
+
+function findFiles(
+  dir: string,
+  extensions: string[],
+  maxDepth: number = 10,
+  currentDepth: number = 0,
+): string[] {
+  const files: string[] = [];
+
+  if (currentDepth >= maxDepth) return files;
+
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+
+      // Skip node_modules, .git, etc.
+      if (entry.name.startsWith(".") || entry.name === "node_modules") {
+        continue;
+      }
+
+      if (entry.isDirectory()) {
+        files.push(
+          ...findFiles(fullPath, extensions, maxDepth, currentDepth + 1),
+        );
+      } else if (entry.isFile()) {
+        const ext = path.extname(entry.name);
+        if (extensions.includes(ext)) {
+          files.push(fullPath);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn(`Warning: Could not read directory ${dir}:`, error);
+  }
+
+  return files;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Scanner: Extract frontend API calls
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -77,19 +119,14 @@ function scanFrontendApis(clientDir: string): EndpointPattern[] {
     /fetch\s*\(\s*apiUrl\s*\(\s*["'`]([^"'`]+)["'`]\s*\)/g,
   ];
 
-  // Scan all TypeScript/TSX files
-  const tsFiles = execSync(
-    `find "${clientDir}" -type f \\( -name "*.ts" -o -name "*.tsx" \\)`,
-  )
-    .toString()
-    .trim()
-    .split("\n")
-    .filter(Boolean);
+  console.log(`  Scanning ${clientDir}...`);
+
+  const tsFiles = findFiles(clientDir, [".ts", ".tsx"]);
+  console.log(`  Found ${tsFiles.length} TypeScript files`);
 
   for (const file of tsFiles) {
     try {
       const content = fs.readFileSync(file, "utf-8");
-      const lines = content.split("\n");
 
       for (const pattern of patterns) {
         let match;
@@ -114,7 +151,7 @@ function scanFrontendApis(clientDir: string): EndpointPattern[] {
         }
       }
     } catch (error) {
-      console.warn(`Warning: Could not scan ${file}: ${error}`);
+      console.warn(`Warning: Could not scan ${file}:`, error);
     }
   }
 
@@ -159,10 +196,14 @@ function scanBackendRoutes(serverDir: string): EndpointPattern[] {
   const endpoints: EndpointPattern[] = [];
   const seenPaths = new Set<string>();
 
+  console.log(`  Scanning ${serverDir}/src...`);
+
   // Patterns for app.ts route registrations
   const appTsPath = path.join(serverDir, "src", "app.ts");
+  let appContent = "";
+
   try {
-    const appContent = fs.readFileSync(appTsPath, "utf-8");
+    appContent = fs.readFileSync(appTsPath, "utf-8");
 
     // app.use("/api/path", router)
     const routePattern =
@@ -170,12 +211,14 @@ function scanBackendRoutes(serverDir: string): EndpointPattern[] {
     let match;
     while ((match = routePattern.exec(appContent)) !== null) {
       const basePath = match[1];
-      endpoints.push({
-        path: basePath,
-        method: "GET" as const, // app.use handles all methods
-        source: appTsPath.replace(process.cwd(), "."),
-      });
-      seenPaths.add(basePath);
+      if (!seenPaths.has(basePath)) {
+        endpoints.push({
+          path: basePath,
+          method: "GET" as const, // app.use handles all methods
+          source: appTsPath.replace(process.cwd(), "."),
+        });
+        seenPaths.add(basePath);
+      }
     }
 
     // Direct route registrations: app.get/post/put/delete/patch("/api/path", ...)
@@ -194,19 +237,18 @@ function scanBackendRoutes(serverDir: string): EndpointPattern[] {
       }
     }
   } catch (error) {
-    console.warn(`Warning: Could not read app.ts: ${error}`);
+    console.warn(`Warning: Could not read app.ts:`, error);
   }
 
   // Scan route files for router.get/post/put/delete/patch
   const routesDir = path.join(serverDir, "src", "routes");
   try {
-    const routeFiles = execSync(`find "${routesDir}" -name "*.ts" -type f`)
-      .toString()
-      .trim()
-      .split("\n")
-      .filter(Boolean);
+    const routeFiles = findFiles(routesDir, [".ts"]);
 
     for (const file of routeFiles) {
+      // Skip test files
+      if (file.endsWith(".test.ts")) continue;
+
       try {
         const content = fs.readFileSync(file, "utf-8");
 
@@ -231,11 +273,11 @@ function scanBackendRoutes(serverDir: string): EndpointPattern[] {
           }
         }
       } catch (error) {
-        console.warn(`Warning: Could not scan ${file}: ${error}`);
+        console.warn(`Warning: Could not scan ${file}:`, error);
       }
     }
   } catch (error) {
-    console.warn(`Warning: Could not scan routes directory: ${error}`);
+    console.warn(`Warning: Could not scan routes directory:`, error);
   }
 
   return Array.from(endpoints.values()).sort((a, b) =>
