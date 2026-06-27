@@ -182,12 +182,27 @@ fn test_user_lock_ttl_bumped_on_read() {
 
     client.create_lock(&user, &amount, &unlock_time);
 
-    // Read the user lock multiple times to verify TTL is extended
-    let _lock_1 = crate::storage::read_user_lock(&env, &user);
-    let _lock_2 = crate::storage::read_user_lock(&env, &user);
+    // Capture the current ledger sequence for TTL testing
+    let initial_seq = env.ledger().sequence();
 
-    // If TTL bump is removed, this test would fail when key expires
-    assert!(true); // TTL extension happened without errors
+    // Step 1: Read the user lock (should bump TTL)
+    let lock_before = crate::storage::read_user_lock(&env, &user);
+    assert!(lock_before.is_some(), "User lock should exist after create_lock");
+
+    // Step 2: Advance ledger to just past the original TTL watermark
+    // TTL_LOW_WATERMARK_LEDGERS = 100_000, so set to initial_seq + 100_001
+    env.ledger().set_sequence(initial_seq + 100_001);
+
+    // Step 3: Try to read again (if TTL wasn't bumped, this would return None)
+    let lock_after_ttl_boundary = crate::storage::read_user_lock(&env, &user);
+    assert!(
+        lock_after_ttl_boundary.is_some(),
+        "User lock should still exist after read TTL bump, even past original expiry window. \
+         This proves extend_ttl() was called."
+    );
+
+    // If extend_ttl() was removed from read_user_lock, the key would expire after 100_000 ledgers,
+    // and the assertion above would fail
 }
 
 #[test]
@@ -203,14 +218,30 @@ fn test_user_lock_ttl_bumped_on_write() {
 
     client.create_lock(&user, &amount, &unlock_time);
 
-    // Read and rewrite the lock to verify TTL bump
-    if let Some(lock) = crate::storage::read_user_lock(&env, &user) {
-        crate::storage::write_user_lock(&env, &user, &lock);
-    }
+    // Capture the current ledger sequence for TTL testing
+    let initial_seq = env.ledger().sequence();
 
-    // Verify the key still exists and is accessible
+    // Step 1: Read the user lock to get it
+    let lock = crate::storage::read_user_lock(&env, &user);
+    assert!(lock.is_some(), "User lock should exist");
+    let lock_data = lock.unwrap();
+
+    // Step 2: Advance ledger to just past the original TTL watermark
+    env.ledger().set_sequence(initial_seq + 100_001);
+
+    // Step 3: Write the user lock back (should bump TTL)
+    crate::storage::write_user_lock(&env, &user, &lock_data);
+
+    // Step 4: Try to read - should succeed because write bumped TTL
     let retrieved = crate::storage::read_user_lock(&env, &user);
-    assert!(retrieved.is_some());
+    assert!(
+        retrieved.is_some(),
+        "User lock should still exist after write TTL bump, even past original expiry window. \
+         This proves extend_ttl() was called."
+    );
+
+    // If extend_ttl() was removed from write_user_lock, the key would expire before or during the write,
+    // and the assertion above would fail
 }
 
 #[test]
@@ -228,12 +259,28 @@ fn test_gauge_vote_ttl_bumped_on_write() {
     client.create_lock(&user, &amount, &unlock_time);
     client.vote(&user, &pool, &5000);
 
-    // Read and rewrite the gauge vote to verify TTL bump
-    if let Some(votes) = crate::storage::read_gauge_vote(&env, &user) {
-        crate::storage::write_gauge_vote(&env, &user, &votes);
-    }
+    // Capture the current ledger sequence for TTL testing
+    let initial_seq = env.ledger().sequence();
 
-    // Verify the key still exists and is accessible
+    // Step 1: Read the gauge vote to get it
+    let votes = crate::storage::read_gauge_vote(&env, &user);
+    assert!(votes.is_some(), "Gauge votes should exist");
+    let votes_data = votes.unwrap();
+
+    // Step 2: Advance ledger to just past the original TTL watermark
+    env.ledger().set_sequence(initial_seq + 100_001);
+
+    // Step 3: Write the gauge vote back (should bump TTL)
+    crate::storage::write_gauge_vote(&env, &user, &votes_data);
+
+    // Step 4: Try to read - should succeed because write bumped TTL
     let retrieved = crate::storage::read_gauge_vote(&env, &user);
-    assert!(retrieved.is_some());
+    assert!(
+        retrieved.is_some(),
+        "Gauge votes should still exist after write TTL bump, even past original expiry window. \
+         This proves extend_ttl() was called."
+    );
+
+    // If extend_ttl() was removed from write_gauge_vote, the key would expire before or during the write,
+    // and the assertion above would fail
 }

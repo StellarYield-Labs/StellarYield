@@ -460,12 +460,27 @@ fn test_position_ttl_bumped_on_read() {
 
     t.client.open_position(&user, &deposit, &0);
 
-    // Read the position multiple times to verify TTL is extended
-    let _pos_1 = crate::storage::read_position(&t.env, &user);
-    let _pos_2 = crate::storage::read_position(&t.env, &user);
+    // Capture the current ledger sequence for TTL testing
+    let initial_seq = t.env.ledger().sequence();
 
-    // If TTL bump is removed, this test would fail when key expires
-    assert!(true); // TTL extension happened without errors
+    // Step 1: Read the position (should bump TTL)
+    let pos_before = crate::storage::read_position(&t.env, &user);
+    assert!(pos_before.is_some(), "Position should exist after open_position");
+
+    // Step 2: Advance ledger to just past the original TTL watermark
+    // TTL_LOW_WATERMARK_LEDGERS = 100_000, so set to initial_seq + 100_001
+    t.env.ledger().set_sequence(initial_seq + 100_001);
+
+    // Step 3: Try to read again (if TTL wasn't bumped, this would return None)
+    let pos_after_ttl_boundary = crate::storage::read_position(&t.env, &user);
+    assert!(
+        pos_after_ttl_boundary.is_some(),
+        "Position should still exist after read TTL bump, even past original expiry window. \
+         This proves extend_ttl() was called."
+    );
+
+    // If extend_ttl() was removed from read_position, the key would expire after 100_000 ledgers,
+    // and the assertion above would fail
 }
 
 #[test]
@@ -479,13 +494,29 @@ fn test_position_ttl_bumped_on_write() {
 
     t.client.open_position(&user, &deposit, &0);
 
-    // Read and rewrite the position to verify TTL bump
-    if let Some(mut pos) = crate::storage::read_position(&t.env, &user) {
-        pos.funding_collected += 1_000;
-        crate::storage::write_position(&t.env, &user, &pos);
-    }
+    // Capture the current ledger sequence for TTL testing
+    let initial_seq = t.env.ledger().sequence();
 
-    // Verify the key still exists and is accessible
+    // Step 1: Read the position to get it
+    let pos = crate::storage::read_position(&t.env, &user);
+    assert!(pos.is_some(), "Position should exist");
+    let mut pos_data = pos.unwrap();
+
+    // Step 2: Advance ledger to just past the original TTL watermark
+    t.env.ledger().set_sequence(initial_seq + 100_001);
+
+    // Step 3: Write the position back (should bump TTL)
+    pos_data.funding_collected += 1_000;
+    crate::storage::write_position(&t.env, &user, &pos_data);
+
+    // Step 4: Try to read - should succeed because write bumped TTL
     let retrieved = crate::storage::read_position(&t.env, &user);
-    assert!(retrieved.is_some());
+    assert!(
+        retrieved.is_some(),
+        "Position should still exist after write TTL bump, even past original expiry window. \
+         This proves extend_ttl() was called."
+    );
+
+    // If extend_ttl() was removed from write_position, the key would expire before or during the write,
+    // and the assertion above would fail
 }

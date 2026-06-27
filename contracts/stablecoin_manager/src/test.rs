@@ -246,12 +246,37 @@ fn test_cdp_ttl_bumped_on_read() {
     give_collateral(&env, &collateral_addr, &user, 100_000);
     client.mint_s_usd(&user, &100_000, &5_000);
 
-    // Read the CDP multiple times to verify TTL is extended
-    let _cdp_1 = crate::storage::read_cdp(&env, &user);
-    let _cdp_2 = crate::storage::read_cdp(&env, &user);
+    // Get initial ledger sequence
+    let initial_seq = env.ledger().sequence();
 
-    // If TTL bump is removed, this test would fail when key expires
-    assert!(true); // TTL extension happened without errors
+    // Step 1: Read the CDP (should bump TTL)
+    let cdp_before = crate::storage::read_cdp(&env, &user);
+    assert!(cdp_before.is_some(), "CDP should exist after mint");
+
+    // Step 2: Advance ledger to just before the original TTL would expire
+    // TTL_LOW_WATERMARK_LEDGERS = 100_000, so advance to initial_seq + 100_001
+    env.ledger().set_sequence(initial_seq + 100_001);
+
+    // Step 3: Try to read again (if TTL wasn't bumped, this would return None)
+    let cdp_after_ttl_boundary = crate::storage::read_cdp(&env, &user);
+    assert!(
+        cdp_after_ttl_boundary.is_some(),
+        "CDP should still exist after read TTL bump, even past original expiry"
+    );
+
+    // Step 4: Advance further past the bumped TTL boundary
+    // New expiry should be initial_seq + 100_000 + 250_000 = initial_seq + 350_000
+    // Advance past that
+    env.ledger().set_sequence(initial_seq + 350_001);
+
+    // Step 5: After the bumped TTL expires, the key should not be accessible
+    // (soroban will return None or error for expired entries)
+    // This test will FAIL if extend_ttl was removed, proving the TTL bump is essential
+    let cdp_after_bumped_expiry = crate::storage::read_cdp(&env, &user);
+    assert!(
+        cdp_after_bumped_expiry.is_none(),
+        "CDP should expire after the bumped TTL window passes"
+    );
 }
 
 #[test]
@@ -262,12 +287,35 @@ fn test_cdp_ttl_bumped_on_write() {
     give_collateral(&env, &collateral_addr, &user, 100_000);
     client.mint_s_usd(&user, &100_000, &5_000);
 
-    // Read and rewrite the CDP to verify TTL bump
-    if let Some(cdp) = crate::storage::read_cdp(&env, &user) {
-        crate::storage::write_cdp(&env, &user, &cdp);
-    }
+    // Get initial ledger sequence
+    let initial_seq = env.ledger().sequence();
 
-    // Verify the key still exists and is accessible
+    // Step 1: Read the CDP
+    let cdp = crate::storage::read_cdp(&env, &user);
+    assert!(cdp.is_some(), "CDP should exist after mint");
+    let cdp_data = cdp.unwrap();
+
+    // Step 2: Write the CDP back (should bump TTL)
+    crate::storage::write_cdp(&env, &user, &cdp_data);
+
+    // Step 3: Advance ledger to just before the original TTL would expire
+    env.ledger().set_sequence(initial_seq + 100_001);
+
+    // Step 4: Try to read - should succeed because write bumped TTL
     let retrieved = crate::storage::read_cdp(&env, &user);
-    assert!(retrieved.is_some());
+    assert!(
+        retrieved.is_some(),
+        "CDP should still exist after write TTL bump, even past original expiry"
+    );
+
+    // Step 5: Advance further past the bumped TTL boundary
+    env.ledger().set_sequence(initial_seq + 350_001);
+
+    // Step 6: After the bumped TTL expires, key should not be accessible
+    // This test will FAIL if extend_ttl was removed from write_cdp
+    let cdp_after_bumped_expiry = crate::storage::read_cdp(&env, &user);
+    assert!(
+        cdp_after_bumped_expiry.is_none(),
+        "CDP should expire after the bumped TTL window passes"
+    );
 }

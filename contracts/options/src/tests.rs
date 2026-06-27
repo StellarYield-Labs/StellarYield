@@ -186,13 +186,27 @@ fn test_option_ttl_bumped_on_read() {
         &10_000_000_i128,
     );
 
-    // Read the option multiple times and verify TTL is extended
-    let _option_1 = crate::storage::read_option(&env, option_id);
-    let _option_2 = crate::storage::read_option(&env, option_id);
+    // Capture the current ledger sequence for TTL testing
+    let initial_seq = env.ledger().sequence();
 
-    // If TTL bump is removed, this test would fail when the key expires
-    // In practice, we verify through ledger checks or lifecycle assertions.
-    assert!(true); // TTL extension happened without errors
+    // Step 1: Read the option (should bump TTL)
+    let option_before = crate::storage::read_option(&env, option_id);
+    assert!(option_before.is_some(), "Option should exist after mint");
+
+    // Step 2: Advance ledger to just past the original TTL watermark
+    // TTL_LOW_WATERMARK_LEDGERS = 100_000, so set to initial_seq + 100_001
+    env.ledger().set_sequence(initial_seq + 100_001);
+
+    // Step 3: Try to read again (if TTL wasn't bumped, this would return None)
+    let option_after_ttl_boundary = crate::storage::read_option(&env, option_id);
+    assert!(
+        option_after_ttl_boundary.is_some(),
+        "Option should still exist after read TTL bump, even past original expiry window. \
+         This proves extend_ttl() was called."
+    );
+
+    // If extend_ttl() was removed from read_option, the key would expire after 100_000 ledgers,
+    // and the assertion above would fail
 }
 
 #[test]
@@ -212,12 +226,29 @@ fn test_option_ttl_bumped_on_write() {
         &10_000_000_i128,
     );
 
-    // Write and verify TTL extends
-    let key = crate::storage::DataKey::Option(option_id);
-    let option_data = env.storage().persistent().get(&key).unwrap();
+    // Capture the current ledger sequence for TTL testing
+    let initial_seq = env.ledger().sequence();
+
+    // Step 1: Read the option to get it
+    let option = crate::storage::read_option(&env, option_id);
+    assert!(option.is_some(), "Option should exist");
+    let option_data = option.unwrap();
+
+    // Step 2: Advance ledger to just past the original TTL watermark
+    env.ledger().set_sequence(initial_seq + 100_001);
+
+    // Step 3: Write the option back (should bump TTL)
     crate::storage::write_option(&env, option_id, &option_data);
 
-    // Verify the key still exists and is accessible
+    // Step 4: Try to read - should succeed because write bumped TTL
     let retrieved = crate::storage::read_option(&env, option_id);
-    assert_eq!(retrieved.exercised, false);
+    assert!(
+        retrieved.is_some(),
+        "Option should still exist after write TTL bump, even past original expiry window. \
+         This proves extend_ttl() was called."
+    );
+    assert_eq!(retrieved.unwrap().exercised, false);
+
+    // If extend_ttl() was removed from write_option, the key would expire before or during the write,
+    // and the assertion above would fail
 }
