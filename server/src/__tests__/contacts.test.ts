@@ -6,9 +6,8 @@
 
 import request from "supertest";
 import express from "express";
-import contactsRouter from "../routes/contacts";
 
-// Mock PrismaClient
+// Mock PrismaClient BEFORE importing the router
 const mockFindMany = jest.fn();
 const mockFindFirst = jest.fn();
 const mockCreate = jest.fn();
@@ -26,6 +25,9 @@ jest.mock("@prisma/client", () => ({
     },
   })),
 }));
+
+// Import router AFTER mocking Prisma
+import contactsRouter from "../routes/contacts";
 
 describe("Contacts API Routes", () => {
   const app = express();
