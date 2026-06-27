@@ -428,4 +428,148 @@ describe('API Utilities', () => {
       );
     });
   });
+
+  describe('Encrypted Payload Verification', () => {
+    it('should only send encrypted data, never plaintext names', async () => {
+      mockFindFirst.mockResolvedValue(null);
+      mockCreate.mockResolvedValue({
+        id: '1',
+        encryptedName: 'encrypted-name',
+        encryptedAddress: 'encrypted-address',
+        createdAt: new Date('2023-01-01T00:00:00Z'),
+        updatedAt: new Date('2023-01-01T00:00:00Z'),
+      });
+
+      const contactData: ContactData = {
+        name: 'Alice Smith',
+        address: 'GBTEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+      };
+
+      await createContact(contactData, mockCryptoKey);
+
+      const fetchCalls = (fetch as ReturnType<typeof vi.fn>).mock.calls;
+      const lastCall = fetchCalls[fetchCalls.length - 1];
+      const requestBody = lastCall[1]?.body;
+
+      // Verify the request body does NOT contain plaintext
+      expect(requestBody).not.toContain('Alice Smith');
+      expect(requestBody).not.toContain('GBTEST1234567890');
+      
+      // Verify it contains encrypted field names
+      expect(requestBody).toContain('encryptedName');
+      expect(requestBody).toContain('encryptedAddress');
+      
+      // Verify it does NOT contain plaintext field names
+      expect(requestBody).not.toContain('"name":');
+      expect(requestBody).not.toContain('"address":');
+    });
+
+    it('should only send encrypted data in update requests', async () => {
+      const updates: Partial<ContactData> = {
+        name: 'Bob Johnson',
+        address: 'GCTEST9876543210ZYXWVUTSRQPONMLKJIHGFEDCBA',
+      };
+
+      const mockUpdatedContact: EncryptedContactResponse = {
+        id: '1',
+        encrypted_name: 'encrypted-updated-name',
+        encrypted_address: 'encrypted-updated-address',
+        created_at: '2023-01-01T00:00:00Z',
+        updated_at: '2023-01-02T00:00:00Z',
+      };
+
+      (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ contact: mockUpdatedContact }),
+      });
+
+      await updateContact('1', updates, mockCryptoKey);
+
+      const fetchCalls = (fetch as ReturnType<typeof vi.fn>).mock.calls;
+      const lastCall = fetchCalls[fetchCalls.length - 1];
+      const requestBody = lastCall[1]?.body;
+
+      // Verify plaintext is never sent
+      expect(requestBody).not.toContain('Bob Johnson');
+      expect(requestBody).not.toContain('GCTEST9876543210');
+      
+      // Verify encrypted field names are used
+      expect(requestBody).toContain('encrypted');
+    });
+
+    it('should never log or expose plaintext contact data', async () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      mockFindFirst.mockResolvedValue(null);
+      const mockCreatedContact: EncryptedContactResponse = {
+        id: '1',
+        encrypted_name: 'encrypted-name',
+        encrypted_address: 'encrypted-address',
+        created_at: '2023-01-01T00:00:00Z',
+        updated_at: '2023-01-01T00:00:00Z',
+      };
+
+      (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ contact: mockCreatedContact }),
+      });
+
+      const contactData: ContactData = {
+        name: 'Charlie Brown',
+        address: 'GDTEST1111111111111111111111111111111111',
+      };
+
+      await createContact(contactData, mockCryptoKey);
+
+      // Check that no console logs contain plaintext
+      const allLogs = [
+        ...consoleSpy.mock.calls.flat(),
+        ...consoleErrorSpy.mock.calls.flat(),
+      ];
+      
+      for (const log of allLogs) {
+        const logStr = String(log);
+        expect(logStr).not.toContain('Charlie Brown');
+        expect(logStr).not.toContain('GDTEST1111111111');
+      }
+
+      consoleSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should ensure responses only contain encrypted fields', async () => {
+      const mockContacts: EncryptedContactResponse[] = [
+        {
+          id: '1',
+          encrypted_name: 'encrypted-name-1',
+          encrypted_address: 'encrypted-address-1',
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+        },
+        {
+          id: '2',
+          encrypted_name: 'encrypted-name-2',
+          encrypted_address: 'encrypted-address-2',
+          created_at: '2023-01-02T00:00:00Z',
+          updated_at: '2023-01-02T00:00:00Z',
+        },
+      ];
+
+      (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ contacts: mockContacts }),
+      });
+
+      const result = await getContacts(mockCryptoKey);
+
+      // Verify all contacts only have encrypted fields
+      for (const contact of result) {
+        expect(contact.encryptedName).toBeDefined();
+        expect(contact.encryptedAddress).toBeDefined();
+        expect((contact as any).name).toBeUndefined();
+        expect((contact as any).address).toBeUndefined();
+      }
+    });
+  });
 });
