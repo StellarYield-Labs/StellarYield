@@ -431,13 +431,17 @@ describe('API Utilities', () => {
 
   describe('Encrypted Payload Verification', () => {
     it('should only send encrypted data, never plaintext names', async () => {
-      mockFindFirst.mockResolvedValue(null);
-      mockCreate.mockResolvedValue({
+      const mockCreatedContact: EncryptedContactResponse = {
         id: '1',
-        encryptedName: 'encrypted-name',
-        encryptedAddress: 'encrypted-address',
-        createdAt: new Date('2023-01-01T00:00:00Z'),
-        updatedAt: new Date('2023-01-01T00:00:00Z'),
+        encrypted_name: 'encrypted-name',
+        encrypted_address: 'encrypted-address',
+        created_at: '2023-01-01T00:00:00Z',
+        updated_at: '2023-01-01T00:00:00Z',
+      };
+
+      (fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ contact: mockCreatedContact }),
       });
 
       const contactData: ContactData = {
@@ -501,7 +505,6 @@ describe('API Utilities', () => {
       const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      mockFindFirst.mockResolvedValue(null);
       const mockCreatedContact: EncryptedContactResponse = {
         id: '1',
         encrypted_name: 'encrypted-name',
