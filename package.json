@@ -2,12 +2,11 @@
   "name": "stellaryield",
   "private": true,
   "scripts": {
-    "audit:api": "npx tsx scripts/audit-api-coverage.ts",
+    "audit:api": "tsx scripts/audit-api-coverage.ts",
     "smoke-test": "bash scripts/smoke-test.sh",
     "smoke-test:node": "node scripts/smoke-test.js",
     "smoke-test:portable": "node scripts/smoke-test.js",
-    "test:provenance": "vitest run tests/services/provenance.test.ts --coverage",
-    "audit:api": "tsx scripts/audit-api-coverage.ts"
+    "test:provenance": "vitest run tests/services/provenance.test.ts --coverage"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.2.1",
