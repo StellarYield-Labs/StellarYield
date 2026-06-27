@@ -71,7 +71,7 @@ pub fn write_option_counter(e: &Env, counter: u32) {
         .set(&DataKey::OptionCounter, &counter);
 }
 
-pub fn read_option(e: &Env, id: u32) -> OptionData {
+pub fn read_option(e: &Env, id: u32) -> Option<OptionData> {
     let key = DataKey::Option(id);
     // Only bump TTL if the key exists to avoid MissingValue errors in tests
     if e.storage().persistent().has(&key) {
@@ -81,7 +81,7 @@ pub fn read_option(e: &Env, id: u32) -> OptionData {
             TTL_BUMP_LEDGER_AMOUNT,
         );
     }
-    e.storage().persistent().get(&key).unwrap()
+    e.storage().persistent().get(&key)
 }
 
 pub fn write_option(e: &Env, id: u32, option: &OptionData) {
