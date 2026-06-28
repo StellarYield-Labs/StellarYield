@@ -49,6 +49,11 @@ jest.mock("@stellar/stellar-sdk", () => {
           })
         })
       }))
+    },
+    rpc: {
+      Server: jest.fn().mockImplementation(() => ({
+        getNetwork: jest.fn().mockResolvedValue({ passcode: "mock-network" })
+      }))
     }
   };
 });

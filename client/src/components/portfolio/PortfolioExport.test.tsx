@@ -28,12 +28,13 @@ describe("PortfolioExport", () => {
 
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
 
-    (globalThis.fetch as unknown) = vi.fn().mockResolvedValueOnce(
-      new Response(new Blob(["col1,col2\nvalue1,value2"], { type: "text/csv" }), {
-        status: 200,
-        headers: { "Content-Disposition": 'attachment; filename="portfolio-export.csv"' },
-      }),
-    );
+    (globalThis.fetch as unknown) = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      blob: async () => new Blob(["col1,col2\nvalue1,value2"], { type: "text/csv" }),
+      headers: {
+        get: (name: string) => name === "Content-Disposition" ? 'attachment; filename="portfolio-export.csv"' : null,
+      },
+    });
 
     render(<PortfolioExport walletAddress="GDETESTWALLET123" />);
 
@@ -62,12 +63,13 @@ describe("PortfolioExport", () => {
     });
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
 
-    (globalThis.fetch as unknown) = vi.fn().mockResolvedValueOnce(
-      new Response(new Blob(["col1,col2\nvalue1,value2"], { type: "text/csv" }), {
-        status: 200,
-        headers: { "Content-Disposition": 'attachment; filename="portfolio-export.csv"' },
-      }),
-    );
+    (globalThis.fetch as unknown) = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      blob: async () => new Blob(["col1,col2\nvalue1,value2"], { type: "text/csv" }),
+      headers: {
+        get: (name: string) => name === "Content-Disposition" ? 'attachment; filename="portfolio-export.csv"' : null,
+      },
+    });
 
     render(<PortfolioExport walletAddress="GDETESTWALLET123" />);
 

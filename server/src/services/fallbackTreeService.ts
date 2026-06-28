@@ -151,15 +151,7 @@ function isNodeViable(
     };
   }
 
-  // Health score check
-  if (health.score < context.minHealthScore) {
-    return {
-      viable: false,
-      reason: `Health score ${health.score} below threshold ${context.minHealthScore}`,
-    };
-  }
-
-  // Status-based check
+  // Status-based checks run before numeric score so the reason string is accurate
   if (health.status === 'blocked') {
     return { viable: false, reason: 'Status is blocked' };
   }
@@ -168,35 +160,45 @@ function isNodeViable(
     return { viable: false, reason: 'Status is critical' };
   }
 
+  if (health.status === 'unknown') {
+    return { viable: false, reason: 'Status is unknown' };
+  }
+
   if (health.status === 'degraded' && !context.allowDegraded) {
     return { viable: false, reason: 'Degraded status not allowed' };
   }
 
-  if (health.status === 'unknown') {
-    return { viable: false, reason: 'Status is unknown' };
+  // Health score check (after status so the reason reflects the status when score is 0)
+  if (health.score < context.minHealthScore) {
+    return {
+      viable: false,
+      reason: `Health score ${health.score} below threshold ${context.minHealthScore}`,
+    };
   }
 
   return { viable: true, reason: 'All checks passed' };
 }
 
 /**
- * Detect cycles in the fallback tree to prevent infinite loops
+ * Detect cycles in the fallback tree to prevent infinite loops.
+ * Uses object reference identity (not node ID) so the same ID can appear
+ * at different levels without triggering a false cycle detection.
  */
-function detectCycles(node: FallbackNode, visited: Set<string>, path: string[]): boolean {
-  if (visited.has(node.id)) {
+function detectCycles(node: FallbackNode, visitedRefs: Set<FallbackNode>, path: FallbackNode[]): boolean {
+  if (visitedRefs.has(node)) {
     return true;
   }
 
-  visited.add(node.id);
-  path.push(node.id);
+  visitedRefs.add(node);
+  path.push(node);
 
   for (const child of node.fallbacks) {
-    if (detectCycles(child, visited, [...path])) {
+    if (detectCycles(child, visitedRefs, [...path])) {
       return true;
     }
   }
 
-  visited.delete(node.id);
+  visitedRefs.delete(node);
   return false;
 }
 
@@ -205,23 +207,27 @@ function detectCycles(node: FallbackNode, visited: Set<string>, path: string[]):
  */
 export function validateFallbackTree(root: FallbackNode): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
-  const visited = new Set<string>();
 
-  // Check for cycles
-  if (detectCycles(root, visited, [])) {
+  // Check for cycles using object reference identity
+  if (detectCycles(root, new Set<FallbackNode>(), [])) {
     errors.push('Cycle detected in fallback tree');
   }
 
-  // Check for duplicate IDs at same level
-  function checkDuplicates(node: FallbackNode, ids: Set<string>): void {
-    if (ids.has(node.id)) {
-      errors.push(`Duplicate node ID at same level: ${node.id}`);
-    }
-    ids.add(node.id);
+  // Check for duplicate IDs within each sibling set (not globally across levels)
+  function checkDuplicates(node: FallbackNode, globalSeen: Set<string>): void {
+    if (globalSeen.has(node.id)) return; // cycle guard — already processed this node
+    globalSeen.add(node.id);
 
+    // Check siblings at this node's children level for duplicates
     const childIds = new Set<string>();
     for (const child of node.fallbacks) {
-      checkDuplicates(child, childIds);
+      if (childIds.has(child.id)) {
+        errors.push(`Duplicate node ID at same level: ${child.id}`);
+      }
+      childIds.add(child.id);
+      // Recurse into children, but use a separate globalSeen so same-id at different
+      // levels does NOT trigger the duplicate error (only same-level siblings do)
+      checkDuplicates(child, globalSeen);
     }
   }
 
@@ -265,10 +271,6 @@ export async function traverseFallbackTree(
     depth: number,
     visited: Set<string>,
   ): Promise<FallbackNode | null> {
-    if (depth > maxDepthReached) {
-      maxDepthReached = depth;
-    }
-
     // Prevent cycles during traversal
     if (visited.has(node.id)) {
       const step: TraversalStep = {
@@ -317,6 +319,11 @@ export async function traverseFallbackTree(
       path.push(step);
       nodesEvaluated++;
       return null;
+    }
+
+    // Track max depth only for nodes we actually process
+    if (depth > maxDepthReached) {
+      maxDepthReached = depth;
     }
 
     visited.add(node.id);
@@ -378,7 +385,7 @@ export async function traverseFallbackTree(
  */
 export class FallbackTreeRegistry {
   private trees: Map<string, FallbackNode> = new Map();
-  private traversalHistory: TraversalResult[] = [];
+  private traversalHistory: Array<{ key: string; result: TraversalResult }> = [];
   private config: FallbackTreeConfig;
 
   constructor(config: Partial<FallbackTreeConfig> = {}) {
@@ -447,7 +454,7 @@ export class FallbackTreeRegistry {
     };
 
     const result = await traverseFallbackTree(root, context);
-    this.recordTraversal(result);
+    this.recordTraversal(key, result);
     return result;
   }
 
@@ -457,15 +464,20 @@ export class FallbackTreeRegistry {
   getTraversalHistory(limit = 50): TraversalResult[] {
     if (limit <= 0) return [];
     const slice = this.traversalHistory.slice(-limit);
-    return slice.slice().reverse();
+    return slice.slice().reverse().map((h) => h.result);
   }
 
   /**
    * Get traversal history for a specific tree
    */
   getTraversalHistoryForTree(key: string, limit = 50): TraversalResult[] {
-    const all = this.getTraversalHistory(limit);
-    return all.filter(r => r.path.length > 0 && r.path[0].nodeId === key);
+    if (limit <= 0) return [];
+    const filtered = this.traversalHistory
+      .filter((h) => h.key === key)
+      .slice(-limit)
+      .reverse()
+      .map((h) => h.result);
+    return filtered;
   }
 
   /**
@@ -474,7 +486,6 @@ export class FallbackTreeRegistry {
   clearHistory(): void {
     this.traversalHistory = [];
   }
-
   /**
    * Update configuration
    */
@@ -497,8 +508,8 @@ export class FallbackTreeRegistry {
     this.traversalHistory = [];
   }
 
-  private recordTraversal(result: TraversalResult): void {
-    this.traversalHistory.push(result);
+  private recordTraversal(key: string, result: TraversalResult): void {
+    this.traversalHistory.push({ key, result });
     if (this.traversalHistory.length > this.config.maxHistorySize) {
       this.traversalHistory.splice(
         0,

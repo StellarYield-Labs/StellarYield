@@ -620,11 +620,15 @@ describe('StrategySnapshotVersioningService', () => {
 
 // ── Route-level tests for GET /api/strategies/:id/snapshots/:v/rollback-preview ──
 
-jest.mock('../services/strategySnapshotVersioningService', () => ({
-  strategySnapshotVersioningService: {
-    previewRollback: jest.fn(),
-  },
-}));
+jest.mock('../services/strategySnapshotVersioningService', () => {
+  const actual = jest.requireActual('../services/strategySnapshotVersioningService');
+  const mockSvc = { previewRollback: jest.fn() };
+  return {
+    __esModule: true,
+    ...actual,
+    strategySnapshotVersioningService: mockSvc,
+  };
+});
 
 describe('GET /api/strategies/:strategyId/snapshots/:targetVersion/rollback-preview', () => {
   const app = express();

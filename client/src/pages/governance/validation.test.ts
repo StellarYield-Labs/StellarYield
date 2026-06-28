@@ -158,10 +158,10 @@ describe("validateTransactionBuilder", () => {
       ],
     };
     const result = validateTransactionBuilder(action, validWallet, {
-      keeper: "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      keeper: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
     });
     expect(result?.isValid).toBe(true);
-    expect(result?.target).toContain("GBBBBBB");
+    expect(result?.target).toContain("GAAAAAA");
   });
 
   it("rejects register keeper with invalid address", () => {
@@ -337,11 +337,11 @@ describe("validateTransactionBuilder", () => {
       ],
     };
     const result = validateTransactionBuilder(action, validWallet, {
-      target: "GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+      target: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
       amount: "5000000",
     });
     expect(result?.isValid).toBe(true);
-    expect(result?.target).toContain("GCCCCCC");
+    expect(result?.target).toContain("GAAAAAA");
   });
 
   it("rejects rescue_funds with zero amount", () => {
@@ -367,7 +367,7 @@ describe("validateTransactionBuilder", () => {
       ],
     };
     const result = validateTransactionBuilder(action, validWallet, {
-      target: "GCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC",
+      target: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
       amount: "0",
     });
     expect(result?.isValid).toBe(false);
@@ -390,10 +390,10 @@ describe("validateTransactionBuilder", () => {
       ],
     };
     const result = validateTransactionBuilder(action, validWallet, {
-      new_admin: "GDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD",
+      new_admin: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
     });
     expect(result?.isValid).toBe(true);
-    expect(result?.target).toContain("GDDDDDD");
+    expect(result?.target).toContain("GAAAAAA");
     expect(result?.risk).toBe("critical");
   });
 

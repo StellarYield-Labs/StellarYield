@@ -506,7 +506,7 @@ export class StrategySnapshotVersioningService {
     const scalarFields: Array<keyof typeof current> = ['name', 'description'];
     for (const field of scalarFields) {
       if (current[field] !== target[field]) {
-        diffs.push({ field, current: current[field], target: target[field] });
+        diffs.push({ field: field as string, current: current[field], target: target[field] });
       }
     }
 
@@ -515,7 +515,7 @@ export class StrategySnapshotVersioningService {
       const currentStr = JSON.stringify(current[field] ?? {});
       const targetStr = JSON.stringify(target[field] ?? {});
       if (currentStr !== targetStr) {
-        diffs.push({ field, current: current[field], target: target[field] });
+        diffs.push({ field: field as string, current: current[field], target: target[field] });
       }
     }
 

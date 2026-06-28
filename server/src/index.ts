@@ -102,7 +102,7 @@ const digestDeliveryService = new DigestDeliveryService(
   },
 );
 const digestGenerationQueue = new Queue(QUEUE_NAMES.DIGEST_GENERATION, {
-  connection: digestRedis,
+  connection: digestRedis as any,
 });
 createDigestGenerationWorker(digestRedis, digestBuilder, digestDeliveryService);
 createDigestThresholdCheckWorker(digestRedis, digestBuilder, digestGenerationQueue);

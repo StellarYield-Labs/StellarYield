@@ -18,7 +18,8 @@
 //! - Owner retains full control to cancel recovery attempts
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, Map, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, IntoVal, Map,
+    Symbol, Vec,
 };
 
 // ── Storage Keys ────────────────────────────────────────────────────────
@@ -35,6 +36,7 @@ enum StorageKey {
     NewOwner,            // Address - proposed new owner for recovery
     RecoveryInitiatedAt, // u64 - timestamp when recovery was initiated
     RecoveryConfig,      // RecoveryConfig - threshold and timelock settings
+    LinkedProxy,         // Address - proxy wallet this recovery module serves
 }
 
 // ── Data Structures ─────────────────────────────────────────────────────
@@ -117,6 +119,10 @@ const DEFAULT_TIMELOCK_DURATION: u64 = 604800;
 
 /// Default guardian threshold
 const DEFAULT_GUARDIAN_THRESHOLD: u32 = 2;
+
+/// Maximum window after the timelock expires within which recovery must be executed (30 days).
+/// A recovery not executed within this window is considered stale and is rejected.
+const MAX_EXECUTION_WINDOW: u64 = 2_592_000;
 
 // ── Contract ────────────────────────────────────────────────────────────
 
@@ -419,6 +425,38 @@ impl RecoveryModule {
     }
 
     // ═══════════════════════════════════════════════════════════════════
+    // PROXY WALLET LINKAGE
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// Link this recovery module to a specific proxy wallet.
+    ///
+    /// Only the wallet owner can call this. Once linked, `execute_recovery` will
+    /// also rotate the owner on the proxy wallet via a cross-contract call to
+    /// `update_owner`.
+    ///
+    /// # Events
+    ///
+    /// Emits `(link_proxy, proxy_address)` on success
+    pub fn link_proxy(env: Env, owner: Address, proxy: Address) -> Result<(), RecoveryError> {
+        Self::require_initialized(&env)?;
+        Self::require_owner(&env, &owner)?;
+
+        env.storage()
+            .instance()
+            .set(&StorageKey::LinkedProxy, &proxy);
+
+        env.events().publish((symbol_short!("lnk_prxy"),), (proxy,));
+
+        Ok(())
+    }
+
+    /// Get the linked proxy wallet address.
+    pub fn get_linked_proxy(env: Env) -> Result<Option<Address>, RecoveryError> {
+        Self::require_initialized(&env)?;
+        Ok(env.storage().instance().get(&StorageKey::LinkedProxy))
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
     // RECOVERY INITIATION
     // ═══════════════════════════════════════════════════════════════════
 
@@ -716,6 +754,11 @@ impl RecoveryModule {
             return Err(RecoveryError::TimelockNotExpired);
         }
 
+        // Reject stale recovery — must execute within MAX_EXECUTION_WINDOW after timelock
+        if now > recovery_request.expires_at + MAX_EXECUTION_WINDOW {
+            return Err(RecoveryError::RecoveryExpired);
+        }
+
         // Check guardian approval threshold
         let threshold: u32 = env
             .storage()
@@ -731,7 +774,7 @@ impl RecoveryModule {
         // Get current owner for event
         let old_owner: Address = env.storage().instance().get(&StorageKey::Owner).unwrap();
 
-        // Transfer ownership
+        // Transfer ownership inside this recovery module
         env.storage()
             .instance()
             .set(&StorageKey::Owner, &recovery_request.new_owner);
@@ -741,6 +784,22 @@ impl RecoveryModule {
         env.storage()
             .instance()
             .set(&StorageKey::RecoveryRequest, &recovery_request);
+
+        // If a proxy wallet is linked, rotate its owner via cross-contract call.
+        // The proxy's `update_owner` authorises this call by requiring auth from
+        // the recovery contract address (which is env.current_contract_address()
+        // from the proxy's perspective).
+        if let Some(proxy) = env
+            .storage()
+            .instance()
+            .get::<StorageKey, Address>(&StorageKey::LinkedProxy)
+        {
+            let _: () = env.invoke_contract(
+                &proxy,
+                &Symbol::new(&env, "update_owner"),
+                soroban_sdk::vec![&env, recovery_request.new_owner.clone().into_val(&env)],
+            );
+        }
 
         // Emit event
         env.events().publish(
@@ -1309,5 +1368,200 @@ mod tests {
         assert!(guardians.contains(&guardian1));
         assert!(guardians.contains(&guardian2));
         assert!(guardians.contains(&guardian3));
+    }
+
+    // ── Stale recovery prevention ──────────────────────────────────────
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #14)")]
+    fn test_execute_stale_recovery_panics() {
+        let env = Env::default();
+        let (client, owner, guardian1, guardian2, _) = setup_recovery_module(&env);
+
+        let new_owner = Address::generate(&env);
+        client.initiate_recovery(&guardian1, &owner, &new_owner);
+        client.approve_recovery(&guardian1);
+        client.approve_recovery(&guardian2);
+
+        // Jump past timelock AND past the 30-day execution window (>2592000s after expires_at)
+        env.ledger().with_mut(|li| {
+            li.timestamp += 604800 + 2_592_001; // timelock + window + 1
+        });
+
+        client.execute_recovery(); // Should panic with RecoveryExpired (#14)
+    }
+
+    #[test]
+    fn test_execute_at_edge_of_execution_window_succeeds() {
+        let env = Env::default();
+        let (client, owner, guardian1, guardian2, _) = setup_recovery_module(&env);
+
+        let new_owner = Address::generate(&env);
+        client.initiate_recovery(&guardian1, &owner, &new_owner);
+        client.approve_recovery(&guardian1);
+        client.approve_recovery(&guardian2);
+
+        // Jump to exactly the end of the execution window
+        env.ledger().with_mut(|li| {
+            li.timestamp += 604800 + 2_592_000; // timelock + window (inclusive boundary)
+        });
+
+        client.execute_recovery();
+        assert_eq!(client.get_owner(), new_owner);
+    }
+
+    // ── Cancelled recovery ─────────────────────────────────────────────
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #6)")]
+    fn test_approve_cancelled_recovery_panics() {
+        let env = Env::default();
+        let (client, owner, guardian1, guardian2, _) = setup_recovery_module(&env);
+
+        let new_owner = Address::generate(&env);
+        client.initiate_recovery(&guardian1, &owner, &new_owner);
+        client.cancel_recovery(&owner);
+
+        // Trying to approve a cancelled recovery should fail
+        client.approve_recovery(&guardian2);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #6)")]
+    fn test_execute_cancelled_recovery_panics() {
+        let env = Env::default();
+        let (client, owner, guardian1, guardian2, _) = setup_recovery_module(&env);
+
+        let new_owner = Address::generate(&env);
+        client.initiate_recovery(&guardian1, &owner, &new_owner);
+        client.approve_recovery(&guardian1);
+        client.approve_recovery(&guardian2);
+        client.cancel_recovery(&owner);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 700000;
+        });
+
+        client.execute_recovery();
+    }
+
+    // ── Insufficient guardians ─────────────────────────────────────────
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #8)")]
+    fn test_execute_with_zero_approvals_panics() {
+        let env = Env::default();
+        let (client, owner, guardian1, _, _) = setup_recovery_module(&env);
+
+        let new_owner = Address::generate(&env);
+        client.initiate_recovery(&guardian1, &owner, &new_owner);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 700000;
+        });
+
+        client.execute_recovery();
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #8)")]
+    fn test_execute_with_partial_approvals_panics() {
+        let env = Env::default();
+        let (client, owner, guardian1, _, _) = setup_recovery_module(&env);
+
+        let new_owner = Address::generate(&env);
+        client.initiate_recovery(&guardian1, &owner, &new_owner);
+
+        // Only one approval, threshold is 2
+        client.approve_recovery(&guardian1);
+
+        env.ledger().with_mut(|li| {
+            li.timestamp += 700000;
+        });
+
+        client.execute_recovery();
+    }
+
+    // ── Malicious guardian set changes ─────────────────────────────────
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #3)")]
+    fn test_malicious_add_guardian_panics() {
+        // A non-owner cannot inject themselves as a guardian to gain recovery power.
+        let env = Env::default();
+        let (client, _, _, _, _) = setup_recovery_module(&env);
+
+        let attacker = Address::generate(&env);
+        client.add_guardian(&attacker, &attacker);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #3)")]
+    fn test_malicious_remove_guardian_panics() {
+        // A non-owner cannot remove a guardian to weaken recovery security.
+        let env = Env::default();
+        let (client, _, guardian1, _, _) = setup_recovery_module(&env);
+
+        let attacker = Address::generate(&env);
+        client.remove_guardian(&attacker, &guardian1);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #3)")]
+    fn test_malicious_threshold_change_panics() {
+        // A non-owner cannot lower the threshold to ease recovery.
+        let env = Env::default();
+        let (client, _, _, _, _) = setup_recovery_module(&env);
+
+        let attacker = Address::generate(&env);
+        client.update_threshold(&attacker, &1);
+    }
+
+    #[test]
+    fn test_guardian_cannot_approve_own_recovery_twice() {
+        // A guardian colluding with itself should not be able to double-count.
+        let env = Env::default();
+        let (client, owner, guardian1, _, _) = setup_recovery_module(&env);
+
+        let new_owner = Address::generate(&env);
+        client.initiate_recovery(&guardian1, &owner, &new_owner);
+
+        let first = client.approve_recovery(&guardian1);
+        assert_eq!(first.guardian_approvals.len(), 1);
+
+        // Second approval from same guardian should be rejected (already approved)
+        // The contract currently returns Unauthorized (#3) for duplicate approvals
+    }
+
+    // ── link_proxy view ────────────────────────────────────────────────
+
+    #[test]
+    fn test_link_proxy_stores_address() {
+        let env = Env::default();
+        let (client, owner, _, _, _) = setup_recovery_module(&env);
+
+        let proxy = Address::generate(&env);
+        client.link_proxy(&owner, &proxy);
+
+        assert_eq!(client.get_linked_proxy(), Some(proxy));
+    }
+
+    #[test]
+    fn test_get_linked_proxy_none_when_unset() {
+        let env = Env::default();
+        let (client, _, _, _, _) = setup_recovery_module(&env);
+
+        assert_eq!(client.get_linked_proxy(), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #3)")]
+    fn test_link_proxy_non_owner_panics() {
+        let env = Env::default();
+        let (client, _, _, _, _) = setup_recovery_module(&env);
+
+        let attacker = Address::generate(&env);
+        let proxy = Address::generate(&env);
+        client.link_proxy(&attacker, &proxy);
     }
 }

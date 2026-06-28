@@ -12,8 +12,12 @@ use sha2::{Digest, Sha256};
 /// Settlement data for on-chain execution
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SettlementData {
-    /// Trade ID
-    pub trade_id: String,
+    /// Settlement ID (acts as nonce/replay protection)
+    pub settlement_id: String,
+    /// Maker order ID
+    pub order_a_id: String,
+    /// Taker order ID
+    pub order_b_id: String,
     /// Maker address
     pub maker: String,
     /// Taker address
@@ -26,10 +30,16 @@ pub struct SettlementData {
     pub amount0: u128,
     /// Amount of token1
     pub amount1: u128,
+    /// Fee taken in token0
+    pub fee0: u128,
+    /// Fee taken in token1
+    pub fee1: u128,
     /// Price
     pub price: u128,
-    /// Timestamp
+    /// Creation timestamp
     pub timestamp: u64,
+    /// Expiration timestamp
+    pub expiration: u64,
     /// Maker signature
     pub maker_signature: String,
     /// Taker signature
@@ -70,15 +80,20 @@ impl SettlementPayload {
         };
 
         let data = SettlementData {
-            trade_id: trade.id.clone(),
+            settlement_id: trade.id.clone(), // trade_id acts as settlement_id
+            order_a_id: trade.maker_order_id.clone(),
+            order_b_id: trade.taker_order_id.clone(),
             maker: trade.maker.clone(),
             taker: trade.taker.clone(),
             token0: trade.token0.clone(),
             token1: trade.token1.clone(),
             amount0,
             amount1,
+            fee0: 0, // In production, calculated based on fee rules
+            fee1: 0, // In production, calculated based on fee rules
             price: trade.price,
             timestamp: trade.timestamp,
+            expiration: trade.timestamp + 3_600_000, // Expires in 1 hour
             maker_signature: String::new(),
             taker_signature: String::new(),
             engine_signature: String::new(),
@@ -112,15 +127,20 @@ impl SettlementPayload {
     /// Hash settlement data
     fn hash_settlement_data(data: &SettlementData) -> String {
         let mut hasher = Sha256::new();
-        hasher.update(data.trade_id.as_bytes());
+        hasher.update(data.settlement_id.as_bytes());
+        hasher.update(data.order_a_id.as_bytes());
+        hasher.update(data.order_b_id.as_bytes());
         hasher.update(data.maker.as_bytes());
         hasher.update(data.taker.as_bytes());
         hasher.update(data.token0.as_bytes());
         hasher.update(data.token1.as_bytes());
         hasher.update(data.amount0.to_be_bytes());
         hasher.update(data.amount1.to_be_bytes());
+        hasher.update(data.fee0.to_be_bytes());
+        hasher.update(data.fee1.to_be_bytes());
         hasher.update(data.price.to_be_bytes());
         hasher.update(data.timestamp.to_be_bytes());
+        hasher.update(data.expiration.to_be_bytes());
         hex::encode(hasher.finalize())
     }
 
@@ -313,7 +333,9 @@ mod tests {
         let settlement =
             SettlementPayload::from_trade(&trade, &maker_key, &taker_key, &engine_key).unwrap();
 
-        assert_eq!(settlement.data.trade_id, trade.id);
+        assert_eq!(settlement.data.settlement_id, trade.id);
+        assert_eq!(settlement.data.order_a_id, trade.maker_order_id);
+        assert_eq!(settlement.data.order_b_id, trade.taker_order_id);
         assert!(!settlement.data.maker_signature.is_empty());
         assert!(!settlement.data.taker_signature.is_empty());
         assert!(!settlement.data.engine_signature.is_empty());
@@ -374,5 +396,44 @@ mod tests {
         let hash2 = SettlementPayload::hash_settlement_data(&settlement.data);
 
         assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn generate_end_to_end_fixture() {
+        use std::fs;
+        use std::path::PathBuf;
+
+        let mut csprng = OsRng;
+        // Use a fixed seed or just random keys? A fixed seed would generate deterministic test vectors.
+        // For now, random keys are fine since the test writes it and the contract reads it.
+        // Actually, to make it reproducible without running the generation, deterministic keys are better.
+        // We'll just generate it and write to file.
+        let maker_key = SigningKey::generate(&mut csprng);
+        let taker_key = SigningKey::generate(&mut csprng);
+        let engine_key = SigningKey::generate(&mut csprng);
+
+        let trade = create_test_trade();
+        let mut settlement =
+            SettlementPayload::from_trade(&trade, &maker_key, &taker_key, &engine_key).unwrap();
+
+        // For the end-to-end fixture, set fixed expiration and timestamp so we can test them deterministically
+        settlement.data.timestamp = 1000000;
+        settlement.data.expiration = 2000000;
+        // Re-hash and sign because we mutated data
+        settlement.data_hash = SettlementPayload::hash_settlement_data(&settlement.data);
+        let maker_sig = maker_key.sign(settlement.data_hash.as_bytes());
+        let taker_sig = taker_key.sign(settlement.data_hash.as_bytes());
+        let engine_sig = engine_key.sign(settlement.data_hash.as_bytes());
+        settlement.data.maker_signature = hex::encode(maker_sig.to_bytes());
+        settlement.data.taker_signature = hex::encode(taker_sig.to_bytes());
+        settlement.data.engine_signature = hex::encode(engine_sig.to_bytes());
+
+        let fixture_json = serde_json::to_string_pretty(&settlement).unwrap();
+
+        let path = PathBuf::from("../../contracts/settlement/test_snapshots/fixture.json");
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).unwrap();
+        }
+        fs::write(path, fixture_json).expect("Unable to write fixture");
     }
 }

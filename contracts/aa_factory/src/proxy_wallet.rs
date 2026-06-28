@@ -52,6 +52,7 @@ pub enum StorageKey {
     UsedNonces,
     VaultAllowances,
     NetworkId,
+    RecoveryContract,
 }
 
 // ── Data Structures ─────────────────────────────────────────────────────
@@ -393,6 +394,64 @@ impl ProxyWallet {
         env.storage().instance().remove(&StorageKey::Relayer);
         env.events().publish((symbol_short!("rm_rel"),), ());
         Ok(())
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // RECOVERY INTEGRATION
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// Link a recovery module contract to this proxy wallet.
+    ///
+    /// Only the owner can call this. Once linked, the recovery contract gains the
+    /// exclusive ability to rotate the owner via `update_owner`.
+    pub fn link_recovery(
+        env: Env,
+        owner: Address,
+        recovery_contract: Address,
+    ) -> Result<(), ProxyError> {
+        Self::require_initialized(&env)?;
+        Self::require_owner(&env, &owner)?;
+
+        env.storage()
+            .instance()
+            .set(&StorageKey::RecoveryContract, &recovery_contract);
+
+        env.events()
+            .publish((symbol_short!("link_rec"),), (recovery_contract,));
+
+        Ok(())
+    }
+
+    /// Rotate the owner as authorised by the linked recovery module.
+    ///
+    /// Only callable by the linked recovery contract (enforced via Soroban's
+    /// cross-contract auth: `recovery_contract.require_auth()` passes because
+    /// the recovery contract is the invoker of this function).
+    pub fn update_owner(env: Env, new_owner: Address) -> Result<(), ProxyError> {
+        Self::require_initialized(&env)?;
+
+        let recovery_contract: Address = env
+            .storage()
+            .instance()
+            .get(&StorageKey::RecoveryContract)
+            .ok_or(ProxyError::Unauthorized)?;
+
+        // Passes when this is called as a cross-contract invocation from the
+        // recovery contract; reverts for any other caller.
+        recovery_contract.require_auth();
+
+        env.storage().instance().set(&StorageKey::Owner, &new_owner);
+
+        env.events()
+            .publish((symbol_short!("upd_owner"),), (new_owner,));
+
+        Ok(())
+    }
+
+    /// Get the recovery contract address, if one has been linked.
+    pub fn get_recovery_contract(env: Env) -> Result<Option<Address>, ProxyError> {
+        Self::require_initialized(&env)?;
+        Ok(env.storage().instance().get(&StorageKey::RecoveryContract))
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1094,5 +1153,47 @@ mod tests {
         let env = Env::default();
         let (client, _, _, _, nid) = setup(&env);
         assert_eq!(client.get_network_id(), nid);
+    }
+
+    // ── Recovery integration ───────────────────────────────────────────
+
+    #[test]
+    fn test_link_recovery() {
+        let env = Env::default();
+        let (client, owner, _) = setup_proxy_wallet(&env);
+
+        let recovery = Address::generate(&env);
+        client.link_recovery(&owner, &recovery);
+
+        assert_eq!(client.get_recovery_contract(), Some(recovery));
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #3)")]
+    fn test_link_recovery_non_owner_panics() {
+        let env = Env::default();
+        let (client, _, _) = setup_proxy_wallet(&env);
+
+        let non_owner = Address::generate(&env);
+        let recovery = Address::generate(&env);
+        client.link_recovery(&non_owner, &recovery);
+    }
+
+    #[test]
+    fn test_get_recovery_contract_none_when_unlinked() {
+        let env = Env::default();
+        let (client, _, _) = setup_proxy_wallet(&env);
+
+        assert_eq!(client.get_recovery_contract(), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "Error(Contract, #3)")]
+    fn test_update_owner_without_recovery_linked_panics() {
+        let env = Env::default();
+        let (client, _, _) = setup_proxy_wallet(&env);
+
+        let new_owner = Address::generate(&env);
+        client.update_owner(&new_owner);
     }
 }

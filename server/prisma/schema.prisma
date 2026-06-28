@@ -318,3 +318,20 @@ model PortfolioRegimeShiftAlert {
   @@index([walletAddress, createdAt])
   @@index([walletAddress, currentRegime, createdAt])
 }
+
+// ── Allocation Provenance Models ──────────────────────────────────────────────
+
+model AllocationProvenance {
+  decisionId          String   @id
+  vaultId             String
+  strategyVersion     String
+  timestamp           DateTime
+  triggerCondition    String
+  triggerInputs       Json
+  previousAllocation  Json
+  updatedAllocation   Json
+  signer              String
+
+  @@index([vaultId])
+  @@index([timestamp])
+}

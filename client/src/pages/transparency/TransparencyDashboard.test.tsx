@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import TransparencyDashboard from "../TransparencyDashboard";
+import TransparencyDashboard from "./TransparencyDashboard";
 
 const mockTransparencyData = {
   totalRevenueLumens: 372000,
@@ -19,6 +19,12 @@ function makeFetchMock(incidents: unknown[]) {
       return Promise.resolve({
         ok: true,
         json: async () => ({ incidents }),
+      });
+    }
+    if (String(url).includes("reliability")) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => [],
       });
     }
     return Promise.resolve({

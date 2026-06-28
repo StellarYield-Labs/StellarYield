@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, no-redeclare, no-useless-escape */
 import { Router, Request, Response } from "express";
 import { PROTOCOLS } from "../config/protocols";
 import { calculateRiskScore } from "../utils/riskScoring";

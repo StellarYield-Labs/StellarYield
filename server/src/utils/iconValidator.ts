@@ -74,8 +74,13 @@ function validateSvgSecurity(svgContent: string): string[] {
  * Extracts SVG dimensions from viewBox or width/height attributes
  */
 function extractSvgDimensions(svgContent: string): { width: number; height: number } | null {
+  // Extract just the <svg ...> opening tag to avoid matching attributes on child elements
+  const svgTagMatch = svgContent.match(/<svg[^>]*>/i);
+  if (!svgTagMatch) return null;
+  const svgTag = svgTagMatch[0];
+
   // Try to extract from viewBox first
-  const viewBoxMatch = svgContent.match(/viewBox\s*=\s*["']([^"']+)["']/i);
+  const viewBoxMatch = svgTag.match(/viewBox\s*=\s*["']([^"']+)["']/i);
   if (viewBoxMatch) {
     const values = viewBoxMatch[1].split(/\s+/).map(Number);
     if (values.length === 4 && !values.some(isNaN)) {
@@ -84,8 +89,8 @@ function extractSvgDimensions(svgContent: string): { width: number; height: numb
   }
 
   // Try to extract from width and height attributes
-  const widthMatch = svgContent.match(/width\s*=\s*["']?(\d+)/i);
-  const heightMatch = svgContent.match(/height\s*=\s*["']?(\d+)/i);
+  const widthMatch = svgTag.match(/width\s*=\s*["']?(\d+)/i);
+  const heightMatch = svgTag.match(/height\s*=\s*["']?(\d+)/i);
 
   if (widthMatch && heightMatch) {
     return {
@@ -160,7 +165,7 @@ function validateSvgIcon(
   return {
     valid: errors.length === 0,
     errors,
-    warnings: warnings.length > 0 ? warnings : undefined,
+    warnings,
     metadata: {
       format: "svg",
       sizeBytes,
@@ -211,6 +216,19 @@ function detectImageFormat(content: Buffer | string): string | null {
     }
   }
 
+  // GIF: GIF87a or GIF89a
+  if (
+    buffer.length >= 6 &&
+    buffer[0] === 0x47 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x38 &&
+    (buffer[4] === 0x37 || buffer[4] === 0x39) &&
+    buffer[5] === 0x61
+  ) {
+    return "gif";
+  }
+
   // SVG (text-based)
   if (typeof content === "string" && /<svg[\s\S]*?>/i.test(content)) {
     return "svg";
@@ -256,7 +274,7 @@ function validateRasterIcon(
   return {
     valid: errors.length === 0,
     errors,
-    warnings: warnings.length > 0 ? warnings : undefined,
+    warnings,
     metadata: {
       format,
       sizeBytes,
@@ -278,7 +296,7 @@ export function validateIconAsset(
   const detectedFormat = detectImageFormat(content);
   if (!detectedFormat) {
     errors.push("Could not detect image format. Ensure the file is a valid image.");
-    return { valid: false, errors };
+    return { valid: false, errors, warnings: [] };
   }
 
   // Validate format is allowed
@@ -286,7 +304,7 @@ export function validateIconAsset(
     errors.push(
       `Image format '${detectedFormat}' is not allowed. Allowed formats: ${config.allowedFormats.join(", ")}`,
     );
-    return { valid: false, errors };
+    return { valid: false, errors, warnings: [] };
   }
 
   // Validate MIME type if provided
@@ -310,10 +328,12 @@ export function validateIconAsset(
   // Format-specific validation
   if (detectedFormat === "svg") {
     const svgContent = typeof content === "string" ? content : content.toString("utf8");
-    return validateSvgIcon(svgContent, config);
+    const result = validateSvgIcon(svgContent, config);
+    return { ...result, valid: result.valid && errors.length === 0, errors: [...errors, ...result.errors] };
   } else {
     const buffer = typeof content === "string" ? Buffer.from(content) : content;
-    return validateRasterIcon(buffer, detectedFormat, config);
+    const result = validateRasterIcon(buffer, detectedFormat, config);
+    return { ...result, valid: result.valid && errors.length === 0, errors: [...errors, ...result.errors] };
   }
 }
 

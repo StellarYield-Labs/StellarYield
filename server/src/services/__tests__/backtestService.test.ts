@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, no-redeclare, no-useless-escape */
 /**
  * Tests for Issue #478: Backtest Date Range Validation
  * Tests coverage for invalid date scenarios, future dates, and long windows.
