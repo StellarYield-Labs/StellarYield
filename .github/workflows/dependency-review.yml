@@ -16,7 +16,6 @@ jobs:
     # Only run on the upstream repo where Dependency graph is enabled.
     # Forks and repos without the feature enabled will skip this job
     # rather than fail with an unsupported-repository error.
-    if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

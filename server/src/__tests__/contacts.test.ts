@@ -18,11 +18,11 @@ const mockDelete = jest.fn();
 jest.mock("@prisma/client", () => ({
   PrismaClient: jest.fn().mockImplementation(() => ({
     contact: {
-      findMany: mockFindMany,
-      findFirst: mockFindFirst,
-      create: mockCreate,
-      update: mockUpdate,
-      delete: mockDelete,
+      get findMany() { return mockFindMany; },
+      get findFirst() { return mockFindFirst; },
+      get create() { return mockCreate; },
+      get update() { return mockUpdate; },
+      get delete() { return mockDelete; },
     },
   })),
 }));
@@ -300,7 +300,9 @@ describe("Contacts API Routes", () => {
     });
 
     it("should allow partial updates", async () => {
-      mockFindFirst.mockResolvedValue(mockContact);
+      mockFindFirst
+        .mockResolvedValueOnce(mockContact) // First call: existing contact
+        .mockResolvedValueOnce(null); // Second call: duplicate check
       mockUpdate.mockResolvedValue(mockContact);
       
       const response = await request(app)
