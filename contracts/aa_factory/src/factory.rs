@@ -12,7 +12,7 @@
 
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, Address, Bytes, Env,
-    IntoVal, Map, Val, Vec,
+    IntoVal, Map, Symbol, Val, Vec,
 };
 
 // ── Storage Keys ────────────────────────────────────────────────────────
@@ -257,6 +257,63 @@ impl WalletFactory {
         };
 
         Self::deploy_proxy(env, config)
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // RECOVERY WIRING
+    // ═══════════════════════════════════════════════════════════════════
+
+    /// Wire a recovery module to an already-deployed proxy wallet.
+    ///
+    /// Calls `link_recovery` on the proxy and `link_proxy` on the recovery module
+    /// so that a successful recovery will rotate the owner on both contracts.
+    /// Only the proxy owner can authorise this action.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `owner` - The proxy wallet owner (must authorize)
+    /// * `proxy` - The proxy wallet contract address
+    /// * `recovery` - The recovery module contract address
+    ///
+    /// # Events
+    ///
+    /// Emits `(wire_rec, proxy, recovery)` on success
+    pub fn wire_recovery(
+        env: Env,
+        owner: Address,
+        proxy: Address,
+        recovery: Address,
+    ) -> Result<(), FactoryError> {
+        Self::require_initialized(&env)?;
+        owner.require_auth();
+
+        // link_recovery on the proxy: proxy now trusts the recovery module to call update_owner
+        let _: () = env.invoke_contract(
+            &proxy,
+            &Symbol::new(&env, "link_recovery"),
+            soroban_sdk::vec![
+                &env,
+                owner.clone().into_val(&env),
+                recovery.clone().into_val(&env)
+            ],
+        );
+
+        // link_proxy on the recovery module: recovery module now knows which proxy to update
+        let _: () = env.invoke_contract(
+            &recovery,
+            &Symbol::new(&env, "link_proxy"),
+            soroban_sdk::vec![
+                &env,
+                owner.clone().into_val(&env),
+                proxy.clone().into_val(&env)
+            ],
+        );
+
+        env.events()
+            .publish((symbol_short!("wire_rec"),), (proxy, recovery));
+
+        Ok(())
     }
 
     // ═══════════════════════════════════════════════════════════════════
