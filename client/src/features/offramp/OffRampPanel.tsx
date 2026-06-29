@@ -38,11 +38,9 @@ export default function OffRampPanel({
   const [transactions, setTransactions] = useState<OffRampTransaction[]>([]);
   const [error, setError] = useState("");
 
-  const service = new OffRampService(
-    "moonpay",
-    import.meta.env.VITE_OFFRAMP_API_KEY || "",
-    import.meta.env.VITE_OFFRAMP_BASE_URL || "https://api.moonpay.com",
-  );
+  // API key and base URL are no longer passed from the frontend; all provider
+  // calls are now proxied through /api/offramp/* so secrets stay server-side.
+  const service = new OffRampService("moonpay");
 
   // Load transaction history and auto-resume pending
   useEffect(() => {
