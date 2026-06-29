@@ -10,12 +10,12 @@ const SESSION_KEY = "stellar_yield_google_oauth";
 
 export class GoogleSheetsService {
     private clientId: string;
-    private clientSecret: string;
     private redirectUri: string;
 
-    constructor(clientId: string, clientSecret: string, redirectUri: string) {
+    // clientSecret is intentionally absent: token exchange is handled server-side
+    // via POST /api/google-sheets/token to keep the secret out of the browser bundle.
+    constructor(clientId: string, redirectUri: string) {
         this.clientId = clientId;
-        this.clientSecret = clientSecret;
         this.redirectUri = redirectUri;
     }
 

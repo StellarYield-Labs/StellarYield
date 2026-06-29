@@ -7,6 +7,16 @@ on:
   workflow_dispatch:
 
 jobs:
+  env-guard:
+    name: Frontend Env Secret Guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Fail if VITE_ variables expose secrets
+        run: bash .github/scripts/check-vite-secrets.sh client
+
   backend:
     name: Backend Checks
     runs-on: ubuntu-latest
