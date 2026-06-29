@@ -92,3 +92,17 @@ describe("TransparencyDashboard – failover incident history", () => {
     expect(screen.getByText(/300s outage/i)).toBeInTheDocument();
   });
 });
+
+describe("TransparencyDashboard – API unavailable fallback", () => {
+  it("shows a route-local error state when API URL configuration is absent", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => {
+      throw new Error("Backend URL is not configured. Set VITE_API_BASE_URL to enable API-backed views.");
+    }));
+
+    render(<TransparencyDashboard />);
+
+    expect(
+      await screen.findByText(/Backend URL is not configured/i),
+    ).toBeInTheDocument();
+  });
+});

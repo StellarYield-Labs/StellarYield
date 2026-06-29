@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import { useWallet } from "../../context/useWallet";
 import { TrendingUp, TrendingDown, Loader2, DollarSign, BarChart3 } from "lucide-react";
-import { getApiBaseUrl } from "../../lib/api";
+import { apiUrl } from "../../lib/api";
 import ApiErrorBanner from "../../components/ApiErrorBanner/ApiErrorBanner";
 
 interface DailyPnLSnapshot {
@@ -29,8 +29,6 @@ interface PnLData {
   twrPercent: number;
   dailySnapshots: DailyPnLSnapshot[];
 }
-
-const API_BASE = getApiBaseUrl();
 
 /**
  * Detects if PnL data is empty or insufficient for rendering.
@@ -72,7 +70,7 @@ export default function PnLChart() {
 
     try {
       const res = await fetch(
-        `${API_BASE}/api/users/${encodeURIComponent(walletAddress)}/pnl`,
+        apiUrl(`/api/users/${encodeURIComponent(walletAddress)}/pnl`),
       );
       if (!res.ok) {
         throw new Error("Failed to fetch PnL data");

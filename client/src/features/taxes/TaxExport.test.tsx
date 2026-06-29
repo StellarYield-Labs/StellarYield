@@ -12,6 +12,7 @@ vi.mock("../../context/useWallet", () => ({
 
 vi.mock("../../lib/api", () => ({
   getApiBaseUrl: () => "http://test",
+  apiUrl: (path: string) => `http://test${path}`,
 }));
 
 const cleanPreview = {
