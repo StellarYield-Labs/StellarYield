@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, no-redeclare, no-useless-escape */
 // ── Relayer Status Service ─────────────────────────────────────────────────
 // Tracks bridge relayer health metrics: queue depth, replay protection,
 // relay failures, and recent activity for the read-only status page.

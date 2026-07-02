@@ -1,0 +1,6 @@
+go 1.21
+
+use .
+
+replace github.com/stellar/go => ./stellarstub
+replace github.com/stellar/go-xdr => ./stellarxdrstub

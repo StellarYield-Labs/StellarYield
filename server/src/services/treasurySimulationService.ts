@@ -110,3 +110,19 @@ export function listScenarios(): TreasuryScenario[] {
 export function deleteScenario(id: string): boolean {
   return scenarioStore.delete(id);
 }
+
+export function isValidAllocationPayload(allocations: unknown): boolean {
+  if (!Array.isArray(allocations)) return false;
+  const requiredFields: (keyof AllocationPosition)[] = [
+    'vaultId', 'vaultName', 'allocationPct', 'apy', 'tvlUsd', 'riskScore', 'rotationCostPct',
+  ];
+  for (const alloc of allocations) {
+    if (!alloc || typeof alloc !== 'object') return false;
+    for (const field of requiredFields) {
+      if (!(field in (alloc as Record<string, unknown>))) return false;
+    }
+    if (typeof (alloc as AllocationPosition).allocationPct !== 'number') return false;
+  }
+  const total = (allocations as AllocationPosition[]).reduce((s, a) => s + a.allocationPct, 0);
+  return Math.abs(total - 100) < 0.001;
+}

@@ -30,15 +30,15 @@ function httpErrorType(status: number): OffRampErrorType {
 
 const STORAGE_KEY = "stellar_yield_offramp_txns";
 
+// All provider calls go through these backend proxy endpoints so that the
+// off-ramp API key never appears in the browser bundle.
+const OFFRAMP_PROXY_BASE = "/api/offramp";
+
 export class OffRampService {
     readonly provider: OffRampProvider;
-    private apiKey: string;
-    private baseUrl: string;
 
-    constructor(provider: OffRampProvider, apiKey: string, baseUrl: string) {
+    constructor(provider: OffRampProvider) {
         this.provider = provider;
-        this.apiKey = apiKey;
-        this.baseUrl = baseUrl;
     }
 
     /**
@@ -75,6 +75,7 @@ export class OffRampService {
             } else {
                 transaction.errorMessage = error instanceof Error ? error.message : "Unknown error";
             }
+            transaction.isRetryable = this.checkIfRetryable(error);
             this.saveTransaction(transaction);
             throw error;
         }
@@ -117,8 +118,8 @@ export class OffRampService {
         if (tx.status === "completed") return tx;
 
         try {
-            const response = await fetch(`${this.baseUrl}/transactions/${txId}`, {
-                headers: { Authorization: `Bearer ${this.apiKey}` },
+            const response = await fetch(`${OFFRAMP_PROXY_BASE}/status/${txId}`, {
+                headers: { "Content-Type": "application/json" },
             });
 
             if (!response.ok) {
@@ -238,12 +239,9 @@ export class OffRampService {
         };
 
         try {
-            const response = await fetch(`${this.baseUrl}/withdrawals`, {
+            const response = await fetch(`${OFFRAMP_PROXY_BASE}/withdrawal`, {
                 method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${this.apiKey}`,
-                },
+                headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(payload),
             });
 

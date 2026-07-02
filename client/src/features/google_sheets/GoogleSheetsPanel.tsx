@@ -30,7 +30,6 @@ export default function GoogleSheetsPanel({
 
   const service = new GoogleSheetsService(
     import.meta.env.VITE_GOOGLE_CLIENT_ID || "",
-    import.meta.env.VITE_GOOGLE_CLIENT_SECRET || "",
     `${window.location.origin}/auth/google-sheets/callback`,
   );
 

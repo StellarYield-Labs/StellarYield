@@ -7,6 +7,16 @@ on:
   workflow_dispatch:
 
 jobs:
+  env-guard:
+    name: Frontend Env Secret Guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Fail if VITE_ variables expose secrets
+        run: bash .github/scripts/check-vite-secrets.sh client
+
   backend:
     name: Backend Checks
     runs-on: ubuntu-latest
@@ -63,6 +73,9 @@ jobs:
       - name: Run backend tests
         run: npm test
 
+      - name: Run failure harness tests (backend)
+        run: npx jest --testPathPatterns="failureHarness" --no-coverage
+
   frontend:
     name: Frontend Checks
     runs-on: ubuntu-latest
@@ -101,6 +114,18 @@ jobs:
         run: |
           set -o pipefail
           npm test 2>&1 | tee frontend-test.log
+
+      - name: Run failure harness tests (frontend)
+        id: frontend_harness_tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          node ./node_modules/vitest/vitest.mjs run --reporter=verbose src/components/dashboard/__tests__/ApyDashboard.failure.test.tsx 2>&1 | tee frontend-harness.log
+
+      - name: Fail if failure harness tests failed
+        if: steps.frontend_harness_tests.outcome == 'failure'
+        run: exit 1
 
       - name: Build frontend and capture logs
         id: frontend_build
@@ -189,7 +214,6 @@ jobs:
   verification:
     name: Formal Verification (Kani)
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Check out repository
         uses: actions/checkout@v4

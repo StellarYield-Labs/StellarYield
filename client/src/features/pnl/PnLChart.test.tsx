@@ -18,6 +18,7 @@ vi.mock("../../context/useWallet", () => ({
 // Mock the API module
 vi.mock("../../lib/api", () => ({
   apiUrl: (path: string) => `http://localhost:3000${path}`,
+  apiUrl: vi.fn((path: string) => `http://localhost:3000${path}`),
 }));
 
 describe("PnLChart", () => {
@@ -106,6 +107,24 @@ describe("PnLChart", () => {
       expect(container).toBeInTheDocument();
     });
   });
+
+
+    it("shows an API configuration error instead of crashing", async () => {
+      const api = await import("../../lib/api");
+      vi.mocked(api.apiUrl).mockImplementation(() => {
+        throw new Error("Backend URL is not configured. Set VITE_API_BASE_URL to enable API-backed views.");
+      });
+      (useWallet as ReturnType<typeof vi.fn>).mockReturnValue({
+        isConnected: true,
+        walletAddress: mockWalletAddress,
+      });
+
+      render(<PnLChart />);
+
+      expect(
+        await screen.findByText(/Backend URL is not configured/i),
+      ).toBeInTheDocument();
+    });
 
   describe("Loading State", () => {
     it("shows loading spinner while fetching data", () => {

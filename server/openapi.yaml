@@ -1868,6 +1868,363 @@ paths:
                   value:
                     error: "Unknown strategy: no-such-strategy"
 
+  /api/openapi:
+    get:
+      summary: Get the OpenAPI specification
+      description: Returns this OpenAPI document as YAML for API clients and documentation tooling.
+      tags:
+        - OpenAPI
+      responses:
+        '200':
+          description: OpenAPI YAML returned successfully
+          content:
+            text/yaml:
+              schema:
+                type: string
+
+  /api/openapi/docs:
+    get:
+      summary: View Swagger UI
+      description: Serves the interactive Swagger UI backed by `/api/openapi`.
+      tags:
+        - OpenAPI
+      responses:
+        '200':
+          description: Swagger UI HTML returned successfully
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /api/relayer/fee-bump:
+    post:
+      summary: Sign a fee-bump transaction
+      description: Signs a Stellar fee-bump transaction through the configured relayer.
+      tags:
+        - Relayer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Fee-bump transaction signed
+        '429':
+          description: Rate limit exceeded
+
+  /api/events:
+    get:
+      summary: Get recent events
+      description: Returns the latest persisted events when the Prisma client and database are available.
+      tags:
+        - Events
+      responses:
+        '200':
+          description: Recent events returned successfully
+        '503':
+          description: Events database is unavailable
+
+  /api/recommend:
+    post:
+      summary: Generate a yield recommendation
+      description: Produces a recommendation from user preferences, risk tolerance, APY, liquidity, and volatility inputs.
+      tags:
+        - Recommendations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Recommendation generated successfully
+
+  /api/recommend/timeline:
+    get:
+      summary: Get recommendation timeline
+      description: Returns recorded recommendation timeline entries for a user.
+      tags:
+        - Recommendations
+      parameters:
+        - name: userId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Recommendation timeline returned successfully
+
+  /api/stress-scenarios/run:
+    post:
+      summary: Run a stress scenario
+      description: Runs an APY collapse, liquidity drain, or oracle shock stress scenario using request inputs.
+      tags:
+        - Risk
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scenario:
+                  type: string
+                  enum: [apy-collapse, liquidity-drain, oracle-shock]
+      responses:
+        '200':
+          description: Stress scenario result returned successfully
+        '400':
+          description: Invalid scenario
+
+  /api/auth/verify:
+    post:
+      summary: Verify a Stellar auth challenge
+      description: Verifies a signed Stellar authentication challenge request.
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Auth challenge verified
+        '400':
+          description: Invalid auth verification request
+
+  /api/incidents:
+    get:
+      summary: List incidents
+      description: Returns a paginated list of protocol incidents with optional filters.
+      tags:
+        - Incidents
+      responses:
+        '200':
+          description: Incidents returned successfully
+    post:
+      summary: Create an incident
+      description: Creates a protocol incident record.
+      tags:
+        - Incidents
+      responses:
+        '201':
+          description: Incident created
+        '400':
+          description: Missing required fields
+
+  /api/incidents/{id}:
+    get:
+      summary: Get an incident
+      tags:
+        - Incidents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Incident returned successfully
+        '404':
+          description: Incident not found
+
+  /api/strategies/leaderboard:
+    get:
+      summary: Get risk-adjusted strategy leaderboard
+      description: Returns strategies ranked by risk-adjusted yield with optional time-window and strategy filters.
+      tags:
+        - Strategies
+      responses:
+        '200':
+          description: Strategy leaderboard returned successfully
+
+  /api/strategies/failover:
+    get:
+      summary: Get strategy failover state
+      tags:
+        - Strategies
+      responses:
+        '200':
+          description: Failover decisions returned successfully
+
+  /api/governance/forecast:
+    post:
+      summary: Forecast governance proposal impact
+      description: Returns an estimated impact forecast for a read-only governance proposal simulation.
+      tags:
+        - Governance
+      responses:
+        '200':
+          description: Governance forecast returned successfully
+        '400':
+          description: Invalid proposal input
+
+  /api/portfolio/activity/{walletAddress}:
+    get:
+      summary: Get portfolio activity timeline
+      description: Returns a unified timeline of deposits, withdrawals, rewards, recommendations, alerts, and rebalances.
+      tags:
+        - Portfolio
+      parameters:
+        - name: walletAddress
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: types
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Portfolio activity returned successfully
+        '400':
+          description: Unknown activity type
+
+  /api/presets:
+    get:
+      summary: List allocation presets
+      tags:
+        - Presets
+      parameters:
+        - name: wallet
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Presets returned successfully
+        '400':
+          description: Wallet query parameter is required
+    post:
+      summary: Create an allocation preset
+      tags:
+        - Presets
+      responses:
+        '201':
+          description: Preset created
+        '400':
+          description: Invalid preset input
+
+  /api/fees:
+    get:
+      summary: Get fee oracle estimate
+      tags:
+        - Fees
+      responses:
+        '200':
+          description: Fee estimate returned successfully
+        '500':
+          description: Unable to estimate fees
+
+  /api/deposits/supported-assets:
+    get:
+      summary: Get supported deposit assets
+      tags:
+        - Deposits
+      responses:
+        '200':
+          description: Supported assets returned successfully
+
+  /api/donations:
+    get:
+      summary: Get donation data
+      tags:
+        - Donations
+      responses:
+        '200':
+          description: Donation data returned successfully
+
+  /api/onramp/webhook:
+    post:
+      summary: Receive onramp webhook
+      tags:
+        - Onramp
+      responses:
+        '200':
+          description: Webhook processed successfully
+
+  /api/transparency/summary:
+    get:
+      summary: Get protocol revenue and burn summary
+      tags:
+        - Transparency
+      responses:
+        '200':
+          description: Transparency summary returned successfully
+
+  /api/admin:
+    get:
+      summary: Get admin status
+      description: Representative admin route prefix; admin-only operations require privileged access.
+      tags:
+        - Admin
+      responses:
+        '200':
+          description: Admin data returned successfully
+        '403':
+          description: Admin access required
+
+  /api/audit-monitoring/status:
+    get:
+      summary: Get audit monitoring status
+      tags:
+        - AuditMonitoring
+      responses:
+        '200':
+          description: Audit monitoring status returned successfully
+        '403':
+          description: Admin access required
+
+  /api/weekly-reports:
+    get:
+      summary: List weekly yield reports
+      tags:
+        - WeeklyReports
+      responses:
+        '200':
+          description: Weekly reports returned successfully
+        '403':
+          description: Admin access required
+
+  /api/correlation:
+    get:
+      summary: Get correlation matrix
+      tags:
+        - Correlation
+      parameters:
+        - name: window
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 365
+      responses:
+        '200':
+          description: Correlation matrix returned successfully
+        '400':
+          description: Invalid window parameter
+
+  /api/metrics:
+    get:
+      summary: Get legacy JSON metrics
+      description: Returns internal JSON metrics used by legacy tooling.
+      tags:
+        - Metrics
+      responses:
+        '200':
+          description: Metrics returned successfully
+
   # Intentionally excluded routes:
   # - Internal debugging and profiling endpoints under /internal/* are intentionally omitted from this public spec.
   # - Any admin-only endpoints that require interactive session tokens are documented above when needed; ephemeral or highly-sensitive debug routes are excluded.

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getApiBaseUrl } from "../../lib/api";
+import { apiUrl } from "../../lib/api";
 
 type ReplayItem = {
   recordId: string;
@@ -31,8 +31,6 @@ type ReplayReportResponse = {
   error?: string;
 };
 
-const API_BASE = getApiBaseUrl();
-
 export default function AuditReplayReportPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +44,7 @@ export default function AuditReplayReportPanel() {
       setError(null);
       try {
         const res = await fetch(
-          `${API_BASE}/api/audit-replay/summary?strategyId=default-strategy&limit=25`,
+          apiUrl(`/api/audit-replay/summary?strategyId=default-strategy&limit=25`),
         );
         const json = (await res.json()) as ReplayReportResponse;
         if (!res.ok || !json.success || !json.data) {

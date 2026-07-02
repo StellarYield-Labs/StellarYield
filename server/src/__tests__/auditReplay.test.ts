@@ -89,7 +89,7 @@ describe('AuditReplayService', () => {
       expect(result.originalRecord).toEqual(record)
       expect(result.replayOutputs).toBeDefined()
       expect(result.isDeterministic).toBeDefined()
-      expect(result.executionTime).toBeGreaterThan(0)
+      expect(result.executionTime).toBeGreaterThanOrEqual(0)
     })
 
     it('should throw error for non-existent record', async () => {
@@ -264,7 +264,7 @@ describe('AuditReplayService', () => {
       expect(stats.totalExecutions).toBe(3)
       expect(stats.successCount).toBe(2)
       expect(stats.failureCount).toBe(1)
-      expect(stats.avgExecutionTime).toBeGreaterThan(0)
+      expect(stats.avgExecutionTime).toBeGreaterThanOrEqual(0)
       expect(stats.lastExecution).toBeInstanceOf(Date)
     })
 

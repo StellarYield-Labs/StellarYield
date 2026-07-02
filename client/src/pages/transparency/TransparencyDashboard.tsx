@@ -24,13 +24,11 @@ import {
     Legend,
     ResponsiveContainer,
 } from "recharts";
-import { getApiBaseUrl } from "../../lib/api";
+import { apiUrl } from "../../lib/api";
 import { parseSmokeRunResult } from "./smokeResults";
 import VaultReliabilityPanel from "./VaultReliabilityPanel";
 import AuditReplayReportPanel from "./AuditReplayReportPanel";
 import RegistryDiffPage from "./RegistryDiff";
-
-const API_BASE = getApiBaseUrl();
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -121,7 +119,7 @@ export default function TransparencyDashboard() {
             setLoading(true);
             setError(null);
             try {
-                const res = await fetch(`${API_BASE}/api/transparency/summary`);
+                const res = await fetch(apiUrl(`/api/transparency/summary`));
                 if (!res.ok) {
                     throw new Error(`Server returned ${res.status}`);
                 }
@@ -158,10 +156,14 @@ export default function TransparencyDashboard() {
     }, []);
 
     useEffect(() => {
-        fetch(`${API_BASE}/api/transparency/failover-history`)
-            .then((res) => (res.ok ? res.json() : Promise.resolve({ incidents: [] })))
-            .then((data: { incidents: FailoverIncident[] }) => setFailoverIncidents(data.incidents))
-            .catch(() => setFailoverIncidents([]));
+        try {
+            fetch(apiUrl("/api/transparency/failover-history"))
+                .then((res) => (res.ok ? res.json() : Promise.resolve({ incidents: [] })))
+                .then((data: { incidents: FailoverIncident[] }) => setFailoverIncidents(data.incidents))
+                .catch(() => setFailoverIncidents([]));
+        } catch {
+            setFailoverIncidents([]);
+        }
     }, []);
 
     // ── Truncate X-axis labels to MM/DD ───────────────────────────────────

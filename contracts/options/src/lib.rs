@@ -98,7 +98,7 @@ impl OptionsContract {
 
     pub fn exercise(env: Env, exerciser: Address, option_id: u32) -> Result<(), OptionsError> {
         exerciser.require_auth();
-        let mut option = read_option(&env, option_id);
+        let mut option = read_option(&env, option_id).ok_or(OptionsError::InvalidOption)?;
 
         if option.exercised || option.expired {
             return Err(OptionsError::AlreadyExercised);
@@ -145,7 +145,7 @@ impl OptionsContract {
     }
 
     pub fn expire(env: Env, option_id: u32) -> Result<(), OptionsError> {
-        let mut option = read_option(&env, option_id);
+        let mut option = read_option(&env, option_id).ok_or(OptionsError::InvalidOption)?;
 
         if option.exercised || option.expired {
             return Err(OptionsError::AlreadyExpired);

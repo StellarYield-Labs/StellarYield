@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import TransparencyDashboard from "../TransparencyDashboard";
+import TransparencyDashboard from "./TransparencyDashboard";
 
 const mockTransparencyData = {
   totalRevenueLumens: 372000,
@@ -19,6 +19,12 @@ function makeFetchMock(incidents: unknown[]) {
       return Promise.resolve({
         ok: true,
         json: async () => ({ incidents }),
+      });
+    }
+    if (String(url).includes("reliability")) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => [],
       });
     }
     return Promise.resolve({
@@ -84,5 +90,19 @@ describe("TransparencyDashboard – failover incident history", () => {
     await waitFor(() => expect(screen.getByText("Soroswap")).toBeInTheDocument());
     expect(screen.getByText("Recovered")).toBeInTheDocument();
     expect(screen.getByText(/300s outage/i)).toBeInTheDocument();
+  });
+});
+
+describe("TransparencyDashboard – API unavailable fallback", () => {
+  it("shows a route-local error state when API URL configuration is absent", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => {
+      throw new Error("Backend URL is not configured. Set VITE_API_BASE_URL to enable API-backed views.");
+    }));
+
+    render(<TransparencyDashboard />);
+
+    expect(
+      await screen.findByText(/Backend URL is not configured/i),
+    ).toBeInTheDocument();
   });
 });

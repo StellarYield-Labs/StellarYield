@@ -1,10 +1,6 @@
 import { DriftService } from "../services/driftService";
 import { dispatchDriftAlert } from "../services/alertsService";
 
-var mockDriftEventFindFirst: jest.Mock;
-var mockDriftEventCreate: jest.Mock;
-var mockDriftEventUpdate: jest.Mock;
-
 jest.mock("../config/targetAllocations", () => ({
   TARGET_ALLOCATIONS: [
     { vaultId: "VaultA", targetWeight: 0.60, driftThreshold: 0.05 },
