@@ -10,7 +10,9 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
 const BACKEND_HEALTH_PATH = process.env.BACKEND_HEALTH_PATH || '/api/health';
 const BACKEND_YIELDS_PATH = process.env.BACKEND_YIELDS_PATH || '/api/yields';
+const BACKEND_SAFE_PATH = process.env.BACKEND_SAFE_PATH || '/api/openapi';
 const FRONTEND_ASSET_PATH = process.env.FRONTEND_ASSET_PATH || '/favicon.svg';
+const FRONTEND_API_BASE_URL = process.env.VITE_API_BASE_URL || process.env.VITE_API_URL || '';
 
 function parseArgs(argv) {
   const flags = new Set();
@@ -79,6 +81,37 @@ async function expect200(label, url) {
   return false;
 }
 
+function isLocalUrl(value) {
+  try {
+    const hostname = new URL(value).hostname;
+    return ['localhost', '127.0.0.1', '::1'].includes(hostname);
+  } catch (_error) {
+    return false;
+  }
+}
+
+function validateFrontendApiConfig() {
+  if (isLocalUrl(FRONTEND_URL)) {
+    return { ok: true, message: 'Local frontend smoke test may rely on BACKEND_URL.' };
+  }
+
+  if (!FRONTEND_API_BASE_URL.trim()) {
+    return {
+      ok: false,
+      message: 'Set VITE_API_BASE_URL or VITE_API_URL for deployed frontend smoke tests.',
+    };
+  }
+
+  if (isLocalUrl(FRONTEND_API_BASE_URL)) {
+    return {
+      ok: false,
+      message: `Frontend API base points at a local-only backend: ${FRONTEND_API_BASE_URL}`,
+    };
+  }
+
+  return { ok: true, message: `Frontend API base: ${FRONTEND_API_BASE_URL}` };
+}
+
 /**
  * Run all four smoke checks and return structured results (always runs every check).
  * @returns {Promise<{ ok: boolean, rows: { label: string, url: string, httpCode: number }[] }>}
@@ -87,12 +120,21 @@ async function collectSmokeResults() {
   /** @type {{ label: string, url: string }[]} */
   const tests = [
     {
+      label: 'Frontend API env',
+      url: 'VITE_API_BASE_URL || VITE_API_URL',
+      config: validateFrontendApiConfig(),
+    },
+    {
       label: `Backend ${BACKEND_HEALTH_PATH}`,
       url: `${BACKEND_URL}${BACKEND_HEALTH_PATH}`,
     },
     {
       label: `Backend ${BACKEND_YIELDS_PATH}`,
       url: `${BACKEND_URL}${BACKEND_YIELDS_PATH}`,
+    },
+    {
+      label: `Backend ${BACKEND_SAFE_PATH}`,
+      url: `${BACKEND_URL}${BACKEND_SAFE_PATH}`,
     },
     {
       label: 'Frontend /',
@@ -107,6 +149,15 @@ async function collectSmokeResults() {
   /** @type {{ label: string, url: string, httpCode: number }[]} */
   const rows = [];
   for (const t of tests) {
+    if (t.config) {
+      rows.push({
+        label: t.label,
+        url: t.url,
+        httpCode: t.config.ok ? 200 : 0,
+        message: t.config.message,
+      });
+      continue;
+    }
     const code = await getStatusCode(t.url);
     rows.push({ label: t.label, url: t.url, httpCode: code });
   }
@@ -127,6 +178,7 @@ function buildMarkdownReport(rows, ok) {
     `- **Time (UTC):** ${ts}`,
     `- **Frontend base:** \`${FRONTEND_URL}\``,
     `- **Backend base:** \`${BACKEND_URL}\``,
+    `- **Frontend API env:** \`${FRONTEND_API_BASE_URL || '(not set)'}\``,
     `- ${statusLine}`,
     '',
     '| Check | URL | Result |',
@@ -135,7 +187,11 @@ function buildMarkdownReport(rows, ok) {
   for (const r of rows) {
     const pass = r.httpCode === 200;
     const result =
-      r.httpCode === 0 ? 'FAIL (unreachable)' : pass ? 'PASS (200)' : `FAIL (${r.httpCode})`;
+      r.httpCode === 0
+        ? `FAIL${r.message ? ` (${r.message})` : ' (unreachable)'}`
+        : pass
+          ? 'PASS (200)'
+          : `FAIL (${r.httpCode})`;
     lines.push(`| ${r.label} | \`${r.url}\` | ${result} |`);
   }
   lines.push('');
@@ -143,8 +199,10 @@ function buildMarkdownReport(rows, ok) {
   lines.push('');
   lines.push('```bash');
   lines.push(
-    `FRONTEND_URL="${FRONTEND_URL}" BACKEND_URL="${BACKEND_URL}" \\\n` +
+      `FRONTEND_URL="${FRONTEND_URL}" BACKEND_URL="${BACKEND_URL}" \\\n` +
+      `  VITE_API_BASE_URL="${FRONTEND_API_BASE_URL || BACKEND_URL}" \\\n` +
       `  BACKEND_HEALTH_PATH="${BACKEND_HEALTH_PATH}" BACKEND_YIELDS_PATH="${BACKEND_YIELDS_PATH}" \\\n` +
+      `  BACKEND_SAFE_PATH="${BACKEND_SAFE_PATH}" \\\n` +
       `  FRONTEND_ASSET_PATH="${FRONTEND_ASSET_PATH}" \\\n` +
       `  node scripts/smoke-test.js --report --markdown`,
   );
@@ -163,6 +221,7 @@ async function runSmokeReport(opts) {
   console.log('----------------------------------------');
   console.log(`Target Frontend: ${FRONTEND_URL}`);
   console.log(`Target Backend:  ${BACKEND_URL}`);
+  console.log(`Frontend API:    ${FRONTEND_API_BASE_URL || '(not set)'}`);
   console.log('----------------------------------------');
 
   const { ok, rows } = await collectSmokeResults();
@@ -170,8 +229,14 @@ async function runSmokeReport(opts) {
 
   for (const r of rows) {
     const pass = r.httpCode === 200;
-    if (pass) {
+    if (r.label === 'Frontend API env' && pass) {
+      console.log(`[PASS] ${r.label}`);
+      if (r.message) console.log(`   ${r.message}`);
+    } else if (pass) {
       console.log(`[PASS] ${r.label} (200)`);
+    } else if (r.label === 'Frontend API env') {
+      console.log(`[FAIL] ${r.label}`);
+      if (r.message) console.log(`   ${r.message}`);
     } else if (r.httpCode === 0) {
       console.log(`[FAIL] ${r.label} (unreachable)`);
       console.log(`   URL: ${r.url}`);
@@ -200,31 +265,43 @@ async function runSmokeReport(opts) {
  * Main smoke test function (fail-fast; default)
  */
 async function runSmokeTest() {
+  const apiConfig = validateFrontendApiConfig();
   console.log('----------------------------------------');
   console.log('StellarYield Smoke Test');
   console.log('----------------------------------------');
   console.log(`Target Frontend: ${FRONTEND_URL}`);
   console.log(`Target Backend:  ${BACKEND_URL}`);
+  console.log(`Frontend API:    ${FRONTEND_API_BASE_URL || '(not set)'}`);
   console.log('----------------------------------------');
 
   const tests = [
     {
-      step: '[1/4] Checking backend health...',
+      step: '[1/6] Checking frontend API environment...',
+      label: 'Frontend API env',
+      config: apiConfig,
+    },
+    {
+      step: '[2/6] Checking backend health...',
       label: `Backend ${BACKEND_HEALTH_PATH}`,
       url: `${BACKEND_URL}${BACKEND_HEALTH_PATH}`,
     },
     {
-      step: '[2/4] Checking backend yield endpoint...',
+      step: '[3/6] Checking backend yield endpoint...',
       label: `Backend ${BACKEND_YIELDS_PATH}`,
       url: `${BACKEND_URL}${BACKEND_YIELDS_PATH}`,
     },
     {
-      step: '[3/4] Checking frontend root...',
+      step: '[4/6] Checking backend unauthenticated-safe route...',
+      label: `Backend ${BACKEND_SAFE_PATH}`,
+      url: `${BACKEND_URL}${BACKEND_SAFE_PATH}`,
+    },
+    {
+      step: '[5/6] Checking frontend root...',
       label: 'Frontend /',
       url: `${FRONTEND_URL}/`,
     },
     {
-      step: '[4/4] Checking frontend static asset...',
+      step: '[6/6] Checking frontend static asset...',
       label: `Frontend ${FRONTEND_ASSET_PATH}`,
       url: `${FRONTEND_URL}${FRONTEND_ASSET_PATH}`,
     },
@@ -233,6 +310,17 @@ async function runSmokeTest() {
   for (const test of tests) {
     console.log('');
     console.log(test.step);
+    if (test.config) {
+      if (test.config.ok) {
+        console.log(`[PASS] ${test.label}`);
+        console.log(`   ${test.config.message}`);
+        continue;
+      }
+
+      console.log(`[FAIL] ${test.label}`);
+      console.log(`   ${test.config.message}`);
+      process.exit(1);
+    }
     const passed = await expect200(test.label, test.url);
     if (!passed) {
       process.exit(1);
@@ -262,4 +350,12 @@ if (require.main === module) {
   }
 }
 
-module.exports = { runSmokeTest, runSmokeReport, getStatusCode, expect200, collectSmokeResults, buildMarkdownReport };
+module.exports = {
+  runSmokeTest,
+  runSmokeReport,
+  getStatusCode,
+  expect200,
+  collectSmokeResults,
+  buildMarkdownReport,
+  validateFrontendApiConfig,
+};
