@@ -37,12 +37,18 @@ tags:
     description: Treasury simulation and scenario management
   - name: Alerts
     description: APY alert management
+  - name: Contacts
+    description: Encrypted contacts management
+  - name: Indexer
+    description: Blockchain indexer status and monitoring
+  - name: Liquidity
+    description: Liquidity fragmentation metrics
+  - name: Vaults
+    description: Vault share price history
   - name: AuditMonitoring
     description: Administrative audit monitoring endpoints (admin access required)
   - name: Metrics
     description: Prometheus-compatible metrics scrape endpoint
-  - name: Liquidity
-    description: Liquidity fragmentation metrics
   - name: Simulator
     description: Simulation endpoints for deposit, rebalance, and failover dry-runs (never executes on-chain)
 
