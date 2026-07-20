@@ -1,33 +1,37 @@
-import { PartialFillConfig, rebalanceQueueService } from '../services/rebalanceQueueService';
+import {
+  ExecutionAdapter,
+  ExecutionSimulationResult,
+  ExecutionSubmitResult,
+  RebalanceExecutionRequest,
+} from '../services/rebalanceExecutionAdapter';
+import { rebalanceQueueService, PartialFillConfig } from '../services/rebalanceQueueService';
+import { REBALANCE_STATUS } from '../queues/types';
 
-/**
- * Rebalance Queue Processor Job
- *
- * Processes items from the rebalance queue:
- * - Handles retries of failed executions
- * - Processes deferred entries when ready
- * - Manages partial fills and follow-ups
- * - Prevents replay of stale intents
- *
- * Can be triggered via cron schedule or called directly.
- */
+export interface QueueEntryForProcessing {
+  id: string;
+  vaultId: string;
+  status: string;
+  targetAllocations: Record<string, number>;
+  currentAllocations: Record<string, number>;
+  executionStrategy: Record<string, unknown>;
+  intentHash: string;
+  triggeredBy?: string;
+  lastTransactionHash?: string | null;
+}
 
 export interface JobConfig {
   enabled: boolean;
-  schedule?: string; // Cron expression (optional if triggered manually)
-  batchSize: number; // Process N items per job run
+  schedule?: string;
+  batchSize: number;
   enableRetries: boolean;
   enableDeferredProcessing: boolean;
   partialFillConfig?: Partial<PartialFillConfig>;
   logResults: boolean;
+  executionAdapter: ExecutionAdapter;
 }
 
 let jobHandle: ReturnType<typeof setInterval> | null = null;
 
-/**
- * Start the rebalance queue processor job.
- * Runs on an interval to process pending and deferred items.
- */
 export function startRebalanceQueueProcessorJob(
   config: Partial<JobConfig> = {},
 ): void {
@@ -38,6 +42,7 @@ export function startRebalanceQueueProcessorJob(
     enableDeferredProcessing: config.enableDeferredProcessing !== false,
     partialFillConfig: config.partialFillConfig,
     logResults: config.logResults !== false,
+    executionAdapter: config.executionAdapter!,
   };
 
   if (!finalConfig.enabled) {
@@ -45,7 +50,10 @@ export function startRebalanceQueueProcessorJob(
     return;
   }
 
-  // Run job every 30 seconds
+  if (!finalConfig.executionAdapter) {
+    throw new Error('executionAdapter is required for rebalance queue processor job');
+  }
+
   const intervalMs = 30000;
   console.log(
     `Starting rebalance queue processor job (interval: ${intervalMs}ms, batch size: ${finalConfig.batchSize})`,
@@ -60,9 +68,6 @@ export function startRebalanceQueueProcessorJob(
   }, intervalMs);
 }
 
-/**
- * Stop the rebalance queue processor job.
- */
 export function stopRebalanceQueueProcessorJob(): void {
   if (jobHandle) {
     clearInterval(jobHandle);
@@ -71,10 +76,6 @@ export function stopRebalanceQueueProcessorJob(): void {
   }
 }
 
-/**
- * Run the rebalance queue processor job.
- * Processes retries, deferred items, and handles failures.
- */
 export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<{
   success: boolean;
   processedRetries: number;
@@ -88,7 +89,6 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
   let failedProcessing = 0;
 
   try {
-    // Process retries
     if (config.enableRetries) {
       const pendingRetries = await rebalanceQueueService.getPendingRetries();
       const toProcess = pendingRetries.slice(0, config.batchSize);
@@ -105,17 +105,15 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
           console.error(`Failed to process retry for entry ${entry.id}:`, error);
           failedProcessing++;
 
-          // Record the failure
           await rebalanceQueueService.recordFailedAttempt(
             entry.id,
             `Job processing failed: ${error instanceof Error ? error.message : String(error)}`,
-            config.partialFillConfig,
+            { errorClass: 'terminal', executionMetadata: { jobError: true } },
           );
         }
       }
     }
 
-    // Process deferred items
     if (config.enableDeferredProcessing) {
       const deferredEntries = await rebalanceQueueService.getDeferredEntries();
       const toProcess = deferredEntries.slice(0, config.batchSize);
@@ -132,11 +130,10 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
           console.error(`Failed to process deferred entry ${entry.id}:`, error);
           failedProcessing++;
 
-          // Record the failure
           await rebalanceQueueService.recordFailedAttempt(
             entry.id,
             `Job processing failed: ${error instanceof Error ? error.message : String(error)}`,
-            config.partialFillConfig,
+            { errorClass: 'terminal', executionMetadata: { jobError: true } },
           );
         }
       }
@@ -146,8 +143,8 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
       const elapsed = Date.now() - startTime;
       console.log(
         `Rebalance queue processor job completed: ` +
-        `${processedRetries} retries, ${processedDeferred} deferred, ` +
-        `${failedProcessing} failed (${elapsed}ms)`,
+          `${processedRetries} retries, ${processedDeferred} deferred, ` +
+          `${failedProcessing} failed (${elapsed}ms)`,
       );
     }
 
@@ -170,46 +167,107 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
   }
 }
 
-/**
- * Process a single queue entry.
- * This is where the actual rebalance execution would be called.
- * For now, it's a stub that can be integrated with contract interactions.
- */
-async function processQueueEntry(entry: any, config: JobConfig): Promise<void> {
-  // Mark as processing
-  await rebalanceQueueService.markAsProcessing(entry.id);
+async function processQueueEntry(
+  entry: QueueEntryForProcessing,
+  config: JobConfig,
+): Promise<void> {
+  const queueEntryId = entry.id;
 
-  // TODO: Integrate with contract/relayer to execute rebalance
-  // This would call the actual rebalance execution logic
-  // For now, we'll simulate success
-  
-  // Simulate execution result
-  const executionResult = {
-    queueEntryId: entry.id,
-    totalExecuted: 100, // Simulated: 100% executed
-    expectedAmount: 100,
-    filledPercentage: 100,
-    transactionHash: `0x${Math.random().toString(16).slice(2)}`,
-    executionDetails: {
-      status: 'completed',
-      allocationsAdjusted: entry.targetAllocations,
-      timestamp: new Date(),
-    },
+  if (entry.status === REBALANCE_STATUS.COMPLETED && entry.lastTransactionHash) {
+    return;
+  }
+
+  await rebalanceQueueService.markAsProcessing(queueEntryId);
+
+  const request: RebalanceExecutionRequest = {
+    queueEntryId,
+    vaultId: entry.vaultId,
+    vaultContractId: entry.vaultId,
+    targetAllocations: entry.targetAllocations,
+    currentAllocations: entry.currentAllocations,
+    executionStrategy: entry.executionStrategy,
+    intentHash: entry.intentHash,
+    adminAddress: entry.triggeredBy ?? undefined,
   };
 
-  // Record execution result
-  await rebalanceQueueService.recordPartialExecution(
-    entry.id,
-    executionResult,
-    config.partialFillConfig,
-  );
+  const simulationResult = await config.executionAdapter.simulate(request);
+  if (!simulationResult.success) {
+    await rebalanceQueueService.recordFailedAttempt(
+      queueEntryId,
+      simulationResult.error ?? 'Simulation failed',
+      {
+        ...config.partialFillConfig,
+        errorClass: simulationResult.errorClass ?? 'terminal',
+        executionMetadata: simulationResult.metadata,
+      },
+    );
+    return;
+  }
+
+  const submitResult = await config.executionAdapter.submit(request);
+
+  if (submitResult.success) {
+    await rebalanceQueueService.recordSubmission(
+      queueEntryId,
+      submitResult.transactionHash ?? '',
+      submitResult.ledger ?? 0,
+      submitResult.errorClass,
+      submitResult.metadata,
+    );
+
+    const filledPercentage = (submitResult.metadata?.filledPercentage as number | undefined) ?? 100;
+    const totalExecuted = (submitResult.metadata?.totalExecuted as number | undefined) ?? filledPercentage;
+
+    if (filledPercentage >= 100) {
+      await rebalanceQueueService.markAsCompleted(
+        queueEntryId,
+        submitResult.transactionHash,
+        submitResult.ledger,
+        submitResult.errorClass,
+        submitResult.metadata,
+      );
+    } else {
+      await rebalanceQueueService.recordPartialExecution(
+        queueEntryId,
+        {
+          queueEntryId,
+          totalExecuted,
+          expectedAmount: 100,
+          filledPercentage,
+          transactionHash: submitResult.transactionHash,
+          executionDetails: {
+            status: 'partial',
+            ...submitResult.metadata,
+          },
+        },
+        {
+          ...config.partialFillConfig,
+          ledger: submitResult.ledger,
+          errorClass: submitResult.errorClass,
+          executionMetadata: submitResult.metadata,
+        },
+      );
+    }
+  } else {
+    const isTerminal = submitResult.errorClass === 'terminal';
+    await rebalanceQueueService.recordFailedAttempt(
+      queueEntryId,
+      submitResult.error ?? 'Submission failed',
+      {
+        ...config.partialFillConfig,
+        maxRetries: isTerminal ? 0 : config.partialFillConfig?.maxRetries,
+        errorClass: submitResult.errorClass ?? 'terminal',
+        transactionHash: submitResult.transactionHash,
+        ledger: submitResult.ledger,
+        executionMetadata: submitResult.metadata,
+      },
+    );
+  }
 }
 
-/**
- * Manually trigger queue processing for testing/admin purposes.
- */
 export async function triggerQueueProcessing(
   batchSize = 10,
+  executionAdapter: ExecutionAdapter,
 ): Promise<{
   retries: number;
   deferred: number;
@@ -221,6 +279,7 @@ export async function triggerQueueProcessing(
     enableRetries: true,
     enableDeferredProcessing: true,
     logResults: true,
+    executionAdapter,
   });
 
   return {

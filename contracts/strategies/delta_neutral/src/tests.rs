@@ -467,9 +467,7 @@ fn test_position_ttl_bumped_on_read() {
     let initial_seq = t.env.ledger().sequence();
 
     // Step 1: Read the position (should bump TTL)
-    let pos_before = t.env.as_contract(&t.client.address, || {
-        crate::storage::read_position(&t.env, &user)
-    });
+    let pos_before = crate::storage::read_position(&t.env, &user);
     assert!(
         pos_before.is_some(),
         "Position should exist after open_position"

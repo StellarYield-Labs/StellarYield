@@ -2231,48 +2231,10 @@ paths:
         '200':
           description: Metrics returned successfully
 
-  /api/contacts:
-    get:
-      summary: Get all contacts
-      description: Fetch all encrypted contacts for the authenticated user
-      tags:
-        - Contacts
-      responses:
-        '200':
-          description: List of contacts
-        '401':
-          description: Wallet address required
-    post:
-      summary: Create a contact
-      description: Create a new encrypted contact
-      tags:
-        - Contacts
-      responses:
-        '201':
-          description: Contact created
-        '400':
-          description: Invalid request body
-        '401':
-          description: Wallet address required
-        '409':
-          description: Duplicate contact
-
-  /api/indexer:
-    get:
-      summary: Get indexer status
-      description: Returns the latest indexed ledger, network ledger, lag, and recent replay errors
-      tags:
-        - Indexer
-      responses:
-        '200':
-          description: Indexer status snapshot
-        '500':
-          description: Failed to build indexer status
-
   /api/vaults/{vaultId}/share-price-history:
     get:
       summary: Get vault share price history
-      description: Returns daily share price snapshots for the requested vault
+      description: Returns daily share price snapshots for the requested vault.
       tags:
         - Vaults
       parameters:
@@ -2286,10 +2248,91 @@ paths:
           schema:
             type: integer
             default: 90
-            maximum: 365
       responses:
         '200':
-          description: Array of share price snapshots
+          description: Share price history returned successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    date:
+                      type: string
+                    sharePrice:
+                      type: number
+                    vaultId:
+                      type: string
+
+  /api/contacts:
+    get:
+      summary: List encrypted contacts
+      description: Returns encrypted contacts for the authenticated wallet.
+      tags:
+        - Contacts
+      responses:
+        '200':
+          description: Contacts returned successfully
+    post:
+      summary: Create encrypted contact
+      description: Stores a new encrypted contact for the authenticated wallet.
+      tags:
+        - Contacts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                encryptedName:
+                  type: string
+                encryptedAddress:
+                  type: string
+      responses:
+        '201':
+          description: Contact created
+    delete:
+      summary: Delete all contacts
+      description: Removes all contacts for the authenticated wallet.
+      tags:
+        - Contacts
+      responses:
+        '204':
+          description: Contacts deleted
+
+  /api/indexer/status:
+    get:
+      summary: Get indexer status
+      description: Returns the latest indexed ledger, network ledger, lag, and status.
+      tags:
+        - Indexer
+      responses:
+        '200':
+          description: Indexer status returned successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      latestIndexedLedger:
+                        type: integer
+                      latestNetworkLedger:
+                        type: integer
+                      lag:
+                        type: integer
+                      status:
+                        type: string
+                      replayErrors:
+                        type: array
+                        items:
+                          type: string
 
   # Intentionally excluded routes:
   # - Internal debugging and profiling endpoints under /internal/* are intentionally omitted from this public spec.
