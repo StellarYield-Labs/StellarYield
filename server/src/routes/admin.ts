@@ -393,9 +393,11 @@ adminRouter.get(
         isValid: verification.isValid,
         totalEntries: logs.length,
         invalidEntries: verification.invalidEntries,
+        deletedEntries: verification.deletedEntries,
+        reorderedEntries: verification.reorderedEntries,
         message: verification.isValid
           ? "Audit trail integrity verified"
-          : `Found ${verification.invalidEntries.length} invalid entries`,
+          : `Found ${verification.invalidEntries.length} invalid entries, ${verification.deletedEntries.length} deleted, ${verification.reorderedEntries.length} reordered`,
       });
     } catch (error) {
       res.status(500).json({
