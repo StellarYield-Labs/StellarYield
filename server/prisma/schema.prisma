@@ -204,6 +204,12 @@ model RebalanceQueueEntry {
   nextRetryAt         DateTime?
   lastError           String?
   
+  // Execution tracking
+  lastTransactionHash String?
+  lastLedger          Int?
+  lastErrorClass      String?
+  executionMetadata   Json?
+  
   // Deferred execution details
   deferredReason      String?  // Reason for deferral
   deferredUntil       DateTime?
@@ -231,6 +237,8 @@ model RebalanceHistory {
   expectedAmount      Float    // Expected amount before partial fill
   filledPercentage    Float    // Percentage of expected amount
   transactionHash     String?  // Blockchain tx hash if applicable
+  ledger              Int?     // Ledger sequence when transaction was included
+  errorClass          String?  // transient | terminal | simulation
   completedAt         DateTime
   createdAt           DateTime @default(now())
 

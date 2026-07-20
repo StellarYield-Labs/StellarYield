@@ -1,4 +1,5 @@
 import { runRebalanceQueueProcessorJob } from '../jobs/rebalanceQueueProcessorJob';
+import { MockExecutionAdapter } from '../services/rebalanceExecutionAdapter';
 import { EXECUTION_TYPE, REBALANCE_STATUS, STRATEGY_EVENT_TYPE } from '../queues/types';
 import { RebalanceQueueService } from '../services/rebalanceQueueService';
 import { StrategySnapshotVersioningService } from '../services/strategySnapshotVersioningService';
@@ -419,7 +420,8 @@ describe('Rebalance Queue and Strategy Versioning Integration', () => {
 
   describe('Queue Processor Job Integration', () => {
     it('should process pending retries through job', async () => {
-      // Mock pending retries
+      const mockAdapter = new MockExecutionAdapter();
+
       mockPrisma.rebalanceQueueEntry.findMany.mockResolvedValueOnce([
         {
           id: 'queue-1',
@@ -427,26 +429,42 @@ describe('Rebalance Queue and Strategy Versioning Integration', () => {
           status: REBALANCE_STATUS.PENDING,
           attemptCount: 1,
           nextRetryAt: new Date(Date.now() - 10000),
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          intentHash: 'hash-1',
+          triggeredBy: null,
         },
       ]);
 
-      // markAsProcessing → update, then recordPartialExecution → findUniqueOrThrow + history.create + update
       mockPrisma.rebalanceQueueEntry.update
         .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.PROCESSING })
-        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.COMPLETED });
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.PROCESSING, lastTransactionHash: '0xabc', lastLedger: 12345 })
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.COMPLETED, lastTransactionHash: '0xabc', lastLedger: 12345 });
 
-      mockPrisma.rebalanceQueueEntry.findUniqueOrThrow.mockResolvedValueOnce({
-        id: 'queue-1',
-        vaultId: 'vault-1',
-        targetAllocations: {},
-        currentAllocations: {},
-        executionStrategy: {},
-        attemptCount: 1,
-        intentValidUntil: new Date(Date.now() + 86400000),
-        maxRetries: 3,
-      });
+      mockPrisma.rebalanceQueueEntry.findUniqueOrThrow
+        .mockResolvedValueOnce({
+          id: 'queue-1',
+          vaultId: 'vault-1',
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          attemptCount: 1,
+          intentValidUntil: new Date(Date.now() + 86400000),
+          maxRetries: 3,
+        })
+        .mockResolvedValueOnce({
+          id: 'queue-1',
+          vaultId: 'vault-1',
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          attemptCount: 1,
+          intentValidUntil: new Date(Date.now() + 86400000),
+          maxRetries: 3,
+        });
 
-      mockPrisma.rebalanceHistory.create.mockResolvedValueOnce({
+      mockPrisma.rebalanceHistory.create.mockResolvedValue({
         id: 'history-1',
       });
 
@@ -456,13 +474,15 @@ describe('Rebalance Queue and Strategy Versioning Integration', () => {
         enableRetries: true,
         enableDeferredProcessing: false,
         logResults: false,
+        executionAdapter: mockAdapter,
       });
 
       expect(result.success).toBe(true);
     });
 
     it('should process deferred entries when ready', async () => {
-      const deferredUntil = new Date(Date.now() - 10000); // Past date
+      const mockAdapter = new MockExecutionAdapter();
+      const deferredUntil = new Date(Date.now() - 10000);
 
       mockPrisma.rebalanceQueueEntry.findMany.mockResolvedValueOnce([
         {
@@ -471,25 +491,42 @@ describe('Rebalance Queue and Strategy Versioning Integration', () => {
           status: REBALANCE_STATUS.PENDING,
           executionType: EXECUTION_TYPE.DEFERRED,
           deferredUntil,
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          intentHash: 'hash-2',
+          triggeredBy: null,
         },
       ]);
 
       mockPrisma.rebalanceQueueEntry.update
         .mockResolvedValueOnce({ id: 'queue-2', status: REBALANCE_STATUS.PROCESSING })
-        .mockResolvedValueOnce({ id: 'queue-2', status: REBALANCE_STATUS.COMPLETED });
+        .mockResolvedValueOnce({ id: 'queue-2', status: REBALANCE_STATUS.PROCESSING, lastTransactionHash: '0xdef', lastLedger: 12346 })
+        .mockResolvedValueOnce({ id: 'queue-2', status: REBALANCE_STATUS.COMPLETED, lastTransactionHash: '0xdef', lastLedger: 12346 });
 
-      mockPrisma.rebalanceQueueEntry.findUniqueOrThrow.mockResolvedValueOnce({
-        id: 'queue-2',
-        vaultId: 'vault-1',
-        targetAllocations: {},
-        currentAllocations: {},
-        executionStrategy: {},
-        attemptCount: 0,
-        intentValidUntil: new Date(Date.now() + 86400000),
-        maxRetries: 3,
-      });
+      mockPrisma.rebalanceQueueEntry.findUniqueOrThrow
+        .mockResolvedValueOnce({
+          id: 'queue-2',
+          vaultId: 'vault-1',
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          attemptCount: 0,
+          intentValidUntil: new Date(Date.now() + 86400000),
+          maxRetries: 3,
+        })
+        .mockResolvedValueOnce({
+          id: 'queue-2',
+          vaultId: 'vault-1',
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          attemptCount: 0,
+          intentValidUntil: new Date(Date.now() + 86400000),
+          maxRetries: 3,
+        });
 
-      mockPrisma.rebalanceHistory.create.mockResolvedValueOnce({
+      mockPrisma.rebalanceHistory.create.mockResolvedValue({
         id: 'history-2',
       });
 
@@ -499,9 +536,359 @@ describe('Rebalance Queue and Strategy Versioning Integration', () => {
         enableRetries: false,
         enableDeferredProcessing: true,
         logResults: false,
+        executionAdapter: mockAdapter,
       });
 
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('Execution Adapter Integration', () => {
+    it('should not duplicate execution on duplicate processing', async () => {
+      const mockAdapter = new MockExecutionAdapter();
+
+      mockPrisma.rebalanceQueueEntry.findMany.mockResolvedValueOnce([
+        {
+          id: 'queue-1',
+          vaultId: 'vault-1',
+          status: REBALANCE_STATUS.PENDING,
+          attemptCount: 0,
+          nextRetryAt: new Date(Date.now() - 10000),
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          intentHash: 'hash-dup',
+          triggeredBy: null,
+          lastTransactionHash: null,
+        },
+      ]);
+
+      mockPrisma.rebalanceQueueEntry.update
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.PROCESSING })
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.PROCESSING, lastTransactionHash: '0xabc', lastLedger: 12345 })
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.COMPLETED, lastTransactionHash: '0xabc', lastLedger: 12345 });
+
+      mockPrisma.rebalanceQueueEntry.findUniqueOrThrow.mockResolvedValue({
+        id: 'queue-1',
+        vaultId: 'vault-1',
+        targetAllocations: {},
+        currentAllocations: {},
+        executionStrategy: {},
+        attemptCount: 0,
+        intentValidUntil: new Date(Date.now() + 86400000),
+        maxRetries: 3,
+      });
+
+      mockPrisma.rebalanceHistory.create.mockResolvedValue({
+        id: 'history-1',
+      });
+
+      const result1 = await runRebalanceQueueProcessorJob({
+        enabled: true,
+        batchSize: 10,
+        enableRetries: true,
+        enableDeferredProcessing: false,
+        logResults: false,
+        executionAdapter: mockAdapter,
+      });
+
+      expect(result1.success).toBe(true);
+
+      const firstHistoryCalls = mockPrisma.rebalanceHistory.create.mock.calls.length;
+      const firstTxHash = mockPrisma.rebalanceHistory.create.mock.calls[firstHistoryCalls - 1]?.[0]?.data?.transactionHash;
+
+      // Second run with same adapter should use cached result
+      jest.clearAllMocks();
+      mockPrisma.rebalanceQueueEntry.findMany.mockResolvedValueOnce([
+        {
+          id: 'queue-1',
+          vaultId: 'vault-1',
+          status: REBALANCE_STATUS.PENDING,
+          attemptCount: 0,
+          nextRetryAt: new Date(Date.now() - 10000),
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          intentHash: 'hash-dup',
+          triggeredBy: null,
+          lastTransactionHash: null,
+        },
+      ]);
+
+      mockPrisma.rebalanceQueueEntry.update
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.PROCESSING })
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.PROCESSING, lastTransactionHash: '0xabc', lastLedger: 12345 })
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.COMPLETED, lastTransactionHash: '0xabc', lastLedger: 12345 });
+
+      mockPrisma.rebalanceQueueEntry.findUniqueOrThrow.mockResolvedValue({
+        id: 'queue-1',
+        vaultId: 'vault-1',
+        targetAllocations: {},
+        currentAllocations: {},
+        executionStrategy: {},
+        attemptCount: 0,
+        intentValidUntil: new Date(Date.now() + 86400000),
+        maxRetries: 3,
+      });
+
+      mockPrisma.rebalanceHistory.create.mockResolvedValue({
+        id: 'history-2',
+      });
+
+      const result2 = await runRebalanceQueueProcessorJob({
+        enabled: true,
+        batchSize: 10,
+        enableRetries: true,
+        enableDeferredProcessing: false,
+        logResults: false,
+        executionAdapter: mockAdapter,
+      });
+
+      expect(result2.success).toBe(true);
+
+      const secondHistoryCalls = mockPrisma.rebalanceHistory.create.mock.calls.length;
+      const secondTxHash = mockPrisma.rebalanceHistory.create.mock.calls[secondHistoryCalls - 1]?.[0]?.data?.transactionHash;
+
+      expect(secondTxHash).toBe(firstTxHash);
+    });
+
+    it('should exhaust retries on persistent terminal failure', async () => {
+      const mockAdapter = new MockExecutionAdapter();
+      mockAdapter.configureSubmitFailure(10, 'terminal');
+
+      mockPrisma.rebalanceQueueEntry.findMany.mockResolvedValueOnce([
+        {
+          id: 'queue-1',
+          vaultId: 'vault-1',
+          status: REBALANCE_STATUS.PENDING,
+          attemptCount: 0,
+          nextRetryAt: new Date(Date.now() - 10000),
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          intentHash: 'hash-term',
+          triggeredBy: null,
+        },
+        {
+          id: 'queue-2',
+          vaultId: 'vault-1',
+          status: REBALANCE_STATUS.PENDING,
+          attemptCount: 1,
+          nextRetryAt: new Date(Date.now() - 10000),
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          intentHash: 'hash-term2',
+          triggeredBy: null,
+        },
+      ]);
+
+      mockPrisma.rebalanceQueueEntry.update
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.PROCESSING })
+        .mockResolvedValueOnce({ id: 'queue-2', status: REBALANCE_STATUS.PROCESSING })
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.FAILED, attemptCount: 1, completedAt: new Date() })
+        .mockResolvedValueOnce({ id: 'queue-2', status: REBALANCE_STATUS.FAILED, attemptCount: 2, completedAt: new Date() });
+
+      mockPrisma.rebalanceQueueEntry.findUniqueOrThrow
+        .mockResolvedValueOnce({
+          id: 'queue-1',
+          vaultId: 'vault-1',
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          attemptCount: 0,
+          intentValidUntil: new Date(Date.now() + 86400000),
+          maxRetries: 3,
+        })
+        .mockResolvedValueOnce({
+          id: 'queue-2',
+          vaultId: 'vault-1',
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          attemptCount: 1,
+          intentValidUntil: new Date(Date.now() + 86400000),
+          maxRetries: 3,
+        });
+
+      mockPrisma.rebalanceHistory.create.mockResolvedValue({
+        id: 'history-1',
+      });
+
+      const result = await runRebalanceQueueProcessorJob({
+        enabled: true,
+        batchSize: 10,
+        enableRetries: true,
+        enableDeferredProcessing: false,
+        logResults: false,
+        executionAdapter: mockAdapter,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.processedRetries).toBe(2);
+    });
+
+    it('should handle partial execution with follow-up', async () => {
+      const mockAdapter = new MockExecutionAdapter();
+      mockAdapter.addSubmitResult({
+        success: true,
+        transactionHash: '0xpartial',
+        ledger: 50001,
+        status: 'confirmed',
+        metadata: { filledPercentage: 70, totalExecuted: 70 },
+      });
+
+      mockPrisma.rebalanceQueueEntry.findMany
+        .mockResolvedValueOnce([
+          {
+            id: 'queue-1',
+            vaultId: 'vault-1',
+            status: REBALANCE_STATUS.PENDING,
+            attemptCount: 0,
+            nextRetryAt: new Date(Date.now() - 10000),
+            targetAllocations: {},
+            currentAllocations: {},
+            executionStrategy: {},
+            intentHash: 'hash-partial',
+            triggeredBy: null,
+          },
+        ])
+        .mockResolvedValueOnce([]);
+
+      mockPrisma.rebalanceQueueEntry.update
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.PROCESSING })
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.PROCESSING, lastTransactionHash: '0xpartial', lastLedger: 50001 })
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.PARTIAL, lastTransactionHash: '0xpartial', lastLedger: 50001, followUpEntryId: 'queue-2' });
+
+      mockPrisma.rebalanceQueueEntry.findUniqueOrThrow
+        .mockResolvedValueOnce({
+          id: 'queue-1',
+          vaultId: 'vault-1',
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          attemptCount: 0,
+          intentValidUntil: new Date(Date.now() + 86400000),
+          maxRetries: 3,
+        })
+        .mockResolvedValueOnce({
+          id: 'queue-1',
+          vaultId: 'vault-1',
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          attemptCount: 0,
+          intentValidUntil: new Date(Date.now() + 86400000),
+          maxRetries: 3,
+        });
+
+      mockPrisma.rebalanceHistory.create.mockResolvedValue({
+        id: 'history-1',
+      });
+
+      mockPrisma.rebalanceQueueEntry.create.mockResolvedValue({
+        id: 'queue-2',
+        vaultId: 'vault-1',
+        status: REBALANCE_STATUS.PENDING,
+        executionType: EXECUTION_TYPE.DEFERRED,
+      });
+
+      const result = await runRebalanceQueueProcessorJob({
+        enabled: true,
+        batchSize: 10,
+        enableRetries: true,
+        enableDeferredProcessing: true,
+        logResults: false,
+        executionAdapter: mockAdapter,
+        partialFillConfig: { deferralThreshold: 75 },
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockPrisma.rebalanceHistory.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('should persist transaction metadata through mocked relayer', async () => {
+      const mockAdapter = new MockExecutionAdapter();
+      mockAdapter.addSubmitResult({
+        success: true,
+        transactionHash: '0xmeta123',
+        ledger: 60001,
+        status: 'confirmed',
+        metadata: {
+          feeBumpHash: '0xfeebump',
+          innerTxHash: '0xinner',
+          relayId: 'relay_123',
+          confirmed: true,
+        },
+      });
+
+      mockPrisma.rebalanceQueueEntry.findMany.mockResolvedValueOnce([
+        {
+          id: 'queue-1',
+          vaultId: 'vault-1',
+          status: REBALANCE_STATUS.PENDING,
+          attemptCount: 0,
+          nextRetryAt: new Date(Date.now() - 10000),
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          intentHash: 'hash-meta',
+          triggeredBy: null,
+        },
+      ]);
+
+      mockPrisma.rebalanceQueueEntry.update
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.PROCESSING })
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.PROCESSING, lastTransactionHash: '0xmeta123', lastLedger: 60001 })
+        .mockResolvedValueOnce({ id: 'queue-1', status: REBALANCE_STATUS.COMPLETED, lastTransactionHash: '0xmeta123', lastLedger: 60001 });
+
+      mockPrisma.rebalanceQueueEntry.findUniqueOrThrow
+        .mockResolvedValueOnce({
+          id: 'queue-1',
+          vaultId: 'vault-1',
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          attemptCount: 0,
+          intentValidUntil: new Date(Date.now() + 86400000),
+          maxRetries: 3,
+        })
+        .mockResolvedValueOnce({
+          id: 'queue-1',
+          vaultId: 'vault-1',
+          targetAllocations: {},
+          currentAllocations: {},
+          executionStrategy: {},
+          attemptCount: 0,
+          intentValidUntil: new Date(Date.now() + 86400000),
+          maxRetries: 3,
+        });
+
+      mockPrisma.rebalanceHistory.create.mockResolvedValue({
+        id: 'history-1',
+      });
+
+      const result = await runRebalanceQueueProcessorJob({
+        enabled: true,
+        batchSize: 10,
+        enableRetries: true,
+        enableDeferredProcessing: false,
+        logResults: false,
+        executionAdapter: mockAdapter,
+      });
+
+      expect(result.success).toBe(true);
+
+      const historyCalls = mockPrisma.rebalanceHistory.create.mock.calls;
+      expect(historyCalls.length).toBeGreaterThanOrEqual(1);
+
+      const submissionCall = historyCalls.find((call: any) =>
+        call[0].data.executionResult?.status === 'submitted',
+      );
+      expect(submissionCall).toBeDefined();
+      expect(submissionCall[0].data.transactionHash).toBe('0xmeta123');
+      expect(submissionCall[0].data.ledger).toBe(60001);
+      expect(submissionCall[0].data.errorClass).toBeUndefined();
     });
   });
 
