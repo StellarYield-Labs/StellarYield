@@ -1,6 +1,4 @@
-use crate::math::{
-    calculate_collateral_value, calculate_cr, calculate_debt, calculate_index,
-};
+use crate::math::{calculate_collateral_value, calculate_cr, calculate_debt, calculate_index};
 use crate::storage::SCALAR_18;
 use crate::StablecoinManager;
 use crate::StablecoinManagerClient;
@@ -257,7 +255,10 @@ fn test_cdp_ttl_bumped_on_read() {
 
     // Step 1: Trigger a CDP read via zero-value repay (internally calls read_cdp, bumps TTL)
     let result = client.try_repay_s_usd(&user, &0, &0);
-    assert!(result.is_ok(), "zero repay should succeed and bump TTL on read");
+    assert!(
+        result.is_ok(),
+        "zero repay should succeed and bump TTL on read"
+    );
 
     // Step 2: Advance past original TTL expiry
     env.ledger().set_sequence_number(initial_seq + 100_001);
@@ -409,7 +410,10 @@ fn test_rounding_in_calculate_index() {
     // Zero rate → index unchanged
     assert_eq!(calculate_index(index_one, zero_rate, 1_000_000), index_one);
     // No elapsed time → index unchanged
-    assert_eq!(calculate_index(index_one, 50_000_000_000_000_000i128, 0), index_one);
+    assert_eq!(
+        calculate_index(index_one, 50_000_000_000_000_000i128, 0),
+        index_one
+    );
     // Very small elapsed time yields no interest due to truncation
     // rate * 1 second / 31.5M == 0 when rate is small enough
     let small_rate: i128 = 1_000; // negligible APR
@@ -422,7 +426,7 @@ fn test_rounding_in_calculate_index() {
 fn test_rounding_in_calculate_cr() {
     // Collateral value smaller than debt → CR is under 100% (1 bps per unit)
     assert_eq!(calculate_cr(1, 100), 100); // (1 * 10000) / 100 = 100 bps
-    // Barely above 100%: 1 * 10000 / 1 = 10000 bps
+                                           // Barely above 100%: 1 * 10000 / 1 = 10000 bps
     assert_eq!(calculate_cr(1, 1), 10000);
     // Large CR value within u32 range (429,496 * 10000 = 4,294,960,000 ≤ u32::MAX)
     assert_eq!(calculate_cr(429_496i128, 1), 4_294_960_000);
