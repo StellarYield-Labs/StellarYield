@@ -255,4 +255,39 @@ describe("createExportFilename", () => {
     expect(filename).not.toContain("..");
     expect(filename).toMatch(/^stellaryield-tax-report-/);
   });
+
+  it("uses YYYY-MM-DD date format exactly", () => {
+    const filename = createExportFilename("GABCDEF");
+    expect(filename).toMatch(/-\d{4}-\d{2}-\d{2}\.csv$/);
+  });
+
+  it("produces identical filenames for identical inputs at the same instant", () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date("2026-03-15T12:00:00.000Z"));
+    try {
+      const first = createExportFilename("GABCDEF", { reportType: "audit-log" });
+      const second = createExportFilename("GABCDEF", { reportType: "audit-log" });
+      expect(first).toBe(second);
+      expect(first).toContain("2026-03-15");
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("handles an address shorter than 8 characters without throwing", () => {
+    const filename = createExportFilename("GAB");
+    expect(filename).toContain("GAB");
+    expect(filename).not.toMatch(/[^a-zA-Z0-9._-]/);
+  });
+
+  it("collapses to a double hyphen when the address sanitizes to nothing, but stays filesystem-safe", () => {
+    // An address made entirely of unsafe characters strips to an empty
+    // segment; the template still joins with literal hyphens, producing
+    // e.g. "...test--2026-07-20.csv" rather than a single hyphen. This is
+    // cosmetically odd but remains filesystem-safe — no illegal
+    // characters, no path traversal, no empty filename.
+    const filename = createExportFilename("///   ");
+    expect(filename).not.toMatch(/[^a-zA-Z0-9._-]/);
+    expect(filename).toMatch(/^stellaryield-tax-report-.*-\d{4}-\d{2}-\d{2}\.csv$/);
+  });
 });
