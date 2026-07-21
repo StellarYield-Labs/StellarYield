@@ -1239,6 +1239,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rebalance-auction"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "soroban-sdk",
+]
+
+[[package]]
 name = "ref-cast"
 version = "1.0.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -238,3 +238,33 @@ jobs:
 
       - name: Run Kani verification
         run: cd contracts/yield_vault && cargo kani --harness verification::prove_fee_bounds --harness verification::prove_flash_loan_security --harness verification::prove_deposit_share_calculation
+
+  sdk-drift:
+    name: SDK Spec & API Drift Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Stellar CLI
+        run: cargo install --locked stellar-cli --version 25.1.0
+
+      - name: Install SDK dependencies
+        run: cd packages/sdk && npm install
+
+      - name: Run SDK drift checks
+        run: cd packages/sdk && npm run verify:drift
+
+      - name: Run SDK tests
+        run: cd packages/sdk && npm test
+
