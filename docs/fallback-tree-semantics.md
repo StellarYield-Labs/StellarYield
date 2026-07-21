@@ -228,6 +228,21 @@ if (result.terminalFailure) {
 }
 ```
 
+### Empty Candidates
+
+When attempting to create a fallback tree with an empty list of candidates, `createFallbackTreeFromList` will immediately throw an error rather than returning an invalid tree. Empty candidate lists commonly occur in degraded environments or during local testing when strategies are unavailable. This acts as an early validation step, preventing the creation of terminal trees before they would be caught by `validateFallbackTree`.
+
+```typescript
+import { createFallbackTreeFromList } from './services';
+
+try {
+  const tree = createFallbackTreeFromList([]);
+} catch (error) {
+  // Throws: Error('Cannot create fallback tree from empty list')
+  console.error(error.message);
+}
+```
+
 ### Custom Tree Structure
 
 ```typescript
