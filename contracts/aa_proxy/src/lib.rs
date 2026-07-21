@@ -1,3 +1,9 @@
+#![no_std]
+#![allow(
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    clippy::unwrap_used
+)]
 //! # Smart Proxy Wallet
 //!
 //! A programmable smart contract wallet for Soroban that enables Account Abstraction.
@@ -25,7 +31,7 @@
 
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, crypto::Hash, symbol_short, Address,
-    Bytes, BytesN, Env, IntoVal, Map, Vec,
+    Bytes, BytesN, Env, IntoVal, Map, String, Symbol, Val, Vec,
 };
 
 /// Legacy WebAuthn assertion data — kept for ABI compatibility.
@@ -221,6 +227,7 @@ impl ProxyWallet {
         Self::require_initialized(&env)?;
         relayer.require_auth();
         Self::verify_relayer(&env, &relayer)?;
+        Self::verify_sender(&env, &op.sender)?;
 
         let pubkey = Self::require_webauthn_key(&env)?;
 
@@ -251,6 +258,7 @@ impl ProxyWallet {
 
         for op in ops.iter() {
             Self::verify_relayer(&env, &relayer)?;
+            Self::verify_sender(&env, &op.sender)?;
             Self::verify_network_id(&env, &op.network_id)?;
             Self::verify_expiry(&env, op.expiry)?;
             Self::consume_nonce(&env, op.nonce)?;
@@ -547,6 +555,13 @@ impl ProxyWallet {
         Ok(())
     }
 
+    fn verify_sender(env: &Env, sender: &Address) -> Result<(), ProxyError> {
+        if *sender != env.current_contract_address() {
+            return Err(ProxyError::InvalidTarget);
+        }
+        Ok(())
+    }
+
     // ═══════════════════════════════════════════════════════════════════
     // INTERNAL — NONCE
     // ═══════════════════════════════════════════════════════════════════
@@ -627,17 +642,35 @@ impl ProxyWallet {
 
     fn execute_call(
         env: &Env,
-        _target: &Address,
-        _call_data: &Bytes,
+        target: &Address,
+        call_data: &Bytes,
     ) -> Result<ExecutionResult, ProxyError> {
-        // Production: decode call_data into (fn_symbol, args) and call
-        // env.invoke_contract(target, &fn_sym, args).
-        // Stub allows auth/nonce/crypto layer to be tested independently.
+        if *target == env.current_contract_address() {
+            return Err(ProxyError::InvalidTarget);
+        }
+
+        let fn_symbol = Self::decode_call_symbol(env, call_data)?;
+        let args = Vec::<Val>::new(env);
+        let _: Val = env.invoke_contract(target, &fn_symbol, args);
+
         Ok(ExecutionResult {
             success: true,
-            return_data: Bytes::from_slice(env, &[0x01]),
+            return_data: Bytes::new(env),
             gas_used: 1000,
         })
+    }
+
+    fn decode_call_symbol(env: &Env, call_data: &Bytes) -> Result<Symbol, ProxyError> {
+        let len = call_data.len() as usize;
+        if len == 0 || len > 32 {
+            return Err(ProxyError::InvalidOperation);
+        }
+
+        let mut raw = [0u8; 32];
+        call_data.copy_into_slice(&mut raw[..len]);
+        let fn_name = core::str::from_utf8(&raw[..len]).map_err(|_| ProxyError::InvalidOperation)?;
+        let _validated = String::from_bytes(env, fn_name.as_bytes());
+        Ok(Symbol::new(env, fn_name))
     }
 
     fn check_vault_allowance(env: &Env, vault: &Address, amount: i128) -> Result<(), ProxyError> {
@@ -727,6 +760,26 @@ mod tests {
     use soroban_sdk::testutils::{Address as _, Ledger};
     use soroban_sdk::Env;
 
+    #[contract]
+    pub struct DummyTarget;
+
+    #[contractimpl]
+    impl DummyTarget {
+        pub fn bump(env: Env) -> u32 {
+            let key = symbol_short!("count");
+            let next = env.storage().instance().get::<Symbol, u32>(&key).unwrap_or(0) + 1;
+            env.storage().instance().set(&key, &next);
+            next
+        }
+
+        pub fn get(env: Env) -> u32 {
+            env.storage()
+                .instance()
+                .get::<Symbol, u32>(&symbol_short!("count"))
+                .unwrap_or(0)
+        }
+    }
+
     // ── Crypto helpers ───────────────────────────────────────────────────
 
     // RFC 6979 / NIST P-256 test vectors
@@ -796,7 +849,7 @@ mod tests {
         }
     }
 
-    fn setup(env: &Env) -> (ProxyWalletClient, Address, Address, Address, BytesN<32>) {
+    fn setup(env: &Env) -> (ProxyWalletClient<'_>, Address, Address, Address, BytesN<32>, Address) {
         env.mock_all_auths();
 
         let contract_id = env.register(ProxyWallet, ());
@@ -810,7 +863,7 @@ mod tests {
         client.initialize(&owner, &factory, &Some(relayer.clone()), &nid);
         client.register_webauthn_key(&owner, &test_pubkey(env));
 
-        (client, owner, factory, relayer, nid)
+        (client, owner, factory, relayer, nid, contract_id)
     }
 
     fn setup_proxy_wallet(env: &Env) -> (ProxyWalletClient<'_>, Address, Address) {
@@ -829,8 +882,10 @@ mod tests {
     }
 
     fn make_op(
-        env: &Env,
+        _env: &Env,
         sender: Address,
+        call_target: Address,
+        call_data: Bytes,
         nonce: u64,
         network_id: BytesN<32>,
         expiry: u64,
@@ -839,8 +894,8 @@ mod tests {
         UserOperation {
             sender,
             nonce,
-            call_data: Bytes::from_slice(env, &[0xde, 0xad]),
-            call_target: Address::generate(env),
+            call_data,
+            call_target,
             signature: sig,
             max_fee: 1000,
             expiry,
@@ -853,7 +908,7 @@ mod tests {
     #[test]
     fn test_initialize_stores_owner_and_factory() {
         let env = Env::default();
-        let (client, owner, factory, _, _) = setup(&env);
+        let (client, owner, factory, _, _, _) = setup(&env);
 
         assert_eq!(client.get_owner(), owner);
         assert_eq!(client.get_factory(), factory);
@@ -866,8 +921,8 @@ mod tests {
         let env = Env::default();
         env.mock_all_auths();
 
-        let contract_id = env.register(ProxyWallet, ());
-        let client = ProxyWalletClient::new(&env, &contract_id);
+        let proxy_id = env.register(ProxyWallet, ());
+        let client = ProxyWalletClient::new(&env, &proxy_id);
 
         let owner = Address::generate(&env);
         let factory = Address::generate(&env);
@@ -897,7 +952,16 @@ mod tests {
         // Initialize WITHOUT registering a WebAuthn key
         client.initialize(&owner, &factory, &Some(relayer.clone()), &nid);
 
-        let op = make_op(&env, owner.clone(), 0, nid, 9999, dummy_sig(&env));
+        let op = make_op(
+            &env,
+            contract_id,
+            Address::generate(&env),
+            Bytes::from_slice(&env, b"bump"),
+            0,
+            nid,
+            9999,
+            dummy_sig(&env),
+        );
         client.execute_user_operation(&op, &relayer);
     }
 
@@ -908,7 +972,7 @@ mod tests {
     fn test_wrong_network_id_panics() {
         let env = Env::default();
         env.ledger().set_sequence_number(100);
-        let (client, owner, _, relayer, _) = setup(&env);
+        let (client, _owner, _, relayer, _, proxy_id) = setup(&env);
 
         let mainnet_nid: BytesN<32> = env
             .crypto()
@@ -918,7 +982,16 @@ mod tests {
             ))
             .to_bytes();
 
-        let op = make_op(&env, owner, 0, mainnet_nid, 9999, dummy_sig(&env));
+        let op = make_op(
+            &env,
+            proxy_id,
+            Address::generate(&env),
+            Bytes::from_slice(&env, b"bump"),
+            0,
+            mainnet_nid,
+            9999,
+            dummy_sig(&env),
+        );
         client.execute_user_operation(&op, &relayer);
     }
 
@@ -929,10 +1002,19 @@ mod tests {
     fn test_expired_operation_panics() {
         let env = Env::default();
         env.ledger().set_sequence_number(1000);
-        let (client, owner, _, relayer, nid) = setup(&env);
+        let (client, _owner, _, relayer, nid, proxy_id) = setup(&env);
 
         // expiry=500, current=1000 → expired
-        let op = make_op(&env, owner, 0, nid, 500, dummy_sig(&env));
+        let op = make_op(
+            &env,
+            proxy_id,
+            Address::generate(&env),
+            Bytes::from_slice(&env, b"bump"),
+            0,
+            nid,
+            500,
+            dummy_sig(&env),
+        );
         client.execute_user_operation(&op, &relayer);
     }
 
@@ -940,13 +1022,25 @@ mod tests {
     fn test_operation_at_expiry_boundary_succeeds() {
         let env = Env::default();
         env.ledger().set_sequence_number(500);
-        let (client, owner, _, relayer, nid) = setup(&env);
+        let (client, _owner, _, relayer, nid, proxy_id) = setup(&env);
+        let target_id = env.register(DummyTarget, ());
 
         // Build a real signature over the canonical digest for this op
-        let mut op = make_op(&env, owner.clone(), 0, nid, 500, dummy_sig(&env));
+        let mut op = make_op(
+            &env,
+            proxy_id,
+            target_id.clone(),
+            Bytes::from_slice(&env, b"bump"),
+            0,
+            nid,
+            500,
+            dummy_sig(&env),
+        );
         op.signature = real_sig(&env, &op);
         let result = client.execute_user_operation(&op, &relayer);
         assert!(result.success);
+        let target = DummyTargetClient::new(&env, &target_id);
+        assert_eq!(target.get(), 1);
     }
 
     // ── Nonce ───────────────────────────────────────────────────────────
@@ -955,10 +1049,20 @@ mod tests {
     fn test_nonce_consumed_on_execute() {
         let env = Env::default();
         env.ledger().set_sequence_number(100);
-        let (client, owner, _, relayer, nid) = setup(&env);
+        let (client, _owner, _, relayer, nid, proxy_id) = setup(&env);
+        let target_id = env.register(DummyTarget, ());
 
         // Build a real signature for this specific op
-        let mut op = make_op(&env, owner.clone(), 0, nid, 9999, dummy_sig(&env));
+        let mut op = make_op(
+            &env,
+            proxy_id,
+            target_id,
+            Bytes::from_slice(&env, b"bump"),
+            0,
+            nid,
+            9999,
+            dummy_sig(&env),
+        );
         op.signature = real_sig(&env, &op);
         client.execute_user_operation(&op, &relayer);
 
@@ -971,12 +1075,21 @@ mod tests {
     fn test_replayed_nonce_panics() {
         let env = Env::default();
         env.ledger().set_sequence_number(100);
-        let (client, owner, _, relayer, nid) = setup(&env);
+        let (client, owner, _, relayer, nid, proxy_id) = setup(&env);
 
         // Pre-mark nonce 0 as used via the owner API, then try to execute with it
         client.mark_nonce_used(&owner, &0);
 
-        let mut op = make_op(&env, owner.clone(), 0, nid, 9999, dummy_sig(&env));
+        let mut op = make_op(
+            &env,
+            proxy_id,
+            Address::generate(&env),
+            Bytes::from_slice(&env, b"bump"),
+            0,
+            nid,
+            9999,
+            dummy_sig(&env),
+        );
         op.signature = real_sig(&env, &op);
         client.execute_user_operation(&op, &relayer);
     }
@@ -990,15 +1103,34 @@ mod tests {
     fn test_below_watermark_nonce_panics() {
         let env = Env::default();
         env.ledger().set_sequence_number(100);
-        let (client, owner, _, relayer, nid) = setup(&env);
+        let (client, _owner, _, relayer, nid, proxy_id) = setup(&env);
+        let target_id = env.register(DummyTarget, ());
 
         // Consume nonce 0 successfully (watermark advances to 1)
-        let mut op0 = make_op(&env, owner.clone(), 0, nid.clone(), 9999, dummy_sig(&env));
+        let mut op0 = make_op(
+            &env,
+            proxy_id.clone(),
+            target_id.clone(),
+            Bytes::from_slice(&env, b"bump"),
+            0,
+            nid.clone(),
+            9999,
+            dummy_sig(&env),
+        );
         op0.signature = real_sig(&env, &op0);
         client.execute_user_operation(&op0, &relayer);
 
         // Retry nonce 0 — it's in the used map → NonceAlreadyUsed (#5)
-        let mut op_old = make_op(&env, owner.clone(), 0, nid, 9999, dummy_sig(&env));
+        let mut op_old = make_op(
+            &env,
+            proxy_id,
+            target_id,
+            Bytes::from_slice(&env, b"bump"),
+            0,
+            nid,
+            9999,
+            dummy_sig(&env),
+        );
         op_old.signature = real_sig(&env, &op_old);
         client.execute_user_operation(&op_old, &relayer);
     }
@@ -1010,17 +1142,26 @@ mod tests {
     fn test_unauthorized_relayer_panics() {
         let env = Env::default();
         env.ledger().set_sequence_number(100);
-        let (client, owner, _, _, nid) = setup(&env);
+        let (client, _owner, _, _, nid, proxy_id) = setup(&env);
 
         let impostor = Address::generate(&env);
-        let op = make_op(&env, owner, 0, nid, 9999, dummy_sig(&env));
+        let op = make_op(
+            &env,
+            proxy_id,
+            Address::generate(&env),
+            Bytes::from_slice(&env, b"bump"),
+            0,
+            nid,
+            9999,
+            dummy_sig(&env),
+        );
         client.execute_user_operation(&op, &impostor);
     }
 
     #[test]
     fn test_set_and_remove_relayer() {
         let env = Env::default();
-        let (client, owner, _, _, _) = setup(&env);
+        let (client, owner, _, _, _, _) = setup(&env);
 
         let new_relayer = Address::generate(&env);
         client.set_relayer(&owner, &new_relayer);
@@ -1036,14 +1177,14 @@ mod tests {
     #[test]
     fn test_op_digest_is_deterministic_and_domain_separated() {
         let env = Env::default();
-        let (_, owner, _, relayer, nid) = setup(&env);
+        let (_, _owner, _, relayer, nid, proxy_id) = setup(&env);
 
         let target = Address::generate(&env);
         let call_data = Bytes::from_slice(&env, &[0xca, 0xfe]);
         let sig = dummy_sig(&env);
 
         let op = UserOperation {
-            sender: owner.clone(),
+            sender: proxy_id.clone(),
             nonce: 7,
             call_data: call_data.clone(),
             call_target: target.clone(),
@@ -1133,14 +1274,42 @@ mod tests {
     fn test_batch_execute_consumes_all_nonces() {
         let env = Env::default();
         env.ledger().set_sequence_number(100);
-        let (client, owner, _, relayer, nid) = setup(&env);
+        let (client, _owner, _, relayer, nid, proxy_id) = setup(&env);
+        let target_id = env.register(DummyTarget, ());
 
         // Build three ops and sign each one individually (each has a different digest)
-        let mut op0 = make_op(&env, owner.clone(), 0, nid.clone(), 9999, dummy_sig(&env));
+        let mut op0 = make_op(
+            &env,
+            proxy_id.clone(),
+            target_id.clone(),
+            Bytes::from_slice(&env, b"bump"),
+            0,
+            nid.clone(),
+            9999,
+            dummy_sig(&env),
+        );
         op0.signature = real_sig(&env, &op0);
-        let mut op1 = make_op(&env, owner.clone(), 1, nid.clone(), 9999, dummy_sig(&env));
+        let mut op1 = make_op(
+            &env,
+            proxy_id.clone(),
+            target_id.clone(),
+            Bytes::from_slice(&env, b"bump"),
+            1,
+            nid.clone(),
+            9999,
+            dummy_sig(&env),
+        );
         op1.signature = real_sig(&env, &op1);
-        let mut op2 = make_op(&env, owner.clone(), 2, nid.clone(), 9999, dummy_sig(&env));
+        let mut op2 = make_op(
+            &env,
+            proxy_id,
+            target_id.clone(),
+            Bytes::from_slice(&env, b"bump"),
+            2,
+            nid.clone(),
+            9999,
+            dummy_sig(&env),
+        );
         op2.signature = real_sig(&env, &op2);
 
         let ops = soroban_sdk::vec![&env, op0, op1, op2];
@@ -1156,7 +1325,7 @@ mod tests {
     #[test]
     fn test_approve_vault_sets_allowance() {
         let env = Env::default();
-        let (client, owner, _, _, _) = setup(&env);
+        let (client, owner, _, _, _, _) = setup(&env);
         let vault = Address::generate(&env);
         client.approve_vault(&owner, &vault, &1000);
     }
@@ -1166,7 +1335,7 @@ mod tests {
     #[test]
     fn test_get_network_id_returns_registered_value() {
         let env = Env::default();
-        let (client, _, _, _, nid) = setup(&env);
+        let (client, _, _, _, nid, _) = setup(&env);
         assert_eq!(client.get_network_id(), nid);
     }
 
