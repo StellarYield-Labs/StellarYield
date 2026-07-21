@@ -1,0 +1,10 @@
+{
+  "name": "clmm_sqrt_ratio_negative_tick_underflow",
+  "subsystem": "clmm_core",
+  "seed": 0,
+  "model_version": "verification-model-v1",
+  "description": "get_sqrt_ratio_at_tick's negative branch (Q96 - Q96*abs_tick/10000) underflows u128 and panics for any tick < -10000, covering essentially the entire valid negative tick range down to MIN_TICK=-887272.",
+  "inputs": {
+    "tick": -10001
+  }
+}

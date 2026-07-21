@@ -3,7 +3,7 @@
 
 use soroban_sdk::{contract, contracterror, contractimpl, symbol_short, token, Address, Env};
 
-mod math;
+pub mod math;
 mod storage;
 #[cfg(test)]
 mod tests;

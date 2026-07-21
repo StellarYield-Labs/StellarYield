@@ -1,0 +1,10 @@
+{
+  "name": "options_exp_wrong_signed",
+  "subsystem": "options",
+  "seed": 0,
+  "model_version": "verification-model-v1",
+  "description": "exp()'s 10-term Taylor series, applied directly at the input with no range reduction, returns a NEGATIVE value for exp(-4*ONE) (true e^-4 ~= 0.0183, production returns ~= -0.192). This cascades into normal_cdf and black_scholes_call losing reliability across most of their practical domain.",
+  "inputs": {
+    "x_scaled": -4000000000
+  }
+}
