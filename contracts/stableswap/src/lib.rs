@@ -408,9 +408,17 @@ impl StableSwap {
             .get(&DataKey::TotalSupply)
             .unwrap_or(0)
     }
+}
 
-    // ── Math internals ─────────────────────────────────────────────────
-
+// ── Math internals ──────────────────────────────────────────────────────
+//
+// Kept in a separate (non-`#[contractimpl]`) impl block so these stay plain
+// Rust associated functions callable from other crates (e.g. the
+// `verification` differential-testing crate) instead of becoming additional
+// Soroban contract entry points — `#[contractimpl]` exports every `pub fn`
+// inside its block as part of the contract's ABI, which none of these
+// pure math helpers should be.
+impl StableSwap {
     /// Compute the StableSwap invariant D for reserves (x, y) and coefficient A.
     ///
     /// Newton–Raphson iteration of:
@@ -419,7 +427,7 @@ impl StableSwap {
     /// Simplified update rule (standard Curve formula for n=2):
     ///   D_{k+1} = (A·n^n·S·D_k + n·Dprod) / ((A·n^n+1)·D_k − Dprod)
     /// where S = x+y, Dprod = D_k³/(4·x·y)
-    fn compute_d(x: i128, y: i128, amp: u32) -> Result<i128, StableSwapError> {
+    pub fn compute_d(x: i128, y: i128, amp: u32) -> Result<i128, StableSwapError> {
         if x <= 0 || y <= 0 {
             return Err(StableSwapError::ZeroInvariant);
         }
@@ -486,7 +494,7 @@ impl StableSwap {
     ///
     /// Solves: y^2 + (b − D)·y − D^3/(4·A·n^n·x_new) = 0
     /// where b = x_new + D/ann
-    fn compute_y(x_new: i128, sum: i128, amp: u32) -> Result<i128, StableSwapError> {
+    pub fn compute_y(x_new: i128, sum: i128, amp: u32) -> Result<i128, StableSwapError> {
         if x_new <= 0 {
             return Err(StableSwapError::InvalidAmount);
         }
@@ -548,7 +556,7 @@ impl StableSwap {
     ///                 = |balance0 − balance1| / (balance0 + balance1)
     ///
     /// dynamic_fee = base_fee + imbalance_ratio × fee_multiplier
-    fn compute_dynamic_fee(
+    pub fn compute_dynamic_fee(
         balance0: i128,
         balance1: i128,
         base_fee: u32,

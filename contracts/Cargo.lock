@@ -278,6 +278,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "clmm_core"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
+]
+
+[[package]]
 name = "const-oid"
 version = "0.9.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -996,6 +1003,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-rational"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f83d14da390562dca69fc84082e73e548e1ad308d24accdedd2720017cb37824"
+dependencies = [
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1043,6 +1061,15 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
+
+[[package]]
+name = "perpetuals"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "soroban-sdk",
+ "soroban-token-sdk",
+]
 
 [[package]]
 name = "pkcs8"
@@ -1863,6 +1890,26 @@ dependencies = [
  "proptest",
  "soroban-sdk",
  "soroban-token-sdk",
+]
+
+[[package]]
+name = "verification"
+version = "0.1.0"
+dependencies = [
+ "clmm_core",
+ "num-bigint",
+ "num-rational",
+ "num-traits",
+ "options",
+ "perpetuals",
+ "proptest",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "serde",
+ "serde_json",
+ "soroban-sdk",
+ "stablecoin_manager",
+ "stableswap",
 ]
 
 [[package]]

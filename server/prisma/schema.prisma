@@ -327,6 +327,106 @@ model PortfolioRegimeShiftAlert {
   @@index([walletAddress, currentRegime, createdAt])
 }
 
+// ── Unified Governance Control Plane Models (Issue #81) ─────────────────────
+
+// Canonical record of a privileged action proposal. Every admin mutation
+// covered by the governance control plane creates or references one of
+// these rather than reporting an unexecuted action as completed. Status is
+// ultimately reconciled from on-chain events/tx results, not just server
+// intent - see GovernanceEvent below.
+model GovernanceProposal {
+  id                  String   @id @default(uuid())
+
+  // Canonical action payload (see server/src/governance/actionSchema.ts).
+  // actionHash is the sha256 shared by client preview, server record,
+  // signatures, on-chain proposal, and execution event.
+  actionHash          String   @unique
+  schemaVersion       Int
+  network             String
+  targetContractId    String
+  method              String
+  argsJson            Json
+  expectedStateJson   Json
+  proposer            String
+  creationLedger      Int
+  executionWindowSecs Int
+  rationale           String
+
+  // Links (Issue #81 requirement: link every proposal to strategy version,
+  // risk forecast, audit record, and resulting state transition).
+  strategyVersionId   String?
+  riskForecastId      String?
+  auditLogId          String?
+
+  // On-chain identity, once proposed on the optimistic_governance contract.
+  onChainProposalId   BigInt?
+  governanceContractId String?
+
+  status              String   @default("PENDING")
+  // PENDING, CHALLENGED, APPROVED, EXECUTABLE, SUBMITTED, CONFIRMED,
+  // FAILED, CANCELLED, EXPIRED
+
+  executionTxHash     String?
+  executionLedger     Int?
+  failureReason       String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  simulations         GovernanceSimulation[]
+  events              GovernanceEvent[]
+
+  @@index([status])
+  @@index([proposer, createdAt])
+  @@index([method, createdAt])
+}
+
+// Simulation evidence recorded before a proposal may be approved for
+// execution. A stale simulation (state or ledger age beyond the configured
+// bound) must not be presented as current without a warning + execution
+// gate - see isSimulationStale in governanceProposalService.ts.
+model GovernanceSimulation {
+  id                  String   @id @default(uuid())
+  proposalId          String
+  proposal            GovernanceProposal @relation(fields: [proposalId], references: [id])
+
+  simulatedAtLedger   Int
+  simulationExpiry    DateTime
+
+  footprintJson       Json     // transaction footprint (read/write keys)
+  resultJson          Json     // simulated result payload
+  diagnosticEventsJson Json    // diagnostic events emitted during simulation
+  expectedStateDiffJson Json   // computed before/after state diff
+  resourceFee         String   // stroops, stored as string to avoid float precision loss
+  riskWarnings        String[] @default([])
+
+  createdAt           DateTime @default(now())
+
+  @@index([proposalId, createdAt])
+}
+
+// Indexed on-chain events for governance proposals (propose/dispute/resolve/
+// cancel/execute). Proposal status must be reconstructable from these events
+// and transaction results alone, so the application DB can be rebuilt from
+// an empty state by replaying them.
+model GovernanceEvent {
+  id                  String   @id @default(uuid())
+  proposalId          String?
+  proposal            GovernanceProposal? @relation(fields: [proposalId], references: [id])
+
+  onChainProposalId   BigInt
+  eventType           String   // PROPOSE, DISPUTE, RESOLVE, CANCEL, EXECUTE
+  ledger              Int
+  txHash              String
+  topic               String
+  dataJson            Json
+
+  createdAt           DateTime @default(now())
+
+  @@unique([txHash, topic, onChainProposalId])
+  @@index([onChainProposalId, ledger])
+}
+
 // ── Allocation Provenance Models ──────────────────────────────────────────────
 
 model AllocationProvenance {

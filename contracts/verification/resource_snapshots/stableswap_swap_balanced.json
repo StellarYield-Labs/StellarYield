@@ -1,0 +1,10 @@
+{
+  "label": "stableswap_swap_balanced",
+  "instructions": 433109,
+  "mem_bytes": 73191,
+  "read_entries": 4,
+  "write_entries": 6,
+  "read_bytes": 2384,
+  "write_bytes": 1652,
+  "contract_events_size_bytes": 688
+}

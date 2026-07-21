@@ -10,6 +10,86 @@ import { uploadVaultMetadata } from "../services/ipfs/vaultMetadataService";
 import { freezeService } from "../services/freezeService";
 import { PROTOCOLS } from "../config/protocols";
 import { strategyStateTransitionAuditService } from "../services/strategyStateTransitionAuditService";
+import { createProposal } from "../governance/governanceProposalService";
+import {
+  GovernanceActionValidationError,
+  type GovernanceAction,
+  type GovernanceActionArg,
+  type GovernanceMethod,
+} from "../governance/actionSchema";
+
+const GOVERNANCE_NETWORK = (process.env.STELLAR_NETWORK ?? "TESTNET").toUpperCase() as
+  | "TESTNET"
+  | "MAINNET"
+  | "FUTURENET";
+const GOVERNANCE_EXECUTION_WINDOW_SECONDS = parseInt(
+  process.env.GOVERNANCE_EXECUTION_WINDOW_SECONDS ?? "259200", // 3 days
+  10,
+);
+
+function adminActor(req: Request): string {
+  return (
+    (req as unknown as { user?: { id?: string; walletAddress?: string } }).user?.walletAddress ??
+    (req as unknown as { user?: { id?: string } }).user?.id ??
+    "admin"
+  );
+}
+
+/**
+ * Build and persist a governance proposal for a privileged admin mutation
+ * instead of applying the change directly. The response reflects proposal
+ * creation, not execution - the action only takes effect once the
+ * optimistic_governance contract executes it after its challenge window.
+ */
+async function proposeGovernanceAction(
+  req: Request,
+  res: Response,
+  params: {
+    method: GovernanceMethod;
+    args: GovernanceActionArg[];
+    expectedCurrentState: Record<string, string | number | boolean>;
+    rationale: string;
+  },
+): Promise<void> {
+  const targetContractId = process.env.VAULT_CONTRACT_ID;
+  if (!targetContractId) {
+    res.status(500).json({
+      error: "VAULT_CONTRACT_ID is not configured; cannot build a governance proposal",
+    });
+    return;
+  }
+
+  const proposer = adminActor(req);
+
+  const action: GovernanceAction = {
+    schemaVersion: 1,
+    network: GOVERNANCE_NETWORK,
+    targetContractId,
+    method: params.method,
+    args: params.args,
+    expectedCurrentState: params.expectedCurrentState,
+    proposer,
+    creationLedger: 0,
+    executionWindowSeconds: GOVERNANCE_EXECUTION_WINDOW_SECONDS,
+    rationale: params.rationale,
+  };
+
+  const proposal = await createProposal({ action });
+
+  res.status(202).json({
+    success: true,
+    status: "PROPOSED",
+    message:
+      "Action recorded as a governance proposal. It has not been executed on-chain and will not take effect until the proposal is simulated, approved, and executed by the optimistic_governance contract.",
+    proposal: {
+      id: proposal.id,
+      actionHash: proposal.actionHash,
+      method: proposal.method,
+      status: proposal.status,
+      createdAt: proposal.createdAt,
+    },
+  });
+}
 
 const adminRouter = Router();
 
@@ -39,31 +119,40 @@ adminRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { vaultId } = req.params;
-      const changes = req.body;
+      const changes = req.body as Record<string, string | number | boolean>;
 
-      // Set audit context before processing
       setAuditContext(req, {
-        action: "UPDATE_VAULT_PARAMETERS",
+        action: "PROPOSE_VAULT_PARAMETERS_UPDATE",
         resource: "VAULT",
         resourceId: vaultId,
         changes,
       });
 
-      // TODO: Implement actual vault parameter update logic
-      // Example: await updateVaultParameters(vaultId, changes);
+      const args: GovernanceActionArg[] = [
+        { name: "vault_id", type: "symbol", value: vaultId },
+        ...Object.entries(changes).map(([name, value]) => ({
+          name,
+          type: (typeof value === "number" ? "i128" : typeof value === "boolean" ? "bool" : "string") as GovernanceActionArg["type"],
+          value,
+        })),
+      ];
 
-      res.json({
-        success: true,
-        message: `Vault ${vaultId} parameters updated`,
-        vaultId,
-        changes,
+      await proposeGovernanceAction(req, res, {
+        method: "strategy_config_update",
+        args,
+        expectedCurrentState: { vaultId },
+        rationale: `Update parameters for vault ${vaultId}`,
       });
     } catch (error) {
+      if (error instanceof GovernanceActionValidationError) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
       res.status(500).json({
         error:
           error instanceof Error
             ? error.message
-            : "Failed to update vault parameters",
+            : "Failed to propose vault parameters update",
       });
     }
   },
@@ -146,27 +235,28 @@ adminRouter.post(
   async (req: Request, res: Response): Promise<void> => {
     try {
       const { vaultId } = req.params;
-      const { reason } = req.body;
+      const { reason } = req.body as { reason?: string };
 
       setAuditContext(req, {
-        action: "PAUSE_VAULT",
+        action: "PROPOSE_VAULT_PAUSE",
         resource: "VAULT",
         resourceId: vaultId,
         changes: { reason },
       });
 
-      // TODO: Implement actual vault pause logic
-      // Example: await pauseVault(vaultId, reason);
-
-      res.json({
-        success: true,
-        message: `Vault ${vaultId} paused`,
-        vaultId,
-        reason,
+      await proposeGovernanceAction(req, res, {
+        method: "vault_pause",
+        args: [{ name: "vault_id", type: "symbol", value: vaultId }],
+        expectedCurrentState: { vaultId, paused: false },
+        rationale: reason || `Pause vault ${vaultId}`,
       });
     } catch (error) {
+      if (error instanceof GovernanceActionValidationError) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
       res.status(500).json({
-        error: error instanceof Error ? error.message : "Failed to pause vault",
+        error: error instanceof Error ? error.message : "Failed to propose vault pause",
       });
     }
   },
@@ -184,23 +274,25 @@ adminRouter.post(
       const { vaultId } = req.params;
 
       setAuditContext(req, {
-        action: "RESUME_VAULT",
+        action: "PROPOSE_VAULT_RESUME",
         resource: "VAULT",
         resourceId: vaultId,
       });
 
-      // TODO: Implement actual vault resume logic
-      // Example: await resumeVault(vaultId);
-
-      res.json({
-        success: true,
-        message: `Vault ${vaultId} resumed`,
-        vaultId,
+      await proposeGovernanceAction(req, res, {
+        method: "vault_resume",
+        args: [{ name: "vault_id", type: "symbol", value: vaultId }],
+        expectedCurrentState: { vaultId, paused: true },
+        rationale: `Resume vault ${vaultId}`,
       });
     } catch (error) {
+      if (error instanceof GovernanceActionValidationError) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
       res.status(500).json({
         error:
-          error instanceof Error ? error.message : "Failed to resume vault",
+          error instanceof Error ? error.message : "Failed to propose vault resume",
       });
     }
   },
@@ -215,28 +307,36 @@ adminRouter.post(
   requireAdmin,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const changes = req.body;
+      const changes = req.body as Record<string, string | number | boolean>;
 
       setAuditContext(req, {
-        action: "UPDATE_FEE_CONFIG",
+        action: "PROPOSE_FEE_CONFIG_UPDATE",
         resource: "FEE_CONFIG",
         changes,
       });
 
-      // TODO: Implement actual fee config update logic
-      // Example: await updateFeeConfig(changes);
+      const args: GovernanceActionArg[] = Object.entries(changes).map(([name, value]) => ({
+        name,
+        type: (typeof value === "number" ? "u32" : typeof value === "boolean" ? "bool" : "string") as GovernanceActionArg["type"],
+        value,
+      }));
 
-      res.json({
-        success: true,
-        message: "Fee configuration updated",
-        changes,
+      await proposeGovernanceAction(req, res, {
+        method: "fee_config_update",
+        args,
+        expectedCurrentState: {},
+        rationale: "Update protocol fee configuration",
       });
     } catch (error) {
+      if (error instanceof GovernanceActionValidationError) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
       res.status(500).json({
         error:
           error instanceof Error
             ? error.message
-            : "Failed to update fee configuration",
+            : "Failed to propose fee configuration update",
       });
     }
   },
@@ -251,28 +351,36 @@ adminRouter.post(
   requireAdmin,
   async (req: Request, res: Response): Promise<void> => {
     try {
-      const changes = req.body;
+      const changes = req.body as Record<string, string | number | boolean>;
 
       setAuditContext(req, {
-        action: "UPDATE_RISK_PARAMETERS",
+        action: "PROPOSE_RISK_PARAMETERS_UPDATE",
         resource: "RISK_CONFIG",
         changes,
       });
 
-      // TODO: Implement actual risk parameter update logic
-      // Example: await updateRiskParameters(changes);
+      const args: GovernanceActionArg[] = Object.entries(changes).map(([name, value]) => ({
+        name,
+        type: (typeof value === "number" ? "i128" : typeof value === "boolean" ? "bool" : "string") as GovernanceActionArg["type"],
+        value,
+      }));
 
-      res.json({
-        success: true,
-        message: "Risk parameters updated",
-        changes,
+      await proposeGovernanceAction(req, res, {
+        method: "risk_parameter_update",
+        args,
+        expectedCurrentState: {},
+        rationale: "Update protocol risk parameters",
       });
     } catch (error) {
+      if (error instanceof GovernanceActionValidationError) {
+        res.status(400).json({ error: error.message });
+        return;
+      }
       res.status(500).json({
         error:
           error instanceof Error
             ? error.message
-            : "Failed to update risk parameters",
+            : "Failed to propose risk parameters update",
       });
     }
   },
