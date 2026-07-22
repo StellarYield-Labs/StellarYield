@@ -100,13 +100,13 @@ impl WalletFactory {
         let salt_hash = Self::derive_deployment_salt(&env, &config.owner, config.salt);
         let predicted_address = Self::predict_proxy_address(&env, &salt_hash);
 
-        if let Some(existing) = env
-            .storage()
-            .instance()
-            .get::<StorageKey, Address>(&StorageKey::OwnerSalt(
-                config.owner.clone(),
-                salt_hash.clone(),
-            ))
+        if let Some(existing) =
+            env.storage()
+                .instance()
+                .get::<StorageKey, Address>(&StorageKey::OwnerSalt(
+                    config.owner.clone(),
+                    salt_hash.clone(),
+                ))
         {
             return Ok(existing);
         }
@@ -139,7 +139,8 @@ impl WalletFactory {
             config.relayer.clone().into_val(&env),
             network_id.clone().into_val(&env)
         ];
-        let _: () = env.invoke_contract(&proxy_address, &Symbol::new(&env, "initialize"), init_args);
+        let _: () =
+            env.invoke_contract(&proxy_address, &Symbol::new(&env, "initialize"), init_args);
 
         let proxy_info = ProxyInfo {
             proxy_address: proxy_address.clone(),
@@ -227,11 +228,7 @@ impl WalletFactory {
         let _: () = env.invoke_contract(
             &recovery,
             &Symbol::new(&env, "link_proxy"),
-            soroban_sdk::vec![
-                &env,
-                owner.into_val(&env),
-                proxy.clone().into_val(&env)
-            ],
+            soroban_sdk::vec![&env, owner.into_val(&env), proxy.clone().into_val(&env)],
         );
 
         env.events()
@@ -395,7 +392,12 @@ mod tests {
     impl DummyTarget {
         pub fn bump(env: Env) -> u32 {
             let key = symbol_short!("count");
-            let next = env.storage().instance().get::<Symbol, u32>(&key).unwrap_or(0) + 1;
+            let next = env
+                .storage()
+                .instance()
+                .get::<Symbol, u32>(&key)
+                .unwrap_or(0)
+                + 1;
             env.storage().instance().set(&key, &next);
             next
         }
@@ -457,7 +459,12 @@ mod tests {
             env,
             b"stellaryield_webauthn_v1\x00\x00\x00\x00\x00\x00\x00\x00",
         ));
-        pre.append(&env.crypto().sha256(&address_bytes(env, op.sender.clone())).to_bytes().into());
+        pre.append(
+            &env.crypto()
+                .sha256(&address_bytes(env, op.sender.clone()))
+                .to_bytes()
+                .into(),
+        );
         pre.append(&Bytes::from_slice(env, &op.nonce.to_be_bytes()));
         pre.append(
             &env.crypto()
@@ -486,7 +493,8 @@ mod tests {
 
     fn setup_factory(env: &Env) -> (WalletFactoryClient<'static>, Address) {
         env.mock_all_auths();
-        env.ledger().set_network_id(testnet_network_id(env).to_array());
+        env.ledger()
+            .set_network_id(testnet_network_id(env).to_array());
         let contract_id = env.register(WalletFactory, ());
         let client = WalletFactoryClient::new(env, &contract_id);
         let admin = Address::generate(env);
@@ -509,7 +517,10 @@ mod tests {
         env.mock_all_auths();
         let contract_id = env.register(WalletFactory, ());
         let client = WalletFactoryClient::new(&env, &contract_id);
-        client.initialize(&Address::generate(&env), &BytesN::from_array(&env, &[0u8; 32]));
+        client.initialize(
+            &Address::generate(&env),
+            &BytesN::from_array(&env, &[0u8; 32]),
+        );
     }
 
     #[test]

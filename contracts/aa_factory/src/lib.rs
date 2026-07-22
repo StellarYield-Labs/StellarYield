@@ -86,8 +86,8 @@
 
 mod factory;
 
-pub use factory::{DeploymentConfig, FactoryError, ProxyInfo, WalletFactory, WalletFactoryClient};
 pub use aa_proxy::{
     ExecutionResult, P256PublicKey, ProxyError, ProxyWallet, ProxyWalletClient, UserOperation,
     WebAuthnSignature,
 };
+pub use factory::{DeploymentConfig, FactoryError, ProxyInfo, WalletFactory, WalletFactoryClient};

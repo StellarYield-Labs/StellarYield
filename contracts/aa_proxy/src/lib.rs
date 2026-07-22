@@ -668,7 +668,8 @@ impl ProxyWallet {
 
         let mut raw = [0u8; 32];
         call_data.copy_into_slice(&mut raw[..len]);
-        let fn_name = core::str::from_utf8(&raw[..len]).map_err(|_| ProxyError::InvalidOperation)?;
+        let fn_name =
+            core::str::from_utf8(&raw[..len]).map_err(|_| ProxyError::InvalidOperation)?;
         let _validated = String::from_bytes(env, fn_name.as_bytes());
         Ok(Symbol::new(env, fn_name))
     }
@@ -767,7 +768,12 @@ mod tests {
     impl DummyTarget {
         pub fn bump(env: Env) -> u32 {
             let key = symbol_short!("count");
-            let next = env.storage().instance().get::<Symbol, u32>(&key).unwrap_or(0) + 1;
+            let next = env
+                .storage()
+                .instance()
+                .get::<Symbol, u32>(&key)
+                .unwrap_or(0)
+                + 1;
             env.storage().instance().set(&key, &next);
             next
         }
@@ -849,7 +855,16 @@ mod tests {
         }
     }
 
-    fn setup(env: &Env) -> (ProxyWalletClient<'_>, Address, Address, Address, BytesN<32>, Address) {
+    fn setup(
+        env: &Env,
+    ) -> (
+        ProxyWalletClient<'_>,
+        Address,
+        Address,
+        Address,
+        BytesN<32>,
+        Address,
+    ) {
         env.mock_all_auths();
 
         let contract_id = env.register(ProxyWallet, ());

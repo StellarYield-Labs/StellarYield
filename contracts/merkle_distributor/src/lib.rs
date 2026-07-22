@@ -198,7 +198,10 @@ impl MerkleDistributor {
     }
 
     fn get_campaign_id_internal(env: &Env) -> u32 {
-        env.storage().instance().get(&DataKey::CampaignId).unwrap_or(0)
+        env.storage()
+            .instance()
+            .get(&DataKey::CampaignId)
+            .unwrap_or(0)
     }
 
     fn compute_leaf(
@@ -213,8 +216,14 @@ impl MerkleDistributor {
         Self::append_address_bytes(env, &mut data, account);
         Self::append_address_bytes(env, &mut data, token_addr);
         data.append(&soroban_sdk::Bytes::from_array(env, &amount.to_be_bytes()));
-        data.append(&soroban_sdk::Bytes::from_array(env, &campaign_id.to_be_bytes()));
-        data.append(&soroban_sdk::Bytes::from_array(env, &metadata_hash.to_array()));
+        data.append(&soroban_sdk::Bytes::from_array(
+            env,
+            &campaign_id.to_be_bytes(),
+        ));
+        data.append(&soroban_sdk::Bytes::from_array(
+            env,
+            &metadata_hash.to_array(),
+        ));
         env.crypto().sha256(&data).into()
     }
 
