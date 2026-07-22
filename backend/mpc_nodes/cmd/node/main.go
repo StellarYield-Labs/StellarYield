@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/stellar/go/keypair"
 	"github.com/stellaryield/mpc_nodes/api"
 	"github.com/stellaryield/mpc_nodes/coordinator"
 	"github.com/stellaryield/mpc_nodes/stellar"
@@ -32,11 +33,11 @@ type Config struct {
 	EnableCORS    bool
 
 	// Storage configuration
-	StorageType        string
+	StorageType           string
 	MongoConnectionString string
-	MongoDatabase      string
-	MongoCollection    string
-	EncryptionKey      string
+	MongoDatabase         string
+	MongoCollection       string
+	EncryptionKey         string
 
 	// Stellar configuration
 	StellarNetworkPassphrase string
@@ -109,7 +110,7 @@ func main() {
 	}
 
 	if config.StellarMPCPublicKey != "" {
-		stellarConfig.MPCPublicKey, _ = stellar.ParseAddress(config.StellarMPCPublicKey)
+		stellarConfig.MPCPublicKey, _ = keypair.ParseAddress(config.StellarMPCPublicKey)
 	}
 
 	treasuryClient, err := stellar.NewTreasuryClient(stellarConfig)
@@ -128,9 +129,9 @@ func main() {
 
 	// Create API server
 	apiConfig := &api.APIConfig{
-		Port:          config.APIPort,
-		EnableMetrics: config.EnableMetrics,
-		EnableCORS:    config.EnableCORS,
+		Port:           config.APIPort,
+		EnableMetrics:  config.EnableMetrics,
+		EnableCORS:     config.EnableCORS,
 		AllowedOrigins: []string{"*"},
 	}
 
@@ -201,6 +202,14 @@ func validateConfig(config *Config) error {
 	if config.Threshold > config.TotalParties {
 		return fmt.Errorf("threshold cannot exceed total parties")
 	}
+	switch config.StorageType {
+	case "memory", "mongodb", "encrypted_file":
+	default:
+		return fmt.Errorf("unsupported storage type %q", config.StorageType)
+	}
+	if config.StorageType == "mongodb" && config.MongoConnectionString == "" {
+		return fmt.Errorf("mongo-uri is required for mongodb storage")
+	}
 	if config.EncryptionKey != "" && len(config.EncryptionKey) != 64 {
 		return fmt.Errorf("encryption-key must be 64 hex characters (32 bytes)")
 	}
@@ -250,11 +259,6 @@ func initializeStorage(config *Config) (storage.KeyShareStorage, error) {
 	case "encrypted_file":
 		return storage.NewEncryptedStorage(storageConfig)
 	default:
-		return storage.NewMemoryStorage(), nil
+		return nil, fmt.Errorf("unsupported storage type %q", config.StorageType)
 	}
-}
-
-// Helper function to parse Stellar address
-func stellar.ParseAddress(address string) (*keypair.FromAddress, error) {
-	return keypair.ParseAddress(address)
 }

@@ -6,6 +6,7 @@ import {
   isStepCompleted,
   isStepActive,
   isTerminalPhase,
+  TX_PHASE_LABELS,
 } from "./transactionPhase";
 
 describe("transactionPhase helpers", () => {
@@ -49,5 +50,36 @@ describe("transactionPhase helpers", () => {
     expect(isTerminalPhase("success")).toBe(true);
     expect(isTerminalPhase("failure")).toBe(true);
     expect(isTerminalPhase("polling")).toBe(false);
+  });
+
+  describe("user-facing finalization messaging", () => {
+    it.each([
+      ["building", "Building transaction"],
+      ["simulating", "Simulating"],
+      ["waiting_for_wallet", "Waiting for wallet"],
+      ["submitting", "Submitting"],
+      ["polling", "Confirming on network"],
+    ] as const)("keeps pending phase %s deterministic", (phase, expected) => {
+      expect(TX_PHASE_LABELS[phase]).toBe(expected);
+      expect(isTerminalPhase(phase)).toBe(false);
+    });
+
+    it("uses a stable failure label when finalization fails", () => {
+      expect(TX_PHASE_LABELS.failure).toBe("Failed");
+      expect(isTerminalPhase("failure")).toBe(true);
+    });
+
+    it("uses the failure state after a polling timeout", () => {
+      const phaseAfterTimeout = "failure" as const;
+      expect(TX_PHASE_LABELS[phaseAfterTimeout]).toBe("Failed");
+      expect(stepIndexIn(TX_PHASE_PIPELINE, phaseAfterTimeout)).toBe(-1);
+      expect(isStepActive(TX_PHASE_PIPELINE, phaseAfterTimeout, 4)).toBe(false);
+    });
+
+    it("keeps successful finalization terminal and explicit", () => {
+      expect(TX_PHASE_LABELS.success).toBe("Success");
+      expect(isTerminalPhase("success")).toBe(true);
+      expect(stepIndexIn(TX_PHASE_PIPELINE, "success")).toBe(TX_PHASE_PIPELINE.length);
+    });
   });
 });

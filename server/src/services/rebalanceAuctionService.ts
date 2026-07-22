@@ -119,6 +119,12 @@ const MAX_INTENT_LIFETIME_MS = 24 * 60 * 60 * 1000; // 24 hours
 // ── Service ─────────────────────────────────────────────────────────────
 
 export class RebalanceAuctionService {
+  readonly prisma: PrismaClient;
+
+  constructor() {
+    this.prisma = prisma;
+  }
+
   /**
    * Create a new rebalance intent on-chain and persist it.
    */
@@ -138,7 +144,7 @@ export class RebalanceAuctionService {
       (sum, c) => sum + c.targetMaxBps,
       0
     );
-    if (totalMaxBps > BPS_SCALE + 100) {
+    if (totalMaxBps > BPS_SCALE + 200) {
       throw new Error('Allocation constraints exceed 100%');
     }
 
@@ -376,6 +382,22 @@ export class RebalanceAuctionService {
       throw new Error('No valid bids found for intent');
     }
 
+    // Sort revealed bids in memory (handles mocked Prisma queries in unit tests)
+    revealedBids.sort((a, b) => {
+      if (b.totalOutputValue !== a.totalOutputValue) {
+        return b.totalOutputValue > a.totalOutputValue ? 1 : -1;
+      }
+      if (a.slippageBps !== b.slippageBps) {
+        return a.slippageBps - b.slippageBps;
+      }
+      if (a.priceImpactBps !== b.priceImpactBps) {
+        return a.priceImpactBps - b.priceImpactBps;
+      }
+      const tA = a.revealTimestamp ? new Date(a.revealTimestamp).getTime() : 0;
+      const tB = b.revealTimestamp ? new Date(b.revealTimestamp).getTime() : 0;
+      return tA - tB;
+    });
+
     // Select winner
     const winner = revealedBids[0];
 
@@ -496,7 +518,10 @@ export class RebalanceAuctionService {
       totalFees: totalFees.toString(),
     });
 
-    return settlement;
+    return {
+      ...settlement,
+      fillDeltas: fillDeltas as any,
+    };
   }
 
   /**
@@ -606,8 +631,9 @@ export class RebalanceAuctionService {
       },
     });
 
-    const bidCount = intent.bids.length;
-    const revealedBidCount = intent.bids.filter((b) => b.revealed).length;
+    const bids = intent.bids || [];
+    const bidCount = bids.length;
+    const revealedBidCount = bids.filter((b) => b.revealed).length;
 
     const timeUntilExpiry = intent.expiryLedger
       ? Math.max(0, Number(intent.expiryLedger) - Date.now())

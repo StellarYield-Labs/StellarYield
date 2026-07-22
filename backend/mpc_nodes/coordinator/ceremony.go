@@ -162,6 +162,20 @@ func (c *CeremonyConfig) Validate() error {
 	if len(c.ParticipantKeys) == 0 {
 		return errors.New("participant keys cannot be empty")
 	}
+	if len(c.ParticipantKeys) != c.TotalParties {
+		return fmt.Errorf("participant key count must equal total parties: got %d, want %d", len(c.ParticipantKeys), c.TotalParties)
+	}
+	if _, ok := c.ParticipantKeys[c.PartyID]; !ok {
+		return errors.New("party ID must exist in participant keys")
+	}
+	for partyID, publicKey := range c.ParticipantKeys {
+		if partyID == "" {
+			return errors.New("participant ID cannot be empty")
+		}
+		if publicKey == nil {
+			return fmt.Errorf("participant %q public key cannot be nil", partyID)
+		}
+	}
 	if c.PrivateKey == nil {
 		return errors.New("private key cannot be nil")
 	}
