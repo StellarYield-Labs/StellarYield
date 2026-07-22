@@ -10,6 +10,7 @@ import {
   sanitizeSvg,
   type VaultMetadataInput,
 } from "../services/ipfs/vaultMetadataService";
+import { validateIconUrl, validateIconUrlOrThrow } from "../utils/iconValidator";
 
 const VALID_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><circle cx="32" cy="32" r="30"/></svg>`;
 
@@ -87,6 +88,84 @@ describe("validateVaultMetadataInput", () => {
     if (!result.ok) {
       expect(result.errors.length).toBeGreaterThanOrEqual(2);
     }
+  });
+});
+
+// ── validateIconUrl (icon URL edge cases, #65) ────────────────────────────────
+
+describe("validateIconUrl", () => {
+  it("accepts a valid HTTPS URL", () => {
+    const result = validateIconUrl("https://cdn.example.com/icons/vault.svg");
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
+    expect(result.url).toBe("https://cdn.example.com/icons/vault.svg");
+  });
+
+  it("accepts an HTTPS URL with query and port", () => {
+    const result = validateIconUrl("https://cdn.example.com:8443/icon.png?v=2");
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects an empty string", () => {
+    const result = validateIconUrl("");
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("empty"))).toBe(true);
+  });
+
+  it("rejects a whitespace-only string", () => {
+    const result = validateIconUrl("   ");
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.includes("empty"))).toBe(true);
+  });
+
+  it("rejects non-string input", () => {
+    expect(validateIconUrl(null).valid).toBe(false);
+    expect(validateIconUrl(undefined).valid).toBe(false);
+    expect(validateIconUrl(42).valid).toBe(false);
+  });
+
+  it.each([
+    "http://cdn.example.com/icon.svg",
+    "ftp://cdn.example.com/icon.svg",
+    "javascript:alert(1)",
+    "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+    "vbscript:msgbox(1)",
+    "file:///etc/passwd",
+  ])("rejects unsupported scheme: %s", (url) => {
+    const result = validateIconUrl(url);
+    expect(result.valid).toBe(false);
+    expect(result.errors.length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    "not a url",
+    "https://",
+    "://missing-scheme.com",
+    "https:// spaces .com/icon.svg",
+    "htps:/broken",
+  ])("rejects malformed URL: %s", (url) => {
+    const result = validateIconUrl(url);
+    expect(result.valid).toBe(false);
+    expect(result.errors.length).toBeGreaterThan(0);
+  });
+
+  it("produces a clear error message for a bad scheme", () => {
+    const result = validateIconUrl("http://example.com/icon.svg");
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toMatch(/scheme .* is not allowed/);
+  });
+
+  it("validateIconUrlOrThrow returns the normalized URL on success", () => {
+    expect(validateIconUrlOrThrow("https://example.com/icon.svg")).toBe(
+      "https://example.com/icon.svg",
+    );
+  });
+
+  it("validateIconUrlOrThrow throws on an invalid URL", () => {
+    expect(() => validateIconUrlOrThrow("http://example.com/icon.svg")).toThrow(
+      /Icon URL validation failed/,
+    );
+    expect(() => validateIconUrlOrThrow("")).toThrow(/Icon URL validation failed/);
   });
 });
 
