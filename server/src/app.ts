@@ -44,13 +44,8 @@ import sharePriceHistoryRouter from "./routes/sharePriceHistory";
 import fragmentationRouter from "./routes/fragmentation";
 import indexerRouter from "./routes/indexer";
 import contactsRouter from "./routes/contacts";
-import auditReplayRouter from "./routes/auditReplay";
-import riskRouter from "./routes/risk";
 import relayerStatusRouter from "./routes/relayerStatus";
-import rewardsRouter from "./routes/rewards";
-import momentumRouter from "./routes/momentum";
-import queueRouter from "./routes/queue";
-import reliabilityRouter from "./routes/reliability";
+import auditReplayRouter from "./routes/auditReplay";
 
 import { createAuthChallenge, verifyAuthChallenge } from "./utils/stellarAuth";
 import {
@@ -142,13 +137,8 @@ export function createApp() {
   app.use("/api/presets", presetsRouter);
   app.use("/api/analytics", analyticsRouter);
   app.use("/api/contacts", contactsRouter);
-  app.use("/api/audit-replay", auditReplayRouter);
-  app.use("/api/risk", riskRouter);
   app.use("/api/relayer", relayerStatusRouter);
-  app.use("/api/rewards", rewardsRouter);
-  app.use("/api/momentum", momentumRouter);
-  app.use("/api/queue", queueRouter);
-  app.use("/api/reliability", reliabilityRouter);
+  app.use("/api/audit-replay", auditReplayRouter);
 
 
   // Legacy JSON metrics (internal tooling)

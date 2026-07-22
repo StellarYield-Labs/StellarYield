@@ -8,6 +8,11 @@
 import * as path from "path";
 import * as fs from "fs";
 
+export const CONTRACT_NAMES: ContractName[] = [
+  "vault", "zap", "token", "governance", "strategy",
+  "emissionController", "liquidStaking", "stableswap",
+];
+
 export type ContractName =
   | "vault"
   | "zap"
@@ -19,6 +24,12 @@ export type ContractName =
   | "stableswap";
 
 export type NetworkName = "testnet" | "mainnet" | "local";
+
+export type RegistryWarning = {
+  network: NetworkName;
+  missingContracts: ContractName[];
+  warningMessage: string;
+};
 
 type Registry = Record<NetworkName, Record<ContractName, string>>;
 
@@ -38,7 +49,7 @@ function loadRegistry(): Registry {
 
 const registry = loadRegistry();
 
-function detectNetwork(): NetworkName {
+export function detectNetwork(): NetworkName {
   const passphrase = process.env.STELLAR_NETWORK_PASSPHRASE ?? "";
   if (passphrase.includes("mainnet") || passphrase.includes("Public Global")) {
     return "mainnet";
@@ -53,22 +64,23 @@ function detectNetwork(): NetworkName {
   return "testnet";
 }
 
-const ENV_OVERRIDES: Partial<Record<ContractName, string | undefined>> = {
-  vault: process.env.CONTRACT_ID,
-  zap: process.env.ZAP_CONTRACT_ID,
-  token: process.env.TOKEN_CONTRACT_ID,
-  governance: process.env.GOVERNANCE_CONTRACT_ID,
-  strategy: process.env.STRATEGY_CONTRACT_ID,
-  emissionController: process.env.EMISSION_CONTROLLER_CONTRACT_ID,
-  liquidStaking: process.env.LIQUID_STAKING_CONTRACT_ID,
-  stableswap: process.env.STABLESWAP_CONTRACT_ID,
+const ENV_MAP: Record<ContractName, string> = {
+  vault: "CONTRACT_ID",
+  zap: "ZAP_CONTRACT_ID",
+  token: "TOKEN_CONTRACT_ID",
+  governance: "GOVERNANCE_CONTRACT_ID",
+  strategy: "STRATEGY_CONTRACT_ID",
+  emissionController: "EMISSION_CONTROLLER_CONTRACT_ID",
+  liquidStaking: "LIQUID_STAKING_CONTRACT_ID",
+  stableswap: "STABLESWAP_CONTRACT_ID",
 };
 
 export function getContractId(
   name: ContractName,
   network?: NetworkName,
 ): string {
-  const envOverride = ENV_OVERRIDES[name];
+  const envKey = ENV_MAP[name];
+  const envOverride = process.env[envKey];
   if (envOverride) return envOverride;
 
   const net = network ?? detectNetwork();
@@ -79,11 +91,26 @@ export function getAllContractIds(
   network?: NetworkName,
 ): Record<ContractName, string> {
   const net = network ?? detectNetwork();
-  const names: ContractName[] = [
-    "vault", "zap", "token", "governance", "strategy",
-    "emissionController", "liquidStaking", "stableswap",
-  ];
   return Object.fromEntries(
-    names.map((n) => [n, getContractId(n, net)]),
+    CONTRACT_NAMES.map((n) => [n, getContractId(n, net)]),
   ) as Record<ContractName, string>;
+}
+
+function isBlank(value: string): boolean {
+  return value.trim() === "";
+}
+
+export function validateRegistry(network?: NetworkName): RegistryWarning {
+  const net = network ?? detectNetwork();
+  const ids = getAllContractIds(net);
+
+  const missingContracts = CONTRACT_NAMES
+    .filter((name) => isBlank(ids[name]))
+    .sort();
+
+  const warningMessage = missingContracts.length > 0
+    ? `Missing contract IDs for ${net}:\n${missingContracts.map((c) => `- ${c}`).join("\n")}`
+    : "";
+
+  return { network: net, missingContracts, warningMessage };
 }
