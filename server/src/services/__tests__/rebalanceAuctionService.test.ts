@@ -134,8 +134,8 @@ describe('RebalanceAuctionService', () => {
           { token: 'TOKEN_A', amount: BigInt(10000), protocol: 'PROTO_1' },
         ],
         targetConstraints: [
-          { token: 'TOKEN_A', protocol: 'PROTO_1', targetMinBps: 6000, targetMaxBps: 6000 },
-          { token: 'TOKEN_B', protocol: 'PROTO_1', targetMinBps: 5000, targetMaxBps: 5000 },
+          { token: 'TOKEN_A', protocol: 'PROTO_1', targetMinBps: 6000, targetMaxBps: 6000, currentBps: 7000 },
+          { token: 'TOKEN_B', protocol: 'PROTO_1', targetMinBps: 5000, targetMaxBps: 5000, currentBps: 3000 },
         ],
         maxTotalLossBps: 500,
         maxSlippageBps: 200,

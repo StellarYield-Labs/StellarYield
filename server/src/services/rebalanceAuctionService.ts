@@ -779,7 +779,7 @@ export class RebalanceAuctionService {
         intentId,
         eventType,
         actor,
-        details,
+        details: JSON.parse(JSON.stringify(details)),
       },
     });
   }
