@@ -12,3 +12,5 @@ soroban-token-sdk = "22.0.0"
 
 [dev-dependencies]
 soroban-sdk = { version = "22.0.0", features = ["testutils"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

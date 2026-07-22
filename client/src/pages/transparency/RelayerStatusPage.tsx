@@ -32,6 +32,7 @@ interface ReplayProtectionStatus {
 
 interface RelayerStatus {
   isOnline: boolean;
+  serviceState: "online" | "degraded" | "offline";
   network: string;
   queueDepth: number;
   totalRelayed: number;
@@ -40,10 +41,12 @@ interface RelayerStatus {
   successRate: number;
   avgDurationMs: number;
   lastRelayAt: string | null;
+  lastRelayAgeMs: number | null;
   recentEvents: RelayEvent[];
   replayProtection: ReplayProtectionStatus;
   uptime: string;
   checkedAt: string;
+  alerts: string[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -81,7 +84,7 @@ function MetricCard({
 }) {
   return (
     <div className={`rounded-xl bg-gray-800/50 border border-gray-700/50 p-4 flex items-center gap-3`}>
-      <span className={`w-10 h-10 rounded-full bg-${accent}-500/20 flex items-center justify-center flex-shrink-0`}>
+      <span className={`w-10 h-10 rounded-full bg-${accent}-500/20 flex items-center justify-center shrink-0`}>
         {icon}
       </span>
       <div>
@@ -98,37 +101,47 @@ export default function RelayerStatusPage() {
   const [status, setStatus] = useState<RelayerStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchStatus() {
-      try {
-        const res = await fetch(apiUrl("/api/relayer/status"));
-        if (!res.ok) throw new Error(`Server returned ${res.status}`);
-        const data: RelayerStatus = await res.json();
-        if (!cancelled) {
-          setStatus(data);
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : "Unable to load relayer status.",
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  const fetchStatus = async (showLoadingState = false) => {
+    if (refreshing) {
+      return;
     }
 
-    void fetchStatus();
-    const interval = setInterval(fetchStatus, 15_000);
+    if (showLoadingState) {
+      setLoading(true);
+    }
+
+    setRefreshing(true);
+    try {
+      const res = await fetch(apiUrl("/api/relayer/status"));
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const data: RelayerStatus = await res.json();
+      setStatus(data);
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to load relayer status.",
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchStatus(true);
+    const interval = setInterval(() => {
+      void fetchStatus(false);
+    }, 15_000);
     return () => {
-      cancelled = true;
       clearInterval(interval);
     };
   }, []);
+
+  const handleRetry = () => {
+    void fetchStatus(false);
+  };
 
   if (loading) {
     return (
@@ -139,15 +152,37 @@ export default function RelayerStatusPage() {
     );
   }
 
-  if (error || !status) {
+  if (!status) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <Radio size={48} className="text-gray-500 mb-4" />
         <h2 className="text-2xl font-bold mb-2">Unable to load relayer status</h2>
-        <p className="text-gray-400">{error ?? "Unknown error"}</p>
+        <p className="text-gray-400 mb-4">{error ?? "Unknown error"}</p>
+        <button
+          type="button"
+          onClick={handleRetry}
+          className="btn-secondary inline-flex items-center gap-2"
+        >
+          {refreshing ? <Loader2 size={16} className="animate-spin" /> : <Radio size={16} />}
+          Retry
+        </button>
       </div>
     );
   }
+
+  const serviceStateTone =
+    status.serviceState === "offline"
+      ? "bg-red-500/20 text-red-400"
+      : status.serviceState === "degraded"
+        ? "bg-amber-500/20 text-amber-300"
+        : "bg-green-500/20 text-green-400";
+
+  const serviceStateLabel =
+    status.serviceState === "offline"
+      ? "Offline"
+      : status.serviceState === "degraded"
+        ? "Degraded"
+        : "Online";
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -165,20 +200,53 @@ export default function RelayerStatusPage() {
       {/* Status badge */}
       <div className="flex items-center gap-3">
         <span
-          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
-            status.isOnline
-              ? "bg-green-500/20 text-green-400"
-              : "bg-red-500/20 text-red-400"
-          }`}
+          className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${serviceStateTone}`}
         >
-          {status.isOnline ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-          {status.isOnline ? "Online" : "Offline"}
+          {status.serviceState === "offline" ? (
+            <XCircle size={16} />
+          ) : status.serviceState === "degraded" ? (
+            <AlertTriangle size={16} />
+          ) : (
+            <CheckCircle2 size={16} />
+          )}
+          {serviceStateLabel}
         </span>
         <span className="text-xs text-gray-500">
           Network: {status.network} &middot; Uptime: {status.uptime} &middot; Checked:{" "}
           {formatTime(status.checkedAt)}
         </span>
+        <button
+          type="button"
+          onClick={handleRetry}
+          disabled={refreshing}
+          className="btn-secondary inline-flex items-center gap-2 text-sm disabled:opacity-50"
+        >
+          {refreshing ? <Loader2 size={14} className="animate-spin" /> : <Radio size={14} />}
+          {refreshing ? "Refreshing..." : "Refresh"}
+        </button>
       </div>
+
+      {(error || status.alerts.length > 0) && (
+        <div
+          className="glass-panel rounded-2xl p-4 border border-amber-500/30 bg-amber-500/10"
+          role="status"
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle size={18} className="text-amber-300 mt-0.5" />
+            <div className="space-y-2 text-sm text-amber-100">
+              {error && (
+                <p>
+                  Live relayer refresh failed. Showing the last known status.{" "}
+                  <span className="text-amber-200/80">{error}</span>
+                </p>
+              )}
+              {status.alerts.map((alert) => (
+                <p key={alert}>{alert}</p>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Metric cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

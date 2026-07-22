@@ -44,6 +44,11 @@ import sharePriceHistoryRouter from "./routes/sharePriceHistory";
 import fragmentationRouter from "./routes/fragmentation";
 import indexerRouter from "./routes/indexer";
 import contactsRouter from "./routes/contacts";
+import auditReplayRouter from "./routes/auditReplay";
+import relayerStatusRouter from "./routes/relayerStatus";
+import riskRouter from "./routes/risk";
+import backtestRouter from "./routes/backtest";
+import googleSheetsRouter from "./routes/googleSheets";
 
 import { createAuthChallenge, verifyAuthChallenge } from "./utils/stellarAuth";
 import {
@@ -104,6 +109,7 @@ export function createApp() {
   });
 
   app.post("/api/relayer/fee-bump", relayerLimiter, signFeeBump);
+  app.use("/api/relayer/status", relayerStatusRouter);
   app.use("/api/vaults", sharePriceHistoryRouter);
   app.use("/api/liquidity", fragmentationRouter);
   app.use("/api/indexer", indexerRouter);
@@ -121,12 +127,16 @@ export function createApp() {
   app.use("/api/users", pnlRouter);
   app.use("/api/users", exportRouter);
   app.use("/api/admin", adminRouter);
+  app.use("/api/audit-replay", auditReplayRouter);
   app.use("/api/audit-monitoring", auditMonitoringRouter);
   app.use("/api/weekly-reports", weeklyReportsRouter);
   app.use("/api/alerts", alertsRouter);
   app.use("/api/incidents", incidentsRouter);
   app.use("/api/simulator", simulatorRouter);
   app.use("/api/correlation", correlationRouter);
+  app.use("/api/risk", riskRouter);
+  app.use("/api/backtest", backtestRouter);
+  app.use("/api/google-sheets", googleSheetsRouter);
   app.use("/api/openapi", openapiRouter);
   app.use("/api/strategies", strategiesRouter);
   app.use("/api/treasury", treasuryRouter);

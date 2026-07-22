@@ -28,6 +28,7 @@
     [],
     [],
     [],
+    [],
     []
   ],
   "ledger": {
@@ -140,7 +141,7 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "Epoch"
+                              "symbol": "CampaignId"
                             }
                           ]
                         },

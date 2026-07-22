@@ -726,7 +726,7 @@ mod tests {
         mint_tokens(&env, &token1, &user, 100_000);
 
         // Mint position with tick range [-60, 60] (smaller range, aligned to tick spacing)
-        let (position_id, amount0, amount1) =
+        let (position_id, _amount0, _amount1) =
             client.mint(&user, &-60, &60, &100_000, &100_000, &100_000);
 
         assert_eq!(position_id, 1);

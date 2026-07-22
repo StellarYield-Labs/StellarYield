@@ -38,7 +38,10 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 },
                 {
-                  "bytes": "eece3eb1ba3f00a15edc1f1c8a3a2672a68e61c25078505afd85f6077ca9e185"
+                  "u32": 7
+                },
+                {
+                  "bytes": "66a8c67193fb2f92b08d4d76296e44d384182b746d9bbdcd58e1cf6bde46e9bf"
                 }
               ]
             }
@@ -85,13 +88,19 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 },
                 {
-                  "u32": 0
+                  "address": "CCABDO7UZXYE4W6GVSEGSNNZTKSLFQGKXXQTH6OX7M7GKZ4Z6CUJNGZN"
                 },
                 {
                   "i128": {
                     "hi": 0,
                     "lo": 1000
                   }
+                },
+                {
+                  "u32": 7
+                },
+                {
+                  "bytes": "0000000000000000000000000000000000000000000000000000000000000000"
                 },
                 {
                   "vec": []
@@ -184,10 +193,13 @@
             "key": {
               "vec": [
                 {
-                  "symbol": "ClaimedBitmap"
+                  "symbol": "Claimed"
                 },
                 {
-                  "u32": 0
+                  "u32": 7
+                },
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 }
               ]
             },
@@ -204,19 +216,19 @@
                 "key": {
                   "vec": [
                     {
-                      "symbol": "ClaimedBitmap"
+                      "symbol": "Claimed"
                     },
                     {
-                      "u32": 0
+                      "u32": 7
+                    },
+                    {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                     }
                   ]
                 },
                 "durability": "persistent",
                 "val": {
-                  "u128": {
-                    "hi": 0,
-                    "lo": 1
-                  }
+                  "bool": true
                 }
               }
             },
@@ -264,12 +276,12 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "Epoch"
+                              "symbol": "CampaignId"
                             }
                           ]
                         },
                         "val": {
-                          "u32": 1
+                          "u32": 7
                         }
                       },
                       {
@@ -293,7 +305,7 @@
                           ]
                         },
                         "val": {
-                          "bytes": "eece3eb1ba3f00a15edc1f1c8a3a2672a68e61c25078505afd85f6077ca9e185"
+                          "bytes": "66a8c67193fb2f92b08d4d76296e44d384182b746d9bbdcd58e1cf6bde46e9bf"
                         }
                       },
                       {

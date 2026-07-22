@@ -28,7 +28,7 @@
 
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Bytes,
-    Env, Map, Vec,
+    BytesN, Env, Map, String, Vec,
 };
 
 // ── Domain Separator ────────────────────────────────────────────────────
@@ -36,9 +36,8 @@ use soroban_sdk::{
 /// Unique domain tag for this contract. Prevents cross-contract replay.
 /// Hash("StellarYield::RebalanceAuction::v1")
 const DOMAIN_SEPARATOR: [u8; 32] = [
-    0x53, 0x74, 0x65, 0x6c, 0x6c, 0x61, 0x72, 0x59, 0x69, 0x65, 0x6c, 0x64, 0x3a, 0x3a, 0x52,
-    0x65, 0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63, 0x65, 0x41, 0x75, 0x63, 0x74, 0x69, 0x6f, 0x6e,
-    0x3a, 0x76,
+    0x53, 0x74, 0x65, 0x6c, 0x6c, 0x61, 0x72, 0x59, 0x69, 0x65, 0x6c, 0x64, 0x3a, 0x3a, 0x52, 0x65,
+    0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63, 0x65, 0x41, 0x75, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x3a, 0x76,
 ];
 
 // ── Constants ───────────────────────────────────────────────────────────
@@ -46,9 +45,6 @@ const DOMAIN_SEPARATOR: [u8; 32] = [
 const BPS_SCALE: i128 = 10_000;
 const MAX_FEE_BPS: u32 = 500; // 5% max total fee
 const MIN_BOND_BPS: u32 = 100; // 1% of intent value minimum bond
-const COMMIT_PHASE_DURATION: u64 = 60; // 60 seconds for commit phase
-const REVEAL_PHASE_DURATION: u64 = 30; // 30 seconds for reveal phase
-const MIN_SOLVERS: u32 = 1; // Minimum solvers for valid auction
 const MAX_INTENT_LIFETIME: u64 = 86400; // 24 hours max intent lifetime
 
 // ── Storage Keys ────────────────────────────────────────────────────────
@@ -61,19 +57,19 @@ pub enum DataKey {
     Paused,
     Intent(u64),
     NextIntentId,
-    IntentHash(u64),             // intent_hash → intent_id (replay prevention)
-    BidCommit(u64, Address),     // (intent_id, solver) → commit hash
-    BidReveal(u64, Address),     // (intent_id, solver) → revealed bid
-    BondDeposit(u64, Address),   // (intent_id, solver) → bond amount
-    Winner(u64),                 // intent_id → winning solver
-    SettlementRecord(u64),       // intent_id → settlement data
-    AllowedProtocols,            // Map<Address, bool> — allowlisted contract IDs
-    AllowedTokens,               // Map<Address, bool> — allowlisted tokens
-    RouteCallGraph,              // Map<Address, Vec<Address>> — allowed call graph
+    IntentHash(u64),           // intent_hash → intent_id (replay prevention)
+    BidCommit(u64, Address),   // (intent_id, solver) → commit hash
+    BidReveal(u64, Address),   // (intent_id, solver) → revealed bid
+    BondDeposit(u64, Address), // (intent_id, solver) → bond amount
+    Winner(u64),               // intent_id → winning solver
+    SettlementRecord(u64),     // intent_id → settlement data
+    AllowedProtocols,          // Map<Address, bool> — allowlisted contract IDs
+    AllowedTokens,             // Map<Address, bool> — allowlisted tokens
+    RouteCallGraph,            // Map<Address, Vec<Address>> — allowed call graph
     FeeBps,
     FeeRecipient,
     TotalSettled,
-    SolverReputation(Address),   // solver → reputation score
+    SolverReputation(Address), // solver → reputation score
 }
 
 // ── Data Structures ─────────────────────────────────────────────────────
@@ -97,11 +93,10 @@ pub enum ExecutionState {
 /// Partial fill policy for the intent.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[repr(u32)]
 pub enum PartialFillPolicy {
-    FullOnly = 0,      // Must fill entire intent or fail
-    ProRata = 1,        // Allow proportional partial fills
-    MinPercent(u32),    // Minimum fill percentage (bps)
+    FullOnly,        // Must fill entire intent or fail
+    ProRata,         // Allow proportional partial fills
+    MinPercent(u32), // Minimum fill percentage (bps)
 }
 
 /// A single transfer leg in the rebalance route.
@@ -131,9 +126,9 @@ pub struct InputPosition {
 pub struct AllocationConstraint {
     pub token: Address,
     pub protocol: Address,
-    pub target_min_bps: u32,  // Minimum weight in bps (0-10000)
-    pub target_max_bps: u32,  // Maximum weight in bps (0-10000)
-    pub current_bps: u32,     // Current weight in bps
+    pub target_min_bps: u32, // Minimum weight in bps (0-10000)
+    pub target_max_bps: u32, // Maximum weight in bps (0-10000)
+    pub current_bps: u32,    // Current weight in bps
 }
 
 /// Canonical RebalanceIntent — the signed intent that drives the auction.
@@ -142,29 +137,48 @@ pub struct AllocationConstraint {
 pub struct RebalanceIntent {
     pub id: u64,
     pub vault: Address,
-    pub network: Bytes,              // Stellar network passphrase hash
+    pub network: Bytes, // Stellar network passphrase hash
     pub strategy_snapshot_id: u64,
     pub strategy_version: u32,
     pub input_positions: Vec<InputPosition>,
     pub target_constraints: Vec<AllocationConstraint>,
-    pub max_total_loss_bps: u32,     // Maximum aggregate loss in bps
-    pub max_slippage_bps: u32,       // Maximum slippage in bps
-    pub max_fees_bps: u32,           // Maximum fees in bps
-    pub max_price_impact_bps: u32,   // Maximum price impact in bps
+    pub max_total_loss_bps: u32,      // Maximum aggregate loss in bps
+    pub max_slippage_bps: u32,        // Maximum slippage in bps
+    pub max_fees_bps: u32,            // Maximum fees in bps
+    pub max_price_impact_bps: u32,    // Maximum price impact in bps
     pub min_total_output_value: i128, // Minimum total output value
     pub allowed_tokens: Vec<Address>,
     pub allowed_protocols: Vec<Address>,
-    pub route: Vec<RouteLeg>,    // Suggested route (solver may find better)
+    pub route: Vec<RouteLeg>, // Suggested route (solver may find better)
     pub partial_fill_policy: PartialFillPolicy,
     pub nonce: u64,
     pub creation_ledger: u64,
     pub expiry_ledger: u64,
     pub cancellation_authority: Address,
     pub state: ExecutionState,
-    pub intent_hash: Bytes,
+    pub intent_hash: BytesN<32>,
     pub total_input_value: i128,
     pub total_output_value: i128,
     pub created_at: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct CreateIntentArgs {
+    pub strategy_snapshot_id: u64,
+    pub strategy_version: u32,
+    pub input_positions: Vec<InputPosition>,
+    pub target_constraints: Vec<AllocationConstraint>,
+    pub max_total_loss_bps: u32,
+    pub max_slippage_bps: u32,
+    pub max_fees_bps: u32,
+    pub max_price_impact_bps: u32,
+    pub min_total_output_value: i128,
+    pub allowed_tokens: Vec<Address>,
+    pub allowed_protocols: Vec<Address>,
+    pub route_suggestion: Vec<RouteLeg>,
+    pub partial_fill_policy: PartialFillPolicy,
+    pub expiry_ledger: u64,
 }
 
 /// Solver's commit hash during the commit phase.
@@ -172,7 +186,7 @@ pub struct RebalanceIntent {
 #[derive(Clone, Debug)]
 pub struct BidCommit {
     pub solver: Address,
-    pub commit_hash: Bytes,
+    pub commit_hash: BytesN<32>,
     pub timestamp: u64,
 }
 
@@ -182,14 +196,14 @@ pub struct BidCommit {
 pub struct SolverBid {
     pub solver: Address,
     pub intent_id: u64,
-    pub output_amounts: Map<Address, i128>,  // token → amount out
+    pub output_amounts: Map<Address, i128>, // token → amount out
     pub total_output_value: i128,
     pub route: Vec<RouteLeg>,
     pub fees_bps: u32,
     pub slippage_bps: u32,
     pub price_impact_bps: u32,
     pub timestamp: u64,
-    pub bid_hash: Bytes,  // For replay protection
+    pub bid_hash: BytesN<32>, // For replay protection
 }
 
 /// Settlement result after atomic execution.
@@ -199,15 +213,15 @@ pub struct SettlementResult {
     pub intent_id: u64,
     pub solver: Address,
     pub tx_hash: Bytes,
-    pub pre_balances: Map<Address, i128>,   // token → balance before
-    pub post_balances: Map<Address, i128>,  // token → balance after
-    pub fill_deltas: Map<Address, i128>,    // token → actual delta
+    pub pre_balances: Map<Address, i128>, // token → balance before
+    pub post_balances: Map<Address, i128>, // token → balance after
+    pub fill_deltas: Map<Address, i128>,  // token → actual delta
     pub realized_slippage_bps: u32,
     pub total_fees: i128,
     pub settlement_ledger: u64,
     pub settled_at: u64,
     pub partial_fill: bool,
-    pub filled_percentage: u32,             // bps (10000 = 100%)
+    pub filled_percentage: u32, // bps (10000 = 100%)
 }
 
 // ── Errors ──────────────────────────────────────────────────────────────
@@ -286,12 +300,8 @@ impl RebalanceAuction {
         env.storage()
             .instance()
             .set(&DataKey::FeeRecipient, &fee_recipient);
-        env.storage()
-            .instance()
-            .set(&DataKey::NextIntentId, &1u64);
-        env.storage()
-            .instance()
-            .set(&DataKey::TotalSettled, &0u64);
+        env.storage().instance().set(&DataKey::NextIntentId, &1u64);
+        env.storage().instance().set(&DataKey::TotalSettled, &0u64);
         env.storage()
             .instance()
             .set(&DataKey::AllowedProtocols, &Map::<Address, bool>::new(&env));
@@ -312,28 +322,29 @@ impl RebalanceAuction {
 
     /// Create a new rebalance intent. The vault authorizes this intent,
     /// locking the rebalance plan on-chain with all constraints.
-    #[allow(clippy::too_many_arguments)]
     pub fn create_intent(
         env: Env,
         vault: Address,
-        strategy_snapshot_id: u64,
-        strategy_version: u32,
-        input_positions: Vec<InputPosition>,
-        target_constraints: Vec<AllocationConstraint>,
-        max_total_loss_bps: u32,
-        max_slippage_bps: u32,
-        max_fees_bps: u32,
-        max_price_impact_bps: u32,
-        min_total_output_value: i128,
-        allowed_tokens: Vec<Address>,
-        allowed_protocols: Vec<Address>,
-        route_suggestion: Vec<RouteLeg>,
-        partial_fill_policy: PartialFillPolicy,
-        expiry_ledger: u64,
+        args: CreateIntentArgs,
     ) -> Result<u64, AuctionError> {
         Self::require_init(&env)?;
         Self::require_not_paused(&env)?;
         vault.require_auth();
+
+        let strategy_snapshot_id = args.strategy_snapshot_id;
+        let strategy_version = args.strategy_version;
+        let input_positions = args.input_positions;
+        let target_constraints = args.target_constraints;
+        let max_total_loss_bps = args.max_total_loss_bps;
+        let max_slippage_bps = args.max_slippage_bps;
+        let max_fees_bps = args.max_fees_bps;
+        let max_price_impact_bps = args.max_price_impact_bps;
+        let min_total_output_value = args.min_total_output_value;
+        let allowed_tokens = args.allowed_tokens;
+        let allowed_protocols = args.allowed_protocols;
+        let route_suggestion = args.route_suggestion;
+        let partial_fill_policy = args.partial_fill_policy;
+        let expiry_ledger = args.expiry_ledger;
 
         // Validate expiry
         let current_ledger = env.ledger().sequence() as u64;
@@ -388,11 +399,7 @@ impl RebalanceAuction {
         );
 
         // Check for duplicate intent
-        if env
-            .storage()
-            .persistent()
-            .has(&DataKey::IntentHash(nonce))
-        {
+        if env.storage().persistent().has(&DataKey::IntentHash(nonce)) {
             return Err(AuctionError::DuplicateIntent);
         }
 
@@ -452,7 +459,7 @@ impl RebalanceAuction {
         env: Env,
         solver: Address,
         intent_id: u64,
-        commit_hash: Bytes,
+        commit_hash: BytesN<32>,
     ) -> Result<(), AuctionError> {
         Self::require_init(&env)?;
         Self::require_not_paused(&env)?;
@@ -498,19 +505,16 @@ impl RebalanceAuction {
             commit_hash,
             timestamp: env.ledger().timestamp(),
         };
-        env.storage().persistent().set(
-            &DataKey::BidCommit(intent_id, solver.clone()),
-            &commit,
-        );
+        env.storage()
+            .persistent()
+            .set(&DataKey::BidCommit(intent_id, solver.clone()), &commit);
         env.storage().persistent().set(
             &DataKey::BondDeposit(intent_id, solver.clone()),
             &bond_amount,
         );
 
-        env.events().publish(
-            (symbol_short!("commit"),),
-            (intent_id, solver, bond_amount),
-        );
+        env.events()
+            .publish((symbol_short!("commit"),), (intent_id, solver, bond_amount));
 
         Ok(())
     }
@@ -585,7 +589,14 @@ impl RebalanceAuction {
         Self::validate_route(&env, &intent, &route)?;
 
         // Validate bid constraints
-        Self::validate_bid_constraints(&env, &intent, total_output_value, fees_bps, slippage_bps, price_impact_bps)?;
+        Self::validate_bid_constraints(
+            &env,
+            &intent,
+            total_output_value,
+            fees_bps,
+            slippage_bps,
+            price_impact_bps,
+        )?;
 
         // Check for duplicate reveal
         if env
@@ -609,10 +620,9 @@ impl RebalanceAuction {
             bid_hash: reveal_hash,
         };
 
-        env.storage().persistent().set(
-            &DataKey::BidReveal(intent_id, solver.clone()),
-            &bid,
-        );
+        env.storage()
+            .persistent()
+            .set(&DataKey::BidReveal(intent_id, solver.clone()), &bid);
 
         // Update intent state
         env.storage()
@@ -677,10 +687,8 @@ impl RebalanceAuction {
             .persistent()
             .set(&DataKey::Winner(intent_id), &best_solver);
 
-        env.events().publish(
-            (symbol_short!("winner"),),
-            (intent_id, best_solver.clone()),
-        );
+        env.events()
+            .publish((symbol_short!("winner"),), (intent_id, best_solver.clone()));
 
         Ok(best_solver)
     }
@@ -752,8 +760,9 @@ impl RebalanceAuction {
         // Record pre-execution balances
         let mut pre_balances = Map::<Address, i128>::new(&env);
         for pos in intent.input_positions.iter() {
-            let client = token::Client::new(&env, &pos.token);
-            pre_balances.set(pos.token, client.balance(&intent.vault));
+            let token = pos.token.clone();
+            let client = token::Client::new(&env, &token);
+            pre_balances.set(token, client.balance(&intent.vault));
         }
 
         // Execute all route legs atomically
@@ -768,10 +777,14 @@ impl RebalanceAuction {
         let mut post_balances = Map::<Address, i128>::new(&env);
         let mut fill_deltas = Map::<Address, i128>::new(&env);
         for pos in intent.input_positions.iter() {
-            let client = token::Client::new(&env, &pos.token);
+            let token = pos.token.clone();
+            let client = token::Client::new(&env, &token);
             let post_balance = client.balance(&intent.vault);
-            post_balances.set(pos.token, post_balance);
-            fill_deltas.set(pos.token, post_balance - pre_balances.get(pos.token).unwrap_or(0));
+            post_balances.set(token.clone(), post_balance);
+            fill_deltas.set(
+                token.clone(),
+                post_balance - pre_balances.get(token).unwrap_or(0),
+            );
         }
 
         // Calculate realized slippage
@@ -806,10 +819,9 @@ impl RebalanceAuction {
             filled_percentage: 10000, // Full fill by default
         };
 
-        env.storage().persistent().set(
-            &DataKey::SettlementRecord(intent_id),
-            &settlement,
-        );
+        env.storage()
+            .persistent()
+            .set(&DataKey::SettlementRecord(intent_id), &settlement);
 
         // Update intent
         intent.state = ExecutionState::Settled;
@@ -844,11 +856,7 @@ impl RebalanceAuction {
     // ═══════════════════════════════════════════════════════════════════
 
     /// Cancel an intent. Only the cancellation authority (vault) can cancel.
-    pub fn cancel_intent(
-        env: Env,
-        caller: Address,
-        intent_id: u64,
-    ) -> Result<(), AuctionError> {
+    pub fn cancel_intent(env: Env, caller: Address, intent_id: u64) -> Result<(), AuctionError> {
         Self::require_init(&env)?;
         caller.require_auth();
 
@@ -925,10 +933,10 @@ impl RebalanceAuction {
     // ═══════════════════════════════════════════════════════════════════
 
     /// Validate a route against the allowlisted call graph.
-    pub fn validate_route(
+    fn validate_route(
         env: &Env,
         intent: &RebalanceIntent,
-        route: &[RouteLeg],
+        route: &Vec<RouteLeg>,
     ) -> Result<(), AuctionError> {
         let allowed_protocols: Map<Address, bool> = env
             .storage()
@@ -944,10 +952,16 @@ impl RebalanceAuction {
 
         for leg in route.iter() {
             // Check protocol is allowed
-            if !allowed_protocols.get(leg.from_protocol.clone()).unwrap_or(false) {
+            if !allowed_protocols
+                .get(leg.from_protocol.clone())
+                .unwrap_or(false)
+            {
                 return Err(AuctionError::ProtocolNotAllowed);
             }
-            if !allowed_protocols.get(leg.to_protocol.clone()).unwrap_or(false) {
+            if !allowed_protocols
+                .get(leg.to_protocol.clone())
+                .unwrap_or(false)
+            {
                 return Err(AuctionError::ProtocolNotAllowed);
             }
 
@@ -983,21 +997,24 @@ impl RebalanceAuction {
 
     /// Validate the call graph: each leg's output must be the next leg's input
     /// (or the final output). This prevents arbitrary intermediate hops.
-    fn validate_call_graph(_env: &Env, route: &[RouteLeg]) -> Result<(), AuctionError> {
-        if route.is_empty() {
+    fn validate_call_graph(_env: &Env, route: &Vec<RouteLeg>) -> Result<(), AuctionError> {
+        let len = route.len();
+        if len == 0 {
             return Ok(());
         }
 
         // For multi-leg routes, verify token continuity
-        for i in 0..route.len() - 1 {
-            let current = route.get(i).unwrap();
-            let next = route.get(i + 1).unwrap();
+        if len > 1 {
+            for i in 0..(len - 1) {
+                let current = route.get(i).unwrap();
+                let next = route.get(i + 1).unwrap();
 
-            // Output token of current leg must match input token of next leg
-            // (unless it's a direct swap with no intermediate)
-            if current.to_token != next.from_token {
-                // Allow if going through a common intermediate (e.g., stablecoin)
-                // but log for audit
+                // Output token of current leg must match input token of next leg
+                // (unless it's a direct swap with no intermediate)
+                if current.to_token != next.from_token {
+                    // Allow if going through a common intermediate (e.g., stablecoin)
+                    // but log for audit
+                }
             }
         }
 
@@ -1051,11 +1068,7 @@ impl RebalanceAuction {
     }
 
     /// Add a token to the allowlist. Admin only.
-    pub fn add_allowed_token(
-        env: Env,
-        admin: Address,
-        token: Address,
-    ) -> Result<(), AuctionError> {
+    pub fn add_allowed_token(env: Env, admin: Address, token: Address) -> Result<(), AuctionError> {
         Self::require_admin(&env, &admin)?;
         let mut allowed: Map<Address, bool> = env
             .storage()
@@ -1087,8 +1100,7 @@ impl RebalanceAuction {
         env.storage()
             .instance()
             .set(&DataKey::AllowedTokens, &allowed);
-        env.events()
-            .publish((symbol_short!("rm_token"),), (token,));
+        env.events().publish((symbol_short!("rm_token"),), (token,));
         Ok(())
     }
 
@@ -1114,8 +1126,7 @@ impl RebalanceAuction {
     pub fn pause(env: Env, admin: Address) -> Result<(), AuctionError> {
         Self::require_admin(&env, &admin)?;
         env.storage().instance().set(&DataKey::Paused, &true);
-        env.events()
-            .publish((symbol_short!("pause"),), (admin,));
+        env.events().publish((symbol_short!("pause"),), (admin,));
         Ok(())
     }
 
@@ -1123,8 +1134,7 @@ impl RebalanceAuction {
     pub fn unpause(env: Env, admin: Address) -> Result<(), AuctionError> {
         Self::require_admin(&env, &admin)?;
         env.storage().instance().remove(&DataKey::Paused);
-        env.events()
-            .publish((symbol_short!("unpause"),), (admin,));
+        env.events().publish((symbol_short!("unpause"),), (admin,));
         Ok(())
     }
 
@@ -1153,10 +1163,7 @@ impl RebalanceAuction {
             .ok_or(AuctionError::NoValidBids)
     }
 
-    pub fn get_settlement(
-        env: Env,
-        intent_id: u64,
-    ) -> Result<SettlementResult, AuctionError> {
+    pub fn get_settlement(env: Env, intent_id: u64) -> Result<SettlementResult, AuctionError> {
         env.storage()
             .persistent()
             .get(&DataKey::SettlementRecord(intent_id))
@@ -1192,10 +1199,7 @@ impl RebalanceAuction {
     }
 
     pub fn get_fee_bps(env: Env) -> u32 {
-        env.storage()
-            .instance()
-            .get(&DataKey::FeeBps)
-            .unwrap_or(0)
+        env.storage().instance().get(&DataKey::FeeBps).unwrap_or(0)
     }
 
     pub fn get_next_intent_id(env: Env) -> u64 {
@@ -1255,6 +1259,14 @@ impl RebalanceAuction {
         Ok(())
     }
 
+    fn address_bytes(env: &Env, address: &Address) -> Bytes {
+        let string: String = address.to_string();
+        let len = string.len() as usize;
+        let mut buffer = [0u8; 128];
+        string.copy_into_slice(&mut buffer[..len]);
+        Bytes::from_slice(env, &buffer[..len])
+    }
+
     /// Compute domain-separated intent hash.
     fn compute_intent_hash(
         env: &Env,
@@ -1264,16 +1276,16 @@ impl RebalanceAuction {
         total_input_value: i128,
         nonce: u64,
         ledger: u64,
-    ) -> Bytes {
+    ) -> BytesN<32> {
         let mut data = Bytes::new(env);
         data.extend_from_slice(&DOMAIN_SEPARATOR);
-        data.extend_from_slice(&vault.to_buffer());
+        data.append(&Self::address_bytes(env, vault));
         data.extend_from_slice(&strategy_snapshot_id.to_be_bytes());
         data.extend_from_slice(&strategy_version.to_be_bytes());
         data.extend_from_slice(&total_input_value.to_be_bytes());
         data.extend_from_slice(&nonce.to_be_bytes());
         data.extend_from_slice(&ledger.to_be_bytes());
-        env.crypto().sha256(&data)
+        env.crypto().sha256(&data).to_bytes()
     }
 
     /// Compute bid hash for commit/reveal.
@@ -1285,28 +1297,32 @@ impl RebalanceAuction {
         total_output_value: i128,
         fees_bps: u32,
         slippage_bps: u32,
-    ) -> Bytes {
+    ) -> BytesN<32> {
         let mut data = Bytes::new(env);
-        data.extend_from_slice(&solver.to_buffer());
+        data.append(&Self::address_bytes(env, solver));
         data.extend_from_slice(&intent_id.to_be_bytes());
         data.extend_from_slice(&total_output_value.to_be_bytes());
         data.extend_from_slice(&fees_bps.to_be_bytes());
         data.extend_from_slice(&slippage_bps.to_be_bytes());
         for (token, amount) in output_amounts.iter() {
-            data.extend_from_slice(&token.to_buffer());
+            data.append(&Self::address_bytes(env, &token));
             data.extend_from_slice(&amount.to_be_bytes());
         }
-        env.crypto().sha256(&data)
+        env.crypto().sha256(&data).to_bytes()
     }
 
     /// Calculate required bond amount.
-    fn calculate_bond(env: &Env, intent_value: i128) -> Result<i128, AuctionError> {
+    fn calculate_bond(_env: &Env, intent_value: i128) -> Result<i128, AuctionError> {
         let bond = (intent_value * MIN_BOND_BPS as i128) / BPS_SCALE as i128;
         Ok(bond.max(1)) // Minimum 1 unit bond
     }
 
     /// Require solver to have deposited sufficient bond.
-    fn require_bond_deposit(env: &Env, solver: &Address, required: i128) -> Result<(), AuctionError> {
+    fn require_bond_deposit(
+        env: &Env,
+        solver: &Address,
+        required: i128,
+    ) -> Result<(), AuctionError> {
         // In production, this would verify actual token transfer to bond escrow
         // For now, we track the requirement
         let _ = (env, solver, required);
@@ -1320,7 +1336,7 @@ impl RebalanceAuction {
         total_output_value: i128,
         fees_bps: u32,
         slippage_bps: u32,
-        price_impact_bps: i128,
+        price_impact_bps: u32,
     ) -> Result<(), AuctionError> {
         // Check minimum output
         if total_output_value < intent.min_total_output_value {
@@ -1338,14 +1354,15 @@ impl RebalanceAuction {
         }
 
         // Check price impact
-        if price_impact_bps as u32 > intent.max_price_impact_bps {
+        if price_impact_bps > intent.max_price_impact_bps {
             return Err(AuctionError::PriceImpactExceeded);
         }
 
         // Check total loss
         let potential_loss = intent.total_input_value - total_output_value;
         if potential_loss > 0 {
-            let loss_bps = ((potential_loss * BPS_SCALE as i128) / intent.total_input_value as i128) as u32;
+            let loss_bps =
+                ((potential_loss * BPS_SCALE as i128) / intent.total_input_value as i128) as u32;
             if loss_bps > intent.max_total_loss_bps {
                 return Err(AuctionError::LossExceeded);
             }
@@ -1364,11 +1381,7 @@ impl RebalanceAuction {
             .ok_or(AuctionError::IntentNotFound)?;
 
         // Check each solver in the allowed list
-        let mut best_solver: Option<Address> = None;
-        let mut best_value: i128 = -1;
-        let mut best_slippage: u32 = u32::MAX;
-        let mut best_impact: u32 = u32::MAX;
-        let mut best_timestamp: u64 = u64::MAX;
+        let best_solver: Option<Address> = None;
 
         // Iterate through committed solvers to find reveals
         // In a real implementation, we'd track solver list; here we use
@@ -1396,31 +1409,19 @@ impl RebalanceAuction {
             let client = token::Client::new(env, &leg.from_token);
 
             // Transfer from vault to protocol
-            client.transfer(
-                &intent.vault,
-                &leg.to_protocol,
-                &leg.amount_in,
-            );
+            client.transfer(&intent.vault, &leg.to_protocol, &leg.amount_in);
         }
 
         // Execute output transfers (solver provides tokens to vault)
         for (token_addr, amount) in bid.output_amounts.iter() {
             if amount > 0 {
                 let client = token::Client::new(env, &token_addr);
-                client.transfer(
-                    &bid.solver,
-                    &intent.vault,
-                    &amount,
-                );
+                client.transfer(&bid.solver, &intent.vault, &amount);
             }
         }
 
         // Collect protocol fees
-        let fee_bps: u32 = env
-            .storage()
-            .instance()
-            .get(&DataKey::FeeBps)
-            .unwrap_or(0);
+        let fee_bps: u32 = env.storage().instance().get(&DataKey::FeeBps).unwrap_or(0);
         if fee_bps > 0 {
             let fee_recipient: Address = env
                 .storage()
@@ -1441,11 +1442,7 @@ impl RebalanceAuction {
     }
 
     /// Slash a solver's bond for invalid/non-executable bid.
-    fn slash_bond(
-        env: &Env,
-        intent_id: u64,
-        solver: &Address,
-    ) -> Result<(), AuctionError> {
+    fn slash_bond(env: &Env, intent_id: u64, solver: &Address) -> Result<(), AuctionError> {
         let bond: i128 = env
             .storage()
             .persistent()
@@ -1454,7 +1451,7 @@ impl RebalanceAuction {
 
         if bond > 0 {
             // Transfer bond to protocol fee recipient
-            let fee_recipient: Address = env
+            let _fee_recipient: Address = env
                 .storage()
                 .instance()
                 .get(&DataKey::FeeRecipient)
@@ -1472,15 +1469,12 @@ impl RebalanceAuction {
                 .persistent()
                 .get(&DataKey::SolverReputation(solver.clone()))
                 .unwrap_or(0);
-            env.storage().persistent().set(
-                &DataKey::SolverReputation(solver.clone()),
-                &(rep - 10),
-            );
+            env.storage()
+                .persistent()
+                .set(&DataKey::SolverReputation(solver.clone()), &(rep - 10));
 
-            env.events().publish(
-                (symbol_short!("slash"),),
-                (intent_id, solver.clone(), bond),
-            );
+            env.events()
+                .publish((symbol_short!("slash"),), (intent_id, solver.clone(), bond));
         }
 
         Ok(())
@@ -1519,10 +1513,9 @@ impl RebalanceAuction {
                     .persistent()
                     .get(&DataKey::SolverReputation(solver.clone()))
                     .unwrap_or(0);
-                env.storage().persistent().set(
-                    &DataKey::SolverReputation(solver.clone()),
-                    &(rep + 5),
-                );
+                env.storage()
+                    .persistent()
+                    .set(&DataKey::SolverReputation(solver.clone()), &(rep + 5));
             }
 
             env.events().publish(
@@ -1535,10 +1528,7 @@ impl RebalanceAuction {
     }
 
     /// Calculate realized slippage from bid vs intent.
-    fn calculate_realized_slippage(
-        intent: &RebalanceIntent,
-        bid: &SolverBid,
-    ) -> u32 {
+    fn calculate_realized_slippage(intent: &RebalanceIntent, bid: &SolverBid) -> u32 {
         if intent.total_input_value == 0 {
             return 0;
         }
@@ -1551,7 +1541,8 @@ impl RebalanceAuction {
         }
 
         let slippage_amount = expected_output - actual_output;
-        ((slippage_amount * BPS_SCALE as i128 / expected_output as i128) as u32).min(BPS_SCALE as u32)
+        ((slippage_amount * BPS_SCALE as i128 / expected_output as i128) as u32)
+            .min(BPS_SCALE as u32)
     }
 }
 
@@ -1603,7 +1594,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Error(Contract, #2)")]
     fn test_double_initialize_panics() {
-        let (env, client, admin, fee_recipient, _, _) = setup_env();
+        let (_, client, admin, fee_recipient, _, _) = setup_env();
         client.initialize(&admin, &50, &fee_recipient);
     }
 
@@ -1636,23 +1627,24 @@ mod tests {
         let allowed_protocols = Vec::new(&env);
         let route = Vec::new(&env);
 
-        let intent_id = client.create_intent(
-            &vault,
-            &1,  // strategy_snapshot_id
-            &1,  // strategy_version
-            &input_positions,
-            &constraints,
-            &500,  // max_total_loss_bps (5%)
-            &200,  // max_slippage_bps (2%)
-            &100,  // max_fees_bps (1%)
-            &300,  // max_price_impact_bps (3%)
-            &9000, // min_total_output_value
-            &allowed_tokens,
-            &allowed_protocols,
-            &route,
-            &PartialFillPolicy::FullOnly,
-            &(1000), // expiry_ledger
-        );
+        let args = CreateIntentArgs {
+            strategy_snapshot_id: 1,
+            strategy_version: 1,
+            input_positions: input_positions.clone(),
+            target_constraints: constraints.clone(),
+            max_total_loss_bps: 500,
+            max_slippage_bps: 200,
+            max_fees_bps: 100,
+            max_price_impact_bps: 300,
+            min_total_output_value: 9000,
+            allowed_tokens: allowed_tokens.clone(),
+            allowed_protocols: allowed_protocols.clone(),
+            route_suggestion: route.clone(),
+            partial_fill_policy: PartialFillPolicy::FullOnly,
+            expiry_ledger: 1000,
+        };
+
+        let intent_id = client.create_intent(&vault, &args);
 
         assert_eq!(intent_id, 1);
         let intent = client.get_intent(&intent_id);
@@ -1676,13 +1668,24 @@ mod tests {
         let allowed_protocols = Vec::new(&env);
         let route = Vec::new(&env);
 
-        let intent_id = client.create_intent(
-            &vault, &1, &1,
-            &input_positions, &constraints,
-            &500, &200, &100, &300, &9000,
-            &allowed_tokens, &allowed_protocols, &route,
-            &PartialFillPolicy::FullOnly, &1000,
-        );
+        let args = CreateIntentArgs {
+            strategy_snapshot_id: 1,
+            strategy_version: 1,
+            input_positions: input_positions.clone(),
+            target_constraints: constraints.clone(),
+            max_total_loss_bps: 500,
+            max_slippage_bps: 200,
+            max_fees_bps: 100,
+            max_price_impact_bps: 300,
+            min_total_output_value: 9000,
+            allowed_tokens: allowed_tokens.clone(),
+            allowed_protocols: allowed_protocols.clone(),
+            route_suggestion: route.clone(),
+            partial_fill_policy: PartialFillPolicy::FullOnly,
+            expiry_ledger: 1000,
+        };
+
+        let intent_id = client.create_intent(&vault, &args);
 
         client.cancel_intent(&vault, &intent_id);
 
@@ -1708,16 +1711,16 @@ mod tests {
         let token = Address::generate(&env);
 
         client.add_allowed_protocol(&admin, &protocol);
-        assert!(client.is_protocol_allowed(protocol.clone()));
+        assert!(client.is_protocol_allowed(&protocol));
 
         client.remove_allowed_protocol(&admin, &protocol);
-        assert!(!client.is_protocol_allowed(protocol));
+        assert!(!client.is_protocol_allowed(&protocol));
 
         client.add_allowed_token(&admin, &token);
-        assert!(client.is_token_allowed(token.clone()));
+        assert!(client.is_token_allowed(&token));
 
         client.remove_allowed_token(&admin, &token);
-        assert!(!client.is_token_allowed(token));
+        assert!(!client.is_token_allowed(&token));
     }
 
     #[test]
@@ -1736,13 +1739,24 @@ mod tests {
         let allowed_protocols = Vec::new(&env);
         let route = Vec::new(&env);
 
-        let intent_id = client.create_intent(
-            &vault, &1, &1,
-            &input_positions, &constraints,
-            &500, &200, &100, &300, &9000,
-            &allowed_tokens, &allowed_protocols, &route,
-            &PartialFillPolicy::FullOnly, &1000,
-        );
+        let args = CreateIntentArgs {
+            strategy_snapshot_id: 1,
+            strategy_version: 1,
+            input_positions: input_positions.clone(),
+            target_constraints: constraints.clone(),
+            max_total_loss_bps: 500,
+            max_slippage_bps: 200,
+            max_fees_bps: 100,
+            max_price_impact_bps: 300,
+            min_total_output_value: 9000,
+            allowed_tokens: allowed_tokens.clone(),
+            allowed_protocols: allowed_protocols.clone(),
+            route_suggestion: route.clone(),
+            partial_fill_policy: PartialFillPolicy::FullOnly,
+            expiry_ledger: 1000,
+        };
+
+        let intent_id = client.create_intent(&vault, &args);
 
         client.cancel_intent(&vault, &intent_id);
 
@@ -1750,7 +1764,7 @@ mod tests {
         let result = client.try_commit_bid(
             &Address::generate(&env),
             &intent_id,
-            &Bytes::from_array(&env, &[0u8; 32]),
+            &BytesN::from_array(&env, &[0u8; 32]),
         );
         assert!(result.is_err());
     }
@@ -1762,12 +1776,20 @@ mod tests {
         let hash1 = RebalanceAuction::compute_intent_hash(
             &env,
             &Address::generate(&env),
-            1, 1, 1000, 1, 100,
+            1,
+            1,
+            1000,
+            1,
+            100,
         );
         let hash2 = RebalanceAuction::compute_intent_hash(
             &env,
             &Address::generate(&env),
-            1, 1, 1000, 2, 100,
+            1,
+            1,
+            1000,
+            2,
+            100,
         );
         // Different nonces produce different hashes
         assert_ne!(hash1, hash2);

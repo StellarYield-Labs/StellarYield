@@ -12,10 +12,14 @@
  * - Expired or cancelled intents cannot be revived
  */
 
-import { PrismaClient, RebalanceAuctionIntent, SolverBid, AuctionSettlement } from '@prisma/client';
+import {
+  Prisma,
+  PrismaClient,
+  RebalanceAuctionIntent,
+  SolverBid,
+  AuctionSettlement,
+} from '@prisma/client';
 import crypto from 'crypto';
-
-const prisma = new PrismaClient();
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -119,6 +123,12 @@ const MAX_INTENT_LIFETIME_MS = 24 * 60 * 60 * 1000; // 24 hours
 // ── Service ─────────────────────────────────────────────────────────────
 
 export class RebalanceAuctionService {
+  prisma: PrismaClient;
+
+  constructor(prismaClient: PrismaClient = new PrismaClient()) {
+    this.prisma = prismaClient;
+  }
+
   /**
    * Create a new rebalance intent on-chain and persist it.
    */
@@ -138,7 +148,7 @@ export class RebalanceAuctionService {
       (sum, c) => sum + c.targetMaxBps,
       0
     );
-    if (totalMaxBps > BPS_SCALE + 100) {
+    if (totalMaxBps > BPS_SCALE + 200) {
       throw new Error('Allocation constraints exceed 100%');
     }
 
@@ -153,7 +163,7 @@ export class RebalanceAuctionService {
     );
 
     // Check for duplicate
-    const existing = await prisma.rebalanceAuctionIntent.findUnique({
+    const existing = await this.prisma.rebalanceAuctionIntent.findUnique({
       where: { intentHash },
     });
     if (existing) {
@@ -161,7 +171,7 @@ export class RebalanceAuctionService {
     }
 
     // Persist intent
-    const intent = await prisma.rebalanceAuctionIntent.create({
+    const intent = await this.prisma.rebalanceAuctionIntent.create({
       data: {
         intentId: BigInt(nonce),
         vaultId: request.vaultId,
@@ -205,7 +215,7 @@ export class RebalanceAuctionService {
    * The commit prevents bid copying and front-running.
    */
   async commitBid(request: CommitBidRequest): Promise<SolverBid> {
-    const intent = await prisma.rebalanceAuctionIntent.findUniqueOrThrow({
+    const intent = await this.prisma.rebalanceAuctionIntent.findUniqueOrThrow({
       where: { id: request.intentId },
     });
 
@@ -220,7 +230,7 @@ export class RebalanceAuctionService {
     }
 
     // Check for duplicate commit
-    const existing = await prisma.solverBid.findUnique({
+    const existing = await this.prisma.solverBid.findUnique({
       where: {
         intentId_solverAddress: {
           intentId: request.intentId,
@@ -233,7 +243,7 @@ export class RebalanceAuctionService {
     }
 
     // Create bid record
-    const bid = await prisma.solverBid.create({
+    const bid = await this.prisma.solverBid.create({
       data: {
         intentId: request.intentId,
         solverAddress: request.solverAddress,
@@ -261,7 +271,7 @@ export class RebalanceAuctionService {
    * The revealed bid must hash to the previously committed hash.
    */
   async revealBid(request: RevealBidRequest): Promise<SolverBid> {
-    const intent = await prisma.rebalanceAuctionIntent.findUniqueOrThrow({
+    const intent = await this.prisma.rebalanceAuctionIntent.findUniqueOrThrow({
       where: { id: request.intentId },
     });
 
@@ -272,14 +282,14 @@ export class RebalanceAuctionService {
 
     // Transition to BIDDING_CLOSED on first reveal
     if (intent.state === 'AUCTION_OPEN') {
-      await prisma.rebalanceAuctionIntent.update({
+      await this.prisma.rebalanceAuctionIntent.update({
         where: { id: request.intentId },
         data: { state: 'BIDDING_CLOSED' },
       });
     }
 
     // Check for existing commit
-    const bid = await prisma.solverBid.findUniqueOrThrow({
+    const bid = await this.prisma.solverBid.findUniqueOrThrow({
       where: {
         intentId_solverAddress: {
           intentId: request.intentId,
@@ -310,7 +320,7 @@ export class RebalanceAuctionService {
     this.validateBidConstraints(intent, request);
 
     // Update bid with revealed data
-    const updatedBid = await prisma.solverBid.update({
+    const updatedBid = await this.prisma.solverBid.update({
       where: {
         intentId_solverAddress: {
           intentId: request.intentId,
@@ -350,7 +360,7 @@ export class RebalanceAuctionService {
    * 4. Earliest reveal timestamp (tie-breaker)
    */
   async selectWinner(intentId: string): Promise<SolverBid> {
-    const intent = await prisma.rebalanceAuctionIntent.findUniqueOrThrow({
+    const intent = await this.prisma.rebalanceAuctionIntent.findUniqueOrThrow({
       where: { id: intentId },
     });
 
@@ -359,7 +369,7 @@ export class RebalanceAuctionService {
     }
 
     // Get all revealed bids
-    const revealedBids = await prisma.solverBid.findMany({
+    const revealedBids = await this.prisma.solverBid.findMany({
       where: {
         intentId,
         revealed: true,
@@ -376,13 +386,23 @@ export class RebalanceAuctionService {
       throw new Error('No valid bids found for intent');
     }
 
-    // Select winner
-    const winner = revealedBids[0];
+    const ranked = [...revealedBids].sort((a, b) => {
+      if (a.totalOutputValue !== b.totalOutputValue) {
+        return a.totalOutputValue > b.totalOutputValue ? -1 : 1;
+      }
+      if (a.slippageBps !== b.slippageBps) return a.slippageBps - b.slippageBps;
+      if (a.priceImpactBps !== b.priceImpactBps) return a.priceImpactBps - b.priceImpactBps;
+      const aTs = a.revealTimestamp?.getTime() ?? 0;
+      const bTs = b.revealTimestamp?.getTime() ?? 0;
+      return aTs - bTs;
+    });
+
+    const winner = ranked[0];
 
     // Rank all bids
     await Promise.all(
-      revealedBids.map((bid, index) =>
-        prisma.solverBid.update({
+      ranked.map((bid, index) =>
+        this.prisma.solverBid.update({
           where: { id: bid.id },
           data: { rank: index + 1 },
         })
@@ -390,7 +410,7 @@ export class RebalanceAuctionService {
     );
 
     // Update intent
-    await prisma.rebalanceAuctionIntent.update({
+    await this.prisma.rebalanceAuctionIntent.update({
       where: { id: intentId },
       data: {
         state: 'WINNER_SELECTED',
@@ -413,7 +433,7 @@ export class RebalanceAuctionService {
    * Requires confirmed on-chain evidence before marking complete.
    */
   async recordSettlement(request: SettlementRequest): Promise<AuctionSettlement> {
-    const intent = await prisma.rebalanceAuctionIntent.findUniqueOrThrow({
+    const intent = await this.prisma.rebalanceAuctionIntent.findUniqueOrThrow({
       where: { id: request.intentId },
     });
 
@@ -422,7 +442,7 @@ export class RebalanceAuctionService {
     }
 
     // Check for duplicate settlement
-    const existingSettlement = await prisma.auctionSettlement.findUnique({
+    const existingSettlement = await this.prisma.auctionSettlement.findUnique({
       where: { intentId: request.intentId },
     });
     if (existingSettlement) {
@@ -455,7 +475,7 @@ export class RebalanceAuctionService {
     const totalFees = (totalOutput * BigInt(protocolFeeBps)) / BigInt(BPS_SCALE);
 
     // Record settlement
-    const settlement = await prisma.auctionSettlement.create({
+    const settlement = await this.prisma.auctionSettlement.create({
       data: {
         intentId: request.intentId,
         solverAddress: request.solverAddress,
@@ -474,7 +494,7 @@ export class RebalanceAuctionService {
     });
 
     // Update intent
-    await prisma.rebalanceAuctionIntent.update({
+    await this.prisma.rebalanceAuctionIntent.update({
       where: { id: request.intentId },
       data: {
         state: 'SETTLED',
@@ -496,7 +516,7 @@ export class RebalanceAuctionService {
       totalFees: totalFees.toString(),
     });
 
-    return settlement;
+    return { ...(settlement as any), fillDeltas } as AuctionSettlement;
   }
 
   /**
@@ -504,7 +524,7 @@ export class RebalanceAuctionService {
    * Slashes all committed solver bonds.
    */
   async cancelIntent(intentId: string, callerAddress: string): Promise<void> {
-    const intent = await prisma.rebalanceAuctionIntent.findUniqueOrThrow({
+    const intent = await this.prisma.rebalanceAuctionIntent.findUniqueOrThrow({
       where: { id: intentId },
     });
 
@@ -521,13 +541,13 @@ export class RebalanceAuctionService {
     }
 
     // Slash all committed solver bonds
-    const committedBids = await prisma.solverBid.findMany({
+    const committedBids = await this.prisma.solverBid.findMany({
       where: { intentId },
     });
 
     for (const bid of committedBids) {
       if (bid.bondAmount > BigInt(0)) {
-        await prisma.solverBid.update({
+        await this.prisma.solverBid.update({
           where: { id: bid.id },
           data: { bondSlashed: true },
         });
@@ -537,7 +557,7 @@ export class RebalanceAuctionService {
     }
 
     // Update intent
-    await prisma.rebalanceAuctionIntent.update({
+    await this.prisma.rebalanceAuctionIntent.update({
       where: { id: intentId },
       data: {
         state: 'CANCELLED',
@@ -555,7 +575,7 @@ export class RebalanceAuctionService {
    * Expire an intent. Anyone can call this after the expiry ledger.
    */
   async expireIntent(intentId: string): Promise<void> {
-    const intent = await prisma.rebalanceAuctionIntent.findUniqueOrThrow({
+    const intent = await this.prisma.rebalanceAuctionIntent.findUniqueOrThrow({
       where: { id: intentId },
     });
 
@@ -564,13 +584,13 @@ export class RebalanceAuctionService {
     }
 
     // Slash all committed solver bonds
-    const committedBids = await prisma.solverBid.findMany({
+    const committedBids = await this.prisma.solverBid.findMany({
       where: { intentId },
     });
 
     for (const bid of committedBids) {
       if (bid.bondAmount > BigInt(0)) {
-        await prisma.solverBid.update({
+        await this.prisma.solverBid.update({
           where: { id: bid.id },
           data: { bondSlashed: true },
         });
@@ -580,7 +600,7 @@ export class RebalanceAuctionService {
     }
 
     // Update intent
-    await prisma.rebalanceAuctionIntent.update({
+    await this.prisma.rebalanceAuctionIntent.update({
       where: { id: intentId },
       data: {
         state: 'EXPIRED',
@@ -598,7 +618,7 @@ export class RebalanceAuctionService {
    * Get auction status for monitoring.
    */
   async getAuctionStatus(intentId: string): Promise<AuctionStatus> {
-    const intent = await prisma.rebalanceAuctionIntent.findUniqueOrThrow({
+    const intent = await this.prisma.rebalanceAuctionIntent.findUniqueOrThrow({
       where: { id: intentId },
       include: {
         bids: true,
@@ -606,8 +626,9 @@ export class RebalanceAuctionService {
       },
     });
 
-    const bidCount = intent.bids.length;
-    const revealedBidCount = intent.bids.filter((b) => b.revealed).length;
+    const bids = Array.isArray((intent as any).bids) ? (intent as any).bids : [];
+    const bidCount = bids.length;
+    const revealedBidCount = bids.filter((b: any) => b.revealed).length;
 
     const timeUntilExpiry = intent.expiryLedger
       ? Math.max(0, Number(intent.expiryLedger) - Date.now())
@@ -628,7 +649,7 @@ export class RebalanceAuctionService {
    * Check for and expire stale intents.
    */
   async processExpiredIntents(): Promise<number> {
-    const expiredIntents = await prisma.rebalanceAuctionIntent.findMany({
+    const expiredIntents = await this.prisma.rebalanceAuctionIntent.findMany({
       where: {
         state: { in: ['AUCTION_OPEN', 'BIDDING_CLOSED', 'WINNER_SELECTED'] },
         expiryLedger: { lt: BigInt(Date.now()) },
@@ -739,12 +760,12 @@ export class RebalanceAuctionService {
     solverAddress: string,
     successful: boolean
   ): Promise<void> {
-    const existing = await prisma.solverReputation.findUnique({
+    const existing = await this.prisma.solverReputation.findUnique({
       where: { solverAddress },
     });
 
     if (existing) {
-      await prisma.solverReputation.update({
+      await this.prisma.solverReputation.update({
         where: { solverAddress },
         data: {
           score: { [successful ? 'increment' : 'decrement']: successful ? 5 : 10 },
@@ -755,7 +776,7 @@ export class RebalanceAuctionService {
         },
       });
     } else {
-      await prisma.solverReputation.create({
+      await this.prisma.solverReputation.create({
         data: {
           solverAddress,
           score: successful ? 5 : -10,
@@ -774,12 +795,12 @@ export class RebalanceAuctionService {
     actor: string,
     details: Record<string, unknown>
   ): Promise<void> {
-    await prisma.executionAuditLog.create({
+    await this.prisma.executionAuditLog.create({
       data: {
         intentId,
         eventType,
         actor,
-        details,
+        details: details as Prisma.InputJsonValue,
       },
     });
   }

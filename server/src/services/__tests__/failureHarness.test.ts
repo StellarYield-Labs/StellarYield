@@ -19,7 +19,6 @@
  *   evaluateOracle() must return decision === "BLOCK".
  */
 
-import { describe, it, expect, beforeEach } from "@jest/globals";
 import fc from "fast-check";
 
 // ── Services under test ────────────────────────────────────────────────────
@@ -43,6 +42,7 @@ import {
   recordRelayStart,
   recordRelayFailure,
   recordRelaySuccess,
+  resetRelayerStatusForTests,
 } from "../relayerStatusService";
 
 import {
@@ -50,6 +50,13 @@ import {
   type OrchestrationConfig,
   type StrategyModule,
 } from "../vaultOrchestratorService";
+
+import { MockExecutionAdapter } from "../rebalanceExecutionAdapter";
+import { runRebalanceQueueProcessorJob } from "../../jobs/rebalanceQueueProcessorJob";
+import { REBALANCE_STATUS, EXECUTION_TYPE } from "../../queues/types";
+import type {
+  RebalanceQueueEntryDTO,
+} from "../rebalanceQueueService";
 
 import {
   traverseFallbackTree,
@@ -62,7 +69,6 @@ import {
 import {
   buildHarnessFor,
   FailureMode,
-  mockHorizonCall,
 } from "./failureHarness";
 
 // ── Local reading factories ────────────────────────────────────────────────
@@ -79,6 +85,7 @@ function makeFreshReading(price: number): OracleReading {
 beforeEach(() => {
   clearDeviationLog();
   resetFeeBaseline();
+  resetRelayerStatusForTests();
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -148,6 +155,40 @@ describe("Failure class: TIMEOUT", () => {
     expect(result.selectedNode?.id).toBe("backup");
     expect(result.terminalFailure).toBe(false);
   });
+
+  it("rebalance execution schedules a failed attempt when the executor times out", async () => {
+    const queueEntry = createQueueEntry();
+    const service = createQueueServiceHarness(queueEntry);
+    const executionAdapter = new MockExecutionAdapter().addSubmitResult({
+      success: false,
+      status: "failed",
+      error: "Timeout after 100ms",
+      errorClass: "transient",
+    });
+
+    const result = await runRebalanceQueueProcessorJob(
+      {
+        enabled: true,
+        batchSize: 10,
+        enableRetries: true,
+        enableDeferredProcessing: false,
+        logResults: false,
+        executionAdapter,
+        useAuctionMode: false,
+      },
+      {
+        queueService: service,
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.failedProcessing).toBe(1);
+    const failedCall = service.recordFailedAttempt.mock.calls[0] as unknown as
+      | [string, string, unknown]
+      | undefined;
+    expect(failedCall?.[0]).toBe(queueEntry.id);
+    expect(String(failedCall?.[1])).toMatch(/timeout/i);
+  });
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -192,6 +233,16 @@ describe("Failure class: STALE_DATA", () => {
     expect(status.checkedAt).toBeTruthy();
   });
 
+  it("relayer degrades when the last successful relay is stale", () => {
+    const staleTimestamp = new Date(Date.now() - 6 * 60_000).toISOString();
+    const id = recordRelayStart();
+    recordRelaySuccess(id, 120, "inner-stale", undefined, staleTimestamp);
+
+    const status = getRelayerStatus();
+    expect(status.serviceState).toBe("degraded");
+    expect(status.alerts.some((reason) => /stale/i.test(reason))).toBe(true);
+  });
+
   it("fee oracle deviation detects stale baseline (no recent samples)", () => {
     // First call sets baseline to 100
     checkFeeDeviation(100);
@@ -206,13 +257,50 @@ describe("Failure class: STALE_DATA", () => {
       fc.property(
         fc.integer({ min: 1, max: 1_000_000 }),      // price
         fc.integer({ min: 1, max: 3_600_000 }),       // extra ms beyond threshold
-        (price, extraMs) => {
+        (price: number, extraMs: number) => {
           const reading = makeStaleReading(price, DEFAULT_THRESHOLDS.maxAgeMs + extraMs);
           const r = evaluateOracle(reading, price, DEFAULT_THRESHOLDS, Date.now());
           return r.decision === "BLOCK";
         },
       ),
     );
+  });
+
+  it("rebalance execution rejects stale execution results", async () => {
+    const queueEntry = createQueueEntry();
+    const service = createQueueServiceHarness(queueEntry);
+    const executionAdapter = new MockExecutionAdapter().addSubmitResult({
+      success: true,
+      status: "confirmed",
+      transactionHash: "0xstale",
+      ledger: 12345,
+      metadata: {
+        timestamp: new Date(Date.now() - 10 * 60_000).toISOString(),
+      },
+    });
+
+    const result = await runRebalanceQueueProcessorJob(
+      {
+        enabled: true,
+        batchSize: 10,
+        enableRetries: true,
+        enableDeferredProcessing: false,
+        logResults: false,
+        executionAdapter,
+        useAuctionMode: false,
+      },
+      {
+        queueService: service,
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.failedProcessing).toBe(1);
+    const failedCall = service.recordFailedAttempt.mock.calls[0] as unknown as
+      | [string, string, unknown]
+      | undefined;
+    expect(failedCall?.[0]).toBe(queueEntry.id);
+    expect(String(failedCall?.[1])).toMatch(/stale/i);
   });
 });
 
@@ -294,6 +382,44 @@ describe("Failure class: MALFORMED_RESPONSE", () => {
     // Should detect cycle and report terminal failure without hanging
     expect(result.terminalFailure).toBe(true);
   });
+
+  it("rebalance execution rejects malformed executor output", async () => {
+    const queueEntry = createQueueEntry();
+    const service = createQueueServiceHarness(queueEntry);
+    const executionAdapter = new MockExecutionAdapter().addSubmitResult({
+      success: true,
+      status: "confirmed",
+      transactionHash: "0xmalformed",
+      ledger: 12345,
+      metadata: {
+        filledPercentage: 150,
+        totalExecuted: Number.NaN,
+      },
+    });
+
+    const result = await runRebalanceQueueProcessorJob(
+      {
+        enabled: true,
+        batchSize: 10,
+        enableRetries: true,
+        enableDeferredProcessing: false,
+        logResults: false,
+        executionAdapter,
+        useAuctionMode: false,
+      },
+      {
+        queueService: service,
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.failedProcessing).toBe(1);
+    const failedCall = service.recordFailedAttempt.mock.calls[0] as unknown as
+      | [string, string, unknown]
+      | undefined;
+    expect(failedCall?.[0]).toBe(queueEntry.id);
+    expect(String(failedCall?.[1])).toMatch(/malformed/i);
+  });
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -319,6 +445,43 @@ describe("Failure class: RATE_LIMIT", () => {
     expect(status.failureCount).toBeGreaterThan(0);
     expect(status.queueDepth).toBe(0);
     expect(status.successRate).toBeLessThan(100);
+  });
+
+  it("rebalance execution records a retryable failure when the executor is rate-limited", async () => {
+    const queueEntry = createQueueEntry();
+    const service = createQueueServiceHarness(queueEntry);
+    const executionAdapter = new MockExecutionAdapter().addSubmitResult({
+      success: false,
+      status: "failed",
+      error: "HTTP 429 Too Many Requests",
+      errorClass: "transient",
+      metadata: {
+        retryAfter: 30,
+      },
+    });
+
+    const result = await runRebalanceQueueProcessorJob(
+      {
+        enabled: true,
+        batchSize: 10,
+        enableRetries: true,
+        enableDeferredProcessing: false,
+        logResults: false,
+        executionAdapter,
+        useAuctionMode: false,
+      },
+      {
+        queueService: service,
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.failedProcessing).toBe(1);
+    const failedCall = service.recordFailedAttempt.mock.calls[0] as unknown as
+      | [string, string, unknown]
+      | undefined;
+    expect(failedCall?.[0]).toBe(queueEntry.id);
+    expect(String(failedCall?.[1])).toMatch(/429/i);
   });
 
   it("oracle always blocks when rate-limit causes missing reading", () => {
@@ -428,6 +591,39 @@ describe("Failure class: HARD_FAILURE", () => {
     expect(result.nodesEvaluated).toBe(3);
   });
 
+  it("rebalance execution fails closed on hard upstream failures", async () => {
+    const queueEntry = createQueueEntry();
+    const service = createQueueServiceHarness(queueEntry);
+    const executionAdapter = new MockExecutionAdapter().addSubmitResult({
+      success: false,
+      status: "failed",
+      error: "upstream service unavailable",
+      errorClass: "transient",
+      metadata: {
+        code: "ECONNREFUSED",
+      },
+    });
+
+    const result = await runRebalanceQueueProcessorJob(
+      {
+        enabled: true,
+        batchSize: 10,
+        enableRetries: true,
+        enableDeferredProcessing: false,
+        logResults: false,
+        executionAdapter,
+        useAuctionMode: false,
+      },
+      {
+        queueService: service,
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.failedProcessing).toBe(1);
+    expect(service.recordFailedAttempt).toHaveBeenCalled();
+  });
+
   it("VaultOrchestrator reports composition invalid when all strategies are inactive", () => {
     const inactiveStrategy: StrategyModule = {
       id: "s1", name: "S1", version: "1",
@@ -463,7 +659,7 @@ describe("Fail-closed properties (PBT)", () => {
     fc.assert(
       fc.property(
         fc.option(fc.integer({ min: 1, max: 1_000_000 })),
-        (refPrice) => {
+        (refPrice: number | null) => {
           const r = evaluateOracle(null, refPrice ?? null, DEFAULT_THRESHOLDS, Date.now());
           return r.decision === "BLOCK";
         },
@@ -477,7 +673,7 @@ describe("Fail-closed properties (PBT)", () => {
         fc.integer({ min: 1, max: 1_000_000 }),  // current price
         fc.integer({ min: 1, max: 1_000_000 }),  // reference price
         fc.integer({ min: 1, max: 3_600_000 }),  // extra staleness ms
-        (price, ref, extra) => {
+        (price: number, ref: number, extra: number) => {
           const reading = makeStaleReading(price, DEFAULT_THRESHOLDS.maxAgeMs + extra);
           const r = evaluateOracle(reading, ref, DEFAULT_THRESHOLDS, Date.now());
           return r.decision === "BLOCK";
@@ -491,7 +687,7 @@ describe("Fail-closed properties (PBT)", () => {
       fc.property(
         fc.integer({ min: 1, max: 1_000_000 }),  // reference price
         fc.double({ min: 1.1, max: 5.0 }),        // multiplier > 5%
-        (ref, multiplier) => {
+        (ref: number, multiplier: number) => {
           const price = Math.round(ref * (1 + DEFAULT_THRESHOLDS.maxDeviationPct / 100 * multiplier));
           const reading = makeFreshReading(price);
           const r = evaluateOracle(reading, ref, DEFAULT_THRESHOLDS, Date.now());
@@ -509,7 +705,7 @@ describe("Fail-closed properties (PBT)", () => {
       fc.property(
         fc.integer({ min: 0, max: 10_000 }),  // current fee in stroops
         fc.integer({ min: 0, max: 10_000 }),  // baseline fee
-        (current, baseline) => {
+        (current: number, baseline: number) => {
           const alert = computeFeeDeviationAlert(current, baseline);
           return ["normal", "warning", "critical"].includes(alert.level);
         },
@@ -528,7 +724,13 @@ describe("Fail-closed properties (PBT)", () => {
           }),
           { minLength: 1, maxLength: 5 },
         ),
-        (strategyParams) => {
+        (
+          strategyParams: Array<{
+            weight: number;
+            performanceScore: number;
+            isActive: boolean;
+          }>,
+        ) => {
           const strategies: StrategyModule[] = strategyParams.map((p, i) => ({
             id: `s${i}`,
             name: `Strategy ${i}`,
@@ -563,6 +765,61 @@ describe("Fail-closed properties (PBT)", () => {
     );
   });
 });
+
+function createQueueEntry(overrides: Partial<RebalanceQueueEntryDTO> = {}): RebalanceQueueEntryDTO {
+  const now = new Date();
+  return {
+    id: "queue-1",
+    vaultId: "vault-1",
+    status: REBALANCE_STATUS.PENDING,
+    executionType: EXECUTION_TYPE.FULL,
+    targetAllocations: { Blend: 0.6, Soroswap: 0.4 },
+    currentAllocations: { Blend: 0.5, Soroswap: 0.5 },
+    executionStrategy: {},
+    partiallyExecuted: false,
+    partialFillAmount: 0,
+    intentHash: "intent-1",
+    attemptCount: 0,
+    maxRetries: 3,
+    nextRetryAt: null,
+    deferredUntil: null,
+    followUpEntryId: null,
+    lastError: null,
+    lastTransactionHash: null,
+    lastLedger: null,
+    lastErrorClass: null,
+    executionMetadata: null,
+    completedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
+function createQueueServiceHarness(entry: RebalanceQueueEntryDTO) {
+  return {
+    getPendingRetries: jest.fn(async () => [entry]),
+    getDeferredEntries: jest.fn(async () => []),
+    markAsProcessing: jest.fn(async () => ({
+      ...entry,
+      status: REBALANCE_STATUS.PROCESSING,
+    })),
+    recordPartialExecution: jest.fn(async () => ({
+      ...entry,
+      status: REBALANCE_STATUS.COMPLETED,
+      partiallyExecuted: false,
+      partialFillAmount: 100,
+      completedAt: new Date(),
+    })),
+    recordFailedAttempt: jest.fn(async () => ({
+      ...entry,
+      status: REBALANCE_STATUS.FAILED,
+      attemptCount: entry.attemptCount + 1,
+      lastError: "Job processing failed",
+      completedAt: new Date(),
+    })),
+  };
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // RETRY & FALLBACK ASSERTIONS

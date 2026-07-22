@@ -38,7 +38,10 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 },
                 {
-                  "bytes": "0101010101010101010101010101010101010101010101010101010101010101"
+                  "u32": 51
+                },
+                {
+                  "bytes": "0854a72309ca81bdcbbd9ac0e414192b85a4a07c327c1268d5212bfc18cd10fe"
                 }
               ]
             }
@@ -159,12 +162,12 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "Epoch"
+                              "symbol": "CampaignId"
                             }
                           ]
                         },
                         "val": {
-                          "u32": 1
+                          "u32": 51
                         }
                       },
                       {
@@ -188,7 +191,7 @@
                           ]
                         },
                         "val": {
-                          "bytes": "0101010101010101010101010101010101010101010101010101010101010101"
+                          "bytes": "0854a72309ca81bdcbbd9ac0e414192b85a4a07c327c1268d5212bfc18cd10fe"
                         }
                       },
                       {
