@@ -257,7 +257,7 @@ jobs:
           node-version: 20
 
       - name: Install Stellar CLI
-        run: cargo install --locked stellar-cli --version 25.1.0
+        run: cargo install --locked stellar-cli --version 26.0.0
 
       - name: Install SDK dependencies
         run: cd packages/sdk && npm install
