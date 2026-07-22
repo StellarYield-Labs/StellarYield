@@ -779,7 +779,7 @@ export class RebalanceAuctionService {
         intentId,
         eventType,
         actor,
-        details,
+        details: details as any,
       },
     });
   }
