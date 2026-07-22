@@ -56,7 +56,34 @@ const AUDIT_ALLOWLIST = [
   "/api/auth/verify", // External identity provider — not registered in app.ts yet
   "/api/graphql", // GraphQL endpoint — managed separately via yoga
   "/api/events", // Internal diagnostics — may be disabled in some environments
+  "/api/rewards", // Reward service is implemented outside the main server routes
 ];
+
+function normalizeTemplatePath(pathStr: string): string {
+  let normalized = pathStr;
+  while (true) {
+    const start = normalized.indexOf("${");
+    if (start === -1) break;
+    const end = normalized.indexOf("}", start + 2);
+    if (end === -1) break;
+
+    const before = normalized.slice(0, start);
+    const after = normalized.slice(end + 1);
+
+    if (before.endsWith("/")) {
+      normalized = `${before}:param${after}`;
+    } else {
+      normalized = `${before}${after}`;
+    }
+  }
+
+  normalized = normalized.replace(/\/{2,}/g, "/");
+  return normalized;
+}
+
+function normalizeParamSegments(pathStr: string): string {
+  return pathStr.replace(/:[^/]+/g, ":param");
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utility: Recursive file finder
@@ -135,7 +162,9 @@ function scanFrontendApis(clientDir: string): EndpointPattern[] {
           if (!pathStr.startsWith("/api/")) continue;
 
           // Normalize path (remove query params and fragments)
-          const normalizedPath = pathStr.split("?")[0].split("#")[0];
+          const normalizedPath = normalizeTemplatePath(
+            pathStr.split("?")[0].split("#")[0],
+          );
 
           // Try to determine HTTP method from context
           const method = inferHttpMethod(content, match.index);
@@ -168,24 +197,23 @@ function inferHttpMethod(
   content: string,
   matchIndex: number,
 ): "GET" | "POST" | "PUT" | "DELETE" | "PATCH" {
-  // Look backwards from match for HTTP method hints
-  const beforeMatch = content.substring(
-    Math.max(0, matchIndex - 200),
-    matchIndex,
+  const window = content.substring(
+    Math.max(0, matchIndex - 300),
+    Math.min(content.length, matchIndex + 400),
   );
 
-  if (/method\s*:\s*["'`]?(POST|PUT|DELETE|PATCH)["'`]?/i.test(beforeMatch)) {
-    const methodMatch = beforeMatch.match(
-      /method\s*:\s*["'`]?(POST|PUT|DELETE|PATCH)["'`]?/i,
-    );
-    return (methodMatch?.[1]?.toUpperCase() as any) || "GET";
+  const methodMatch = window.match(
+    /method\s*:\s*["'`]?(GET|POST|PUT|DELETE|PATCH)["'`]?/i,
+  );
+  if (methodMatch?.[1]) {
+    return methodMatch[1].toUpperCase() as any;
   }
 
-  if (
-    /["']method["']\s*,\s*["'](POST|PUT|DELETE|PATCH)["']/i.test(beforeMatch)
-  ) {
-    const methodMatch = beforeMatch.match(/["'](POST|PUT|DELETE|PATCH)["']/i);
-    return (methodMatch?.[1]?.toUpperCase() as any) || "GET";
+  const altMethodMatch = window.match(
+    /["']method["']\s*,\s*["'`](GET|POST|PUT|DELETE|PATCH)["'`]/i,
+  );
+  if (altMethodMatch?.[1]) {
+    return altMethodMatch[1].toUpperCase() as any;
   }
 
   // Default to GET if no method found
@@ -345,13 +373,16 @@ function auditCoverage(
 
   // Build a map of path -> [endpoints] for backend (to handle multiple methods)
   for (const endpoint of backendEndpoints) {
-    if (!backendMap.has(endpoint.path)) {
-      backendMap.set(endpoint.path, []);
+    const normalizedPath = normalizeParamSegments(endpoint.path);
+    if (!backendMap.has(normalizedPath)) {
+      backendMap.set(normalizedPath, []);
     }
-    backendMap.get(endpoint.path)!.push(endpoint);
+    backendMap.get(normalizedPath)!.push(endpoint);
   }
 
   for (const frontend of frontendEndpoints) {
+    const normalizedFrontendPath = normalizeParamSegments(frontend.path);
+
     // Skip allowlisted endpoints
     if (AUDIT_ALLOWLIST.some((allow) => frontend.path.startsWith(allow))) {
       findings.push({
@@ -365,7 +396,7 @@ function auditCoverage(
     }
 
     // Exact match with same method
-    const backendAtPath = backendMap.get(frontend.path) || [];
+    const backendAtPath = backendMap.get(normalizedFrontendPath) || [];
     const exactMatch = backendAtPath.find((e) => e.method === frontend.method);
 
     if (exactMatch) {
@@ -403,7 +434,10 @@ function auditCoverage(
     const prefixMatch = backendEndpoints.find(
       (e) =>
         e.method === frontend.method &&
-        (frontend.path.startsWith(e.path + "/") || frontend.path === e.path),
+        (normalizeParamSegments(frontend.path).startsWith(
+          normalizeParamSegments(e.path) + "/",
+        ) ||
+          normalizeParamSegments(frontend.path) === normalizeParamSegments(e.path)),
     );
 
     if (prefixMatch) {

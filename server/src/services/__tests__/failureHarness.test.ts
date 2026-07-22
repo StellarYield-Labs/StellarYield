@@ -52,6 +52,7 @@ import {
   type StrategyModule,
 } from "../vaultOrchestratorService";
 
+import { MockExecutionAdapter } from "../rebalanceExecutionAdapter";
 import { runRebalanceQueueProcessorJob } from "../../jobs/rebalanceQueueProcessorJob";
 import { REBALANCE_STATUS, EXECUTION_TYPE } from "../../queues/types";
 import type {
@@ -161,6 +162,12 @@ describe("Failure class: TIMEOUT", () => {
   it("rebalance execution schedules a failed attempt when the executor times out", async () => {
     const queueEntry = createQueueEntry();
     const service = createQueueServiceHarness(queueEntry);
+    const executionAdapter = new MockExecutionAdapter().addSubmitResult({
+      success: false,
+      status: "failed",
+      error: "Timeout after 100ms",
+      errorClass: "transient",
+    });
 
     const result = await runRebalanceQueueProcessorJob(
       {
@@ -169,20 +176,11 @@ describe("Failure class: TIMEOUT", () => {
         enableRetries: true,
         enableDeferredProcessing: false,
         logResults: false,
+        executionAdapter,
+        useAuctionMode: false,
       },
       {
         queueService: service,
-        executeRebalance: async () => {
-          const harness = buildHarnessFor(
-            async () =>
-              new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error("Timeout after 100ms")), 100),
-              ),
-          );
-          const timedOut = await harness.inject(FailureMode.TIMEOUT, { delayMs: 25 });
-          if (timedOut.error) throw timedOut.error;
-          throw new Error("Expected timeout result.");
-        },
       },
     );
 
@@ -274,6 +272,15 @@ describe("Failure class: STALE_DATA", () => {
   it("rebalance execution rejects stale execution results", async () => {
     const queueEntry = createQueueEntry();
     const service = createQueueServiceHarness(queueEntry);
+    const executionAdapter = new MockExecutionAdapter().addSubmitResult({
+      success: true,
+      status: "confirmed",
+      transactionHash: "0xstale",
+      ledger: 12345,
+      metadata: {
+        timestamp: new Date(Date.now() - 10 * 60_000).toISOString(),
+      },
+    });
 
     const result = await runRebalanceQueueProcessorJob(
       {
@@ -282,19 +289,11 @@ describe("Failure class: STALE_DATA", () => {
         enableRetries: true,
         enableDeferredProcessing: false,
         logResults: false,
+        executionAdapter,
+        useAuctionMode: false,
       },
       {
         queueService: service,
-        executeRebalance: async () => ({
-          queueEntryId: queueEntry.id,
-          totalExecuted: 100,
-          expectedAmount: 100,
-          filledPercentage: 100,
-          executionDetails: {
-            status: "completed",
-            timestamp: new Date(Date.now() - 10 * 60_000).toISOString(),
-          },
-        }),
       },
     );
 
@@ -390,6 +389,16 @@ describe("Failure class: MALFORMED_RESPONSE", () => {
   it("rebalance execution rejects malformed executor output", async () => {
     const queueEntry = createQueueEntry();
     const service = createQueueServiceHarness(queueEntry);
+    const executionAdapter = new MockExecutionAdapter().addSubmitResult({
+      success: true,
+      status: "confirmed",
+      transactionHash: "0xmalformed",
+      ledger: 12345,
+      metadata: {
+        filledPercentage: 150,
+        totalExecuted: Number.NaN,
+      },
+    });
 
     const result = await runRebalanceQueueProcessorJob(
       {
@@ -398,17 +407,11 @@ describe("Failure class: MALFORMED_RESPONSE", () => {
         enableRetries: true,
         enableDeferredProcessing: false,
         logResults: false,
+        executionAdapter,
+        useAuctionMode: false,
       },
       {
         queueService: service,
-        executeRebalance: async () =>
-          ({
-            queueEntryId: "",
-            totalExecuted: Number.NaN,
-            expectedAmount: 100,
-            filledPercentage: 150,
-            executionDetails: null,
-          } as unknown as RebalanceExecutionResult),
       },
     );
 
@@ -450,9 +453,14 @@ describe("Failure class: RATE_LIMIT", () => {
   it("rebalance execution records a retryable failure when the executor is rate-limited", async () => {
     const queueEntry = createQueueEntry();
     const service = createQueueServiceHarness(queueEntry);
-    const rateLimitError = Object.assign(new Error("HTTP 429 Too Many Requests"), {
-      status: 429,
-      retryAfter: 30,
+    const executionAdapter = new MockExecutionAdapter().addSubmitResult({
+      success: false,
+      status: "failed",
+      error: "HTTP 429 Too Many Requests",
+      errorClass: "transient",
+      metadata: {
+        retryAfter: 30,
+      },
     });
 
     const result = await runRebalanceQueueProcessorJob(
@@ -462,12 +470,11 @@ describe("Failure class: RATE_LIMIT", () => {
         enableRetries: true,
         enableDeferredProcessing: false,
         logResults: false,
+        executionAdapter,
+        useAuctionMode: false,
       },
       {
         queueService: service,
-        executeRebalance: async () => {
-          throw rateLimitError;
-        },
       },
     );
 
@@ -590,6 +597,15 @@ describe("Failure class: HARD_FAILURE", () => {
   it("rebalance execution fails closed on hard upstream failures", async () => {
     const queueEntry = createQueueEntry();
     const service = createQueueServiceHarness(queueEntry);
+    const executionAdapter = new MockExecutionAdapter().addSubmitResult({
+      success: false,
+      status: "failed",
+      error: "upstream service unavailable",
+      errorClass: "transient",
+      metadata: {
+        code: "ECONNREFUSED",
+      },
+    });
 
     const result = await runRebalanceQueueProcessorJob(
       {
@@ -598,14 +614,11 @@ describe("Failure class: HARD_FAILURE", () => {
         enableRetries: true,
         enableDeferredProcessing: false,
         logResults: false,
+        executionAdapter,
+        useAuctionMode: false,
       },
       {
         queueService: service,
-        executeRebalance: async () => {
-          throw Object.assign(new Error("upstream service unavailable"), {
-            code: "ECONNREFUSED",
-          });
-        },
       },
     );
 
@@ -769,6 +782,10 @@ function createQueueEntry(overrides: Partial<RebalanceQueueEntryDTO> = {}): Reba
     deferredUntil: null,
     followUpEntryId: null,
     lastError: null,
+    lastTransactionHash: null,
+    lastLedger: null,
+    lastErrorClass: null,
+    executionMetadata: null,
     completedAt: null,
     createdAt: now,
     updatedAt: now,

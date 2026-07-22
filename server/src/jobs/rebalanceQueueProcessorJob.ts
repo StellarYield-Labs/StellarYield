@@ -27,7 +27,12 @@ import {
   ExecutionSubmitResult,
   RebalanceExecutionRequest,
 } from '../services/rebalanceExecutionAdapter';
-import { rebalanceQueueService, PartialFillConfig } from '../services/rebalanceQueueService';
+import {
+  rebalanceQueueService,
+  PartialFillConfig,
+  type RebalanceExecutionResult,
+  type RebalanceQueueEntryDTO,
+} from '../services/rebalanceQueueService';
 import { rebalanceAuctionService, CreateIntentRequest } from '../services/rebalanceAuctionService';
 import { REBALANCE_STATUS } from '../queues/types';
 
@@ -68,7 +73,12 @@ export interface RebalanceQueueProcessorService {
   recordFailedAttempt(
     queueEntryId: string,
     error: string,
-    config?: Partial<PartialFillConfig>,
+    config?: Partial<PartialFillConfig> & {
+      transactionHash?: string;
+      ledger?: number;
+      errorClass?: string;
+      executionMetadata?: Record<string, unknown>;
+    },
   ): Promise<RebalanceQueueEntryDTO>;
 }
 
@@ -83,6 +93,15 @@ export interface RebalanceQueueProcessorDependencies {
 const REBALANCE_RESULT_MAX_AGE_MS = Number(
   process.env.REBALANCE_RESULT_MAX_AGE_MS ?? 2 * 60 * 1000,
 );
+
+class JobEntryFailure extends Error {
+  readonly alreadyRecorded: boolean;
+
+  constructor(message: string, alreadyRecorded: boolean) {
+    super(message);
+    this.alreadyRecorded = alreadyRecorded;
+  }
+}
 
 let jobHandle: ReturnType<typeof setInterval> | null = null;
 
@@ -150,6 +169,7 @@ export async function runRebalanceQueueProcessorJob(
   success: boolean;
   processedRetries: number;
   processedDeferred: number;
+  processedAuction: number;
   failedProcessing: number;
   timestamp: string;
 }>;
@@ -187,18 +207,21 @@ export async function runRebalanceQueueProcessorJob(
             await processQueueEntryWithAuction(entry, config);
             processedAuction++;
           } else {
-            await processQueueEntryLegacy(entry, config);
+            await processQueueEntryLegacy(entry, config, queueService);
             processedRetries++;
           }
         } catch (error) {
           console.error(`Failed to process retry for entry ${entry.id}:`, error);
           failedProcessing++;
 
-          await rebalanceQueueService.recordFailedAttempt(
-            entry.id,
-            `Job processing failed: ${error instanceof Error ? error.message : String(error)}`,
-            { errorClass: 'terminal', executionMetadata: { jobError: true } },
-          );
+          if (error instanceof JobEntryFailure && error.alreadyRecorded) {
+            continue;
+          }
+
+          await queueService.recordFailedAttempt(entry.id, String(error), {
+            errorClass: 'terminal',
+            executionMetadata: { jobError: true },
+          });
         }
       }
     }
@@ -218,18 +241,21 @@ export async function runRebalanceQueueProcessorJob(
             await processQueueEntryWithAuction(entry, config);
             processedAuction++;
           } else {
-            await processQueueEntryLegacy(entry, config);
+            await processQueueEntryLegacy(entry, config, queueService);
             processedDeferred++;
           }
         } catch (error) {
           console.error(`Failed to process deferred entry ${entry.id}:`, error);
           failedProcessing++;
 
-          await rebalanceQueueService.recordFailedAttempt(
-            entry.id,
-            `Job processing failed: ${error instanceof Error ? error.message : String(error)}`,
-            { errorClass: 'terminal', executionMetadata: { jobError: true } },
-          );
+          if (error instanceof JobEntryFailure && error.alreadyRecorded) {
+            continue;
+          }
+
+          await queueService.recordFailedAttempt(entry.id, String(error), {
+            errorClass: 'terminal',
+            executionMetadata: { jobError: true },
+          });
         }
       }
     }
@@ -395,6 +421,7 @@ async function processQueueEntryWithAuction(
 async function processQueueEntryLegacy(
   entry: QueueEntryForProcessing,
   config: JobConfig,
+  queueService: RebalanceQueueProcessorService,
 ): Promise<void> {
   const queueEntryId = entry.id;
 
@@ -402,7 +429,7 @@ async function processQueueEntryLegacy(
     return;
   }
 
-  await rebalanceQueueService.markAsProcessing(queueEntryId);
+  await queueService.markAsProcessing(queueEntryId);
 
   const request: RebalanceExecutionRequest = {
     queueEntryId,
@@ -417,7 +444,7 @@ async function processQueueEntryLegacy(
 
   const simulationResult = await config.executionAdapter.simulate(request);
   if (!simulationResult.success) {
-    await rebalanceQueueService.recordFailedAttempt(
+    await queueService.recordFailedAttempt(
       queueEntryId,
       simulationResult.error ?? 'Simulation failed',
       {
@@ -426,12 +453,46 @@ async function processQueueEntryLegacy(
         executionMetadata: simulationResult.metadata,
       },
     );
-    return;
+    throw new JobEntryFailure(
+      simulationResult.error ?? 'Simulation failed',
+      true,
+    );
   }
 
   const submitResult = await config.executionAdapter.submit(request);
 
   if (submitResult.success) {
+    const timestampRaw = submitResult.metadata?.timestamp;
+    if (typeof timestampRaw === 'string') {
+      const ts = new Date(timestampRaw).getTime();
+      if (Number.isFinite(ts) && Date.now() - ts > REBALANCE_RESULT_MAX_AGE_MS) {
+        await queueService.recordFailedAttempt(
+          queueEntryId,
+          'Stale execution result',
+          { errorClass: 'terminal', executionMetadata: submitResult.metadata },
+        );
+        throw new JobEntryFailure('Stale execution result', true);
+      }
+    }
+
+    const filledPercentage = (submitResult.metadata?.filledPercentage as number | undefined) ?? 100;
+    const totalExecuted = (submitResult.metadata?.totalExecuted as number | undefined) ?? filledPercentage;
+
+    if (
+      !Number.isFinite(filledPercentage) ||
+      filledPercentage < 0 ||
+      filledPercentage > 100 ||
+      !Number.isFinite(totalExecuted) ||
+      totalExecuted < 0
+    ) {
+      await queueService.recordFailedAttempt(
+        queueEntryId,
+        'Malformed executor output',
+        { errorClass: 'terminal', executionMetadata: submitResult.metadata },
+      );
+      throw new JobEntryFailure('Malformed executor output', true);
+    }
+
     await rebalanceQueueService.recordSubmission(
       queueEntryId,
       submitResult.transactionHash ?? '',
@@ -439,9 +500,6 @@ async function processQueueEntryLegacy(
       submitResult.errorClass,
       submitResult.metadata,
     );
-
-    const filledPercentage = (submitResult.metadata?.filledPercentage as number | undefined) ?? 100;
-    const totalExecuted = (submitResult.metadata?.totalExecuted as number | undefined) ?? filledPercentage;
 
     if (filledPercentage >= 100) {
       await rebalanceQueueService.markAsCompleted(
@@ -475,7 +533,7 @@ async function processQueueEntryLegacy(
     }
   } else {
     const isTerminal = submitResult.errorClass === 'terminal';
-    await rebalanceQueueService.recordFailedAttempt(
+    await queueService.recordFailedAttempt(
       queueEntryId,
       submitResult.error ?? 'Submission failed',
       {
@@ -487,6 +545,7 @@ async function processQueueEntryLegacy(
         executionMetadata: submitResult.metadata,
       },
     );
+    throw new JobEntryFailure(submitResult.error ?? 'Submission failed', true);
   }
 }
 

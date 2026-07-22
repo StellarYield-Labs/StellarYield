@@ -70,14 +70,7 @@ fn test_governance_lifecycle() {
     // 1. Propose
     let args: Vec<Val> = vec![&env, 10i128.into_val(&env)];
     let hash = dummy_hash(&env, 1);
-    let proposal_id = client.propose(
-        &admin,
-        &target,
-        &action_fn,
-        &args,
-        &hash,
-        &EXPIRY_WINDOW,
-    );
+    let proposal_id = client.propose(&admin, &target, &action_fn, &args, &hash, &EXPIRY_WINDOW);
 
     assert_eq!(proposal_id, 1);
     let proposal = client.get_proposal(&1).unwrap();
