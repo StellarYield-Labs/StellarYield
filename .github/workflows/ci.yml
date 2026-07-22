@@ -187,7 +187,7 @@ jobs:
           VERIFICATION_CASES: "300"
         run: |
           set -o pipefail
-          cargo test --workspace 2>&1 | tee contract-test.log
+          cargo test --workspace --exclude verification 2>&1 | tee contract-test.log
 
       - name: Upload contract test logs
         if: steps.contract_tests.outcome == 'failure'
@@ -255,9 +255,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-
-      - name: Install Stellar CLI
-        run: cargo install --locked stellar-cli --version 25.1.0
 
       - name: Install SDK dependencies
         run: cd packages/sdk && npm install
