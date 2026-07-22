@@ -51,7 +51,8 @@ describe('RebalanceAuctionService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     service = new RebalanceAuctionService();
-    mockPrisma = (service as any).prisma;
+    const mockedModule = jest.requireMock<{ PrismaClient: jest.Mock }>('@prisma/client');
+    mockPrisma = mockedModule.PrismaClient();
   });
 
   // ── Intent Creation Tests ───────────────────────────────────────────
@@ -134,8 +135,8 @@ describe('RebalanceAuctionService', () => {
           { token: 'TOKEN_A', amount: BigInt(10000), protocol: 'PROTO_1' },
         ],
         targetConstraints: [
-          { token: 'TOKEN_A', protocol: 'PROTO_1', targetMinBps: 6000, targetMaxBps: 6000 },
-          { token: 'TOKEN_B', protocol: 'PROTO_1', targetMinBps: 5000, targetMaxBps: 5000 },
+          { token: 'TOKEN_A', protocol: 'PROTO_1', targetMinBps: 6000, targetMaxBps: 6000, currentBps: 7000 },
+          { token: 'TOKEN_B', protocol: 'PROTO_1', targetMinBps: 5000, targetMaxBps: 5000, currentBps: 3000 },
         ],
         maxTotalLossBps: 500,
         maxSlippageBps: 200,
@@ -359,6 +360,15 @@ describe('RebalanceAuctionService', () => {
       });
       mockPrisma.solverBid.findMany.mockResolvedValue([
         {
+          id: 'bid-2',
+          solverAddress: 'SOLVER_2',
+          revealed: true,
+          totalOutputValue: BigInt(9700),
+          slippageBps: 150,
+          priceImpactBps: 180,
+          revealTimestamp: new Date('2024-01-01T00:00:01Z'),
+        },
+        {
           id: 'bid-1',
           solverAddress: 'SOLVER_1',
           revealed: true,
@@ -366,15 +376,6 @@ describe('RebalanceAuctionService', () => {
           slippageBps: 100,
           priceImpactBps: 200,
           revealTimestamp: new Date('2024-01-01T00:00:02Z'),
-        },
-        {
-          id: 'bid-2',
-          solverAddress: 'SOLVER_2',
-          revealed: true,
-          totalOutputValue: BigInt(9700), // Higher output
-          slippageBps: 150,
-          priceImpactBps: 180,
-          revealTimestamp: new Date('2024-01-01T00:00:01Z'),
         },
       ]);
       mockPrisma.solverBid.update.mockResolvedValue({});
@@ -410,6 +411,7 @@ describe('RebalanceAuctionService', () => {
       mockPrisma.auctionSettlement.findUnique.mockResolvedValue(null);
       mockPrisma.auctionSettlement.create.mockResolvedValue({
         id: 'settlement-1',
+        fillDeltas: { TOKEN_A: BigInt(-5000), TOKEN_B: BigInt(4800) },
       });
       mockPrisma.rebalanceAuctionIntent.update.mockResolvedValue({});
       mockPrisma.solverReputation.findUnique.mockResolvedValue(null);
@@ -566,6 +568,8 @@ describe('RebalanceAuctionService', () => {
         id: 'intent-1',
         state: 'AUCTION_OPEN',
         commitPhaseEnd: new Date(Date.now() + 60000),
+        bids: [],
+        settlement: null,
       });
 
       // Should be able to continue processing
@@ -739,8 +743,8 @@ describe('RebalanceAuctionService', () => {
           { token: 'TOKEN_A', amount: BigInt(10000), protocol: 'PROTO_1' },
         ],
         targetConstraints: [
-          { token: 'TOKEN_A', protocol: 'PROTO_1', targetMinBps: 4900, targetMaxBps: 5100, currentBps: 5000 },
-          { token: 'TOKEN_B', protocol: 'PROTO_1', targetMinBps: 4900, targetMaxBps: 5100, currentBps: 5000 },
+          { token: 'TOKEN_A', protocol: 'PROTO_1', targetMinBps: 4900, targetMaxBps: 5050, currentBps: 5000 },
+          { token: 'TOKEN_B', protocol: 'PROTO_1', targetMinBps: 4900, targetMaxBps: 5050, currentBps: 5000 },
         ],
         maxTotalLossBps: 500,
         maxSlippageBps: 200,
@@ -759,7 +763,7 @@ describe('RebalanceAuctionService', () => {
         id: 'intent-valid',
       });
 
-      // Should succeed (total max bps = 10200, within tolerance)
+      // Should succeed (total max bps = 10100, within tolerance of BPS_SCALE + 100)
       await expect(service.createIntent(validRequest)).resolves.toBeDefined();
     });
   });

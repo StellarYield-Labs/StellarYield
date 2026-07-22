@@ -44,6 +44,8 @@ import sharePriceHistoryRouter from "./routes/sharePriceHistory";
 import fragmentationRouter from "./routes/fragmentation";
 import indexerRouter from "./routes/indexer";
 import contactsRouter from "./routes/contacts";
+import relayerStatusRouter from "./routes/relayerStatus";
+import auditReplayRouter from "./routes/auditReplay";
 
 import { createAuthChallenge, verifyAuthChallenge } from "./utils/stellarAuth";
 import {
@@ -135,6 +137,8 @@ export function createApp() {
   app.use("/api/presets", presetsRouter);
   app.use("/api/analytics", analyticsRouter);
   app.use("/api/contacts", contactsRouter);
+  app.use("/api/relayer", relayerStatusRouter);
+  app.use("/api/audit-replay", auditReplayRouter);
 
 
   // Legacy JSON metrics (internal tooling)

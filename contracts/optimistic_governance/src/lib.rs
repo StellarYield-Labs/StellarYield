@@ -153,7 +153,10 @@ impl OptimisticGovernance {
         let allowed: bool = env
             .storage()
             .instance()
-            .get(&DataKey::AllowedAction(contract_id.clone(), function.clone()))
+            .get(&DataKey::AllowedAction(
+                contract_id.clone(),
+                function.clone(),
+            ))
             .unwrap_or(false);
         if !allowed {
             return Err(Error::ActionNotAllowed);
@@ -290,10 +293,8 @@ impl OptimisticGovernance {
             .persistent()
             .set(&DataKey::Proposal(proposal_id), &proposal);
 
-        env.events().publish(
-            (symbol_short!("resolve"), proposal_id),
-            (reinstate,),
-        );
+        env.events()
+            .publish((symbol_short!("resolve"), proposal_id), (reinstate,));
 
         Ok(())
     }
@@ -398,7 +399,11 @@ impl OptimisticGovernance {
 
         env.events().publish(
             (symbol_short!("execute"), proposal_id),
-            (proposal.contract_id, proposal.function, proposal.action_hash),
+            (
+                proposal.contract_id,
+                proposal.function,
+                proposal.action_hash,
+            ),
         );
 
         Ok(result)
