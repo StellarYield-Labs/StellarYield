@@ -1,0 +1,11 @@
+{
+  "name": "stablecoin_cr_wraps_silently",
+  "subsystem": "stablecoin_manager",
+  "seed": 0,
+  "model_version": "verification-model-v1",
+  "description": "calculate_cr computes (collateral_value*10000)/debt_value as i128 then casts `as u32`, which truncates silently instead of saturating/erroring once the true ratio exceeds u32::MAX bps. A healthy position (large collateral, tiny debt) reports a wrapped, essentially arbitrary CR instead of a very safe one.",
+  "inputs": {
+    "collateral_value": 1000000000000,
+    "debt_value": 1
+  }
+}

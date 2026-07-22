@@ -1,0 +1,57 @@
+name: Extended Differential Verification
+
+# Full 10,000-case-per-formula differential/property corpus for the AMM,
+# options, and perpetual math verification harness (contracts/verification,
+# issue #83). Too slow for every PR — ci.yml's `contracts` job runs a
+# bounded 300-case smoke corpus on every PR instead; this runs the full
+# corpus nightly plus on demand, and uploads the resource snapshots and any
+# newly-recorded regression fixtures for human review (never auto-committed).
+on:
+  schedule:
+    # Nightly at 03:17 UTC (off the hour, to avoid piling onto GitHub's
+    # top-of-hour scheduling load).
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  extended-verification:
+    name: Full differential verification corpus
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run full verification corpus
+        id: verification
+        continue-on-error: true
+        shell: bash
+        env:
+          VERIFICATION_CASES: "10000"
+        run: |
+          set -o pipefail
+          cargo test -p verification -- --include-ignored 2>&1 | tee verification-extended.log
+
+      - name: Upload verification report and logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-extended-${{ github.run_id }}
+          path: |
+            contracts/verification-extended.log
+            contracts/verification/resource_snapshots/
+            contracts/verification/regression/
+            docs/differential-verification.md
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Fail job if the extended corpus failed
+        if: steps.verification.outcome == 'failure'
+        run: exit 1

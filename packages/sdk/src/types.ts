@@ -2,6 +2,7 @@ export interface VaultConfig {
   contractId: string;
   networkPassphrase: string;
   rpcUrl: string;
+  specHashPin?: string;
 }
 
 export interface ApiConfig {
@@ -19,6 +20,22 @@ export interface WithdrawParams {
   shares: string;
 }
 
+export interface HarvestParams {
+  caller: string;
+  minAmountOut: string;
+}
+
+export interface RebalanceParams {
+  caller: string;
+  target: string;
+  amount: string;
+}
+
+export interface EmergencyWithdrawParams {
+  to: string;
+  shares: string;
+}
+
 export interface VaultInfo {
   totalShares: string;
   totalAssets: string;
@@ -27,6 +44,9 @@ export interface VaultInfo {
 }
 
 export interface ApiVaultData {
+  id?: string;
+  name?: string;
+  symbol?: string;
   apy: number;
   tvl: number;
   historicalData: HistoricalDataPoint[];
@@ -42,3 +62,10 @@ export interface SDKConfig {
   vault: VaultConfig;
   api?: ApiConfig;
 }
+
+export type {
+  TransactionStatus,
+  WaitOptions,
+} from "./lifecycle";
+
+export type { SignerAdapter } from "./signers";

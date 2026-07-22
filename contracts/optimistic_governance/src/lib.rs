@@ -1,7 +1,7 @@
 #![no_std]
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, symbol_short, Address, Env, Symbol, Val, Vec,
+    contract, contracterror, contractimpl, symbol_short, Address, BytesN, Env, Symbol, Val, Vec,
 };
 
 mod storage;
@@ -24,6 +24,10 @@ pub enum Error {
     ProposalAlreadyExecuted = 7,
     InsufficientVotingPower = 8,
     ChallengeWindowExpired = 9,
+    ActionNotAllowed = 10,
+    ProposalExpired = 11,
+    ProposalCancelled = 12,
+    ProposalNotExecutable = 13,
 }
 
 // Interface for ve_tokenomics (veYIELD)
@@ -66,13 +70,74 @@ impl OptimisticGovernance {
         Ok(())
     }
 
-    /// Submit a proposal with a payload to be executed after the challenge window.
+    /// Register a (contract, function) pair as callable by governance
+    /// proposals. Only the admin may extend the allowlist. Generic
+    /// arbitrary invocation is impossible unless the target has been
+    /// explicitly allowlisted here.
+    pub fn allow_action(
+        env: Env,
+        caller: Address,
+        contract_id: Address,
+        function: Symbol,
+    ) -> Result<(), Error> {
+        Self::require_init(&env)?;
+        caller.require_auth();
+
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if caller != admin {
+            return Err(Error::Unauthorized);
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::AllowedAction(contract_id, function), &true);
+
+        Ok(())
+    }
+
+    /// Remove a (contract, function) pair from the allowlist.
+    pub fn revoke_action(
+        env: Env,
+        caller: Address,
+        contract_id: Address,
+        function: Symbol,
+    ) -> Result<(), Error> {
+        Self::require_init(&env)?;
+        caller.require_auth();
+
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if caller != admin {
+            return Err(Error::Unauthorized);
+        }
+
+        env.storage()
+            .instance()
+            .remove(&DataKey::AllowedAction(contract_id, function));
+
+        Ok(())
+    }
+
+    pub fn is_action_allowed(env: Env, contract_id: Address, function: Symbol) -> bool {
+        env.storage()
+            .instance()
+            .get(&DataKey::AllowedAction(contract_id, function))
+            .unwrap_or(false)
+    }
+
+    /// Submit a proposal with a payload to be executed after the challenge
+    /// window. `action_hash` must be the sha256 of the canonical
+    /// GovernanceAction reviewed off-chain (see actionSchema.ts) so that the
+    /// action executed on-chain is byte-for-byte the action that was
+    /// reviewed. `expiry_window` bounds how long the proposal remains
+    /// executable once its challenge window ends.
     pub fn propose(
         env: Env,
         proposer: Address,
         contract_id: Address,
         function: Symbol,
         args: Vec<Val>,
+        action_hash: BytesN<32>,
+        expiry_window: u64,
     ) -> Result<u64, Error> {
         Self::require_init(&env)?;
         proposer.require_auth();
@@ -81,6 +146,17 @@ impl OptimisticGovernance {
         let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
         if proposer != admin {
             return Err(Error::Unauthorized);
+        }
+
+        // Enforce the on-chain allowlist. Generic arbitrary invocation must
+        // not bypass protocol controls.
+        let allowed: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::AllowedAction(contract_id.clone(), function.clone()))
+            .unwrap_or(false);
+        if !allowed {
+            return Err(Error::ActionNotAllowed);
         }
 
         let count: u64 = env
@@ -96,6 +172,7 @@ impl OptimisticGovernance {
             .get(&DataKey::ChallengeWindow)
             .unwrap();
         let execution_time = env.ledger().timestamp() + challenge_window;
+        let expiry_time = execution_time + expiry_window;
 
         let proposal = Proposal {
             id: proposal_id,
@@ -103,7 +180,9 @@ impl OptimisticGovernance {
             contract_id,
             function,
             args,
+            action_hash: action_hash.clone(),
             execution_time,
+            expiry_time,
             status: ProposalStatus::Pending,
         };
 
@@ -116,7 +195,7 @@ impl OptimisticGovernance {
 
         env.events().publish(
             (symbol_short!("propose"), proposer),
-            (proposal_id, execution_time),
+            (proposal_id, execution_time, action_hash),
         );
 
         Ok(proposal_id)
@@ -156,7 +235,7 @@ impl OptimisticGovernance {
             return Err(Error::InsufficientVotingPower);
         }
 
-        proposal.status = ProposalStatus::Disputed;
+        proposal.status = ProposalStatus::Challenged;
         env.storage()
             .persistent()
             .set(&DataKey::Proposal(proposal_id), &proposal);
@@ -167,7 +246,95 @@ impl OptimisticGovernance {
         Ok(())
     }
 
-    /// Execute a proposal after the challenge window expires, if not disputed.
+    /// Resolve a challenged proposal. The admin may either reinstate it
+    /// (clearing the challenge so it can execute again once its window
+    /// reopens) or cancel it outright.
+    pub fn resolve_dispute(
+        env: Env,
+        caller: Address,
+        proposal_id: u64,
+        reinstate: bool,
+    ) -> Result<(), Error> {
+        Self::require_init(&env)?;
+        caller.require_auth();
+
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if caller != admin {
+            return Err(Error::Unauthorized);
+        }
+
+        let mut proposal: Proposal = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Proposal(proposal_id))
+            .ok_or(Error::ProposalNotFound)?;
+
+        if proposal.status != ProposalStatus::Challenged {
+            return Err(Error::ProposalNotFound);
+        }
+
+        if reinstate {
+            let challenge_window: u64 = env
+                .storage()
+                .instance()
+                .get(&DataKey::ChallengeWindow)
+                .unwrap();
+            let execution_time = env.ledger().timestamp() + challenge_window;
+            proposal.execution_time = execution_time;
+            proposal.status = ProposalStatus::Pending;
+        } else {
+            proposal.status = ProposalStatus::Cancelled;
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Proposal(proposal_id), &proposal);
+
+        env.events().publish(
+            (symbol_short!("resolve"), proposal_id),
+            (reinstate,),
+        );
+
+        Ok(())
+    }
+
+    /// Cancel a pending proposal before its challenge window elapses.
+    /// Only the original proposer or the admin may cancel.
+    pub fn cancel(env: Env, caller: Address, proposal_id: u64) -> Result<(), Error> {
+        Self::require_init(&env)?;
+        caller.require_auth();
+
+        let mut proposal: Proposal = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Proposal(proposal_id))
+            .ok_or(Error::ProposalNotFound)?;
+
+        let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if caller != admin && caller != proposal.proposer {
+            return Err(Error::Unauthorized);
+        }
+
+        if proposal.status == ProposalStatus::Executed {
+            return Err(Error::ProposalAlreadyExecuted);
+        }
+        if proposal.status == ProposalStatus::Cancelled {
+            return Err(Error::ProposalCancelled);
+        }
+
+        proposal.status = ProposalStatus::Cancelled;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Proposal(proposal_id), &proposal);
+
+        env.events()
+            .publish((symbol_short!("cancel"), proposal_id), ());
+
+        Ok(())
+    }
+
+    /// Execute a proposal after the challenge window expires, if not
+    /// disputed, cancelled, or past its expiry window.
     pub fn execute(env: Env, proposal_id: u64) -> Result<Val, Error> {
         Self::require_init(&env)?;
 
@@ -177,17 +344,44 @@ impl OptimisticGovernance {
             .get(&DataKey::Proposal(proposal_id))
             .ok_or(Error::ProposalNotFound)?;
 
-        if proposal.status == ProposalStatus::Disputed {
-            return Err(Error::ProposalDisputed);
-        }
-
-        if proposal.status == ProposalStatus::Executed {
-            return Err(Error::ProposalAlreadyExecuted);
+        match proposal.status {
+            ProposalStatus::Challenged => return Err(Error::ProposalDisputed),
+            ProposalStatus::Executed => return Err(Error::ProposalAlreadyExecuted),
+            ProposalStatus::Cancelled => return Err(Error::ProposalCancelled),
+            ProposalStatus::Expired => return Err(Error::ProposalExpired),
+            ProposalStatus::Failed => return Err(Error::ProposalNotExecutable),
+            ProposalStatus::Pending | ProposalStatus::Executable => {}
         }
 
         let current_time = env.ledger().timestamp();
         if current_time < proposal.execution_time {
             return Err(Error::ChallengeWindowActive);
+        }
+
+        if current_time > proposal.expiry_time {
+            proposal.status = ProposalStatus::Expired;
+            env.storage()
+                .persistent()
+                .set(&DataKey::Proposal(proposal_id), &proposal);
+            return Err(Error::ProposalExpired);
+        }
+
+        // Re-verify the action is still allowlisted at execution time - an
+        // admin may have revoked it between proposal and execution.
+        let allowed: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::AllowedAction(
+                proposal.contract_id.clone(),
+                proposal.function.clone(),
+            ))
+            .unwrap_or(false);
+        if !allowed {
+            proposal.status = ProposalStatus::Failed;
+            env.storage()
+                .persistent()
+                .set(&DataKey::Proposal(proposal_id), &proposal);
+            return Err(Error::ActionNotAllowed);
         }
 
         // Execute the payload
@@ -204,7 +398,7 @@ impl OptimisticGovernance {
 
         env.events().publish(
             (symbol_short!("execute"), proposal_id),
-            (proposal.contract_id, proposal.function),
+            (proposal.contract_id, proposal.function, proposal.action_hash),
         );
 
         Ok(result)
