@@ -204,11 +204,52 @@ If the name differs in your fork, run `gh workflow list` and use the **CI** work
 
 ## How to interpret failed logs
 
-1. Open **Actions** → failed workflow → failed **job**.
-2. Expand the first **red** step; read from the **first error** upward (later steps are often cascades).
+### The First-Error-First Debugging Rule
+
+When a CI workflow fails, GitHub Actions presents logs for all executed steps. Always scroll to the **first failing step** and read from the **first error message upward**. Subsequent step failures or error outputs in the log are frequently downstream cascades resulting from the initial failure (such as a build step failing because an earlier typecheck or test step failed).
+
+### Quick Steps for Investigating Failures
+1. Open **Actions** → failed workflow → failed **job** (e.g. `Backend Checks`, `Frontend Checks`, or `Soroban Contract Checks`).
+2. Expand the first **red** step and locate the **first error** from the top.
 3. Download **Artifacts** when the job summary lists them (frontend logs, contract logs, audit JSON).
 4. For **security comment** workflows, read the **issue comment** on the PR for a summary table, then cross-check the uploaded artifact for full detail.
 5. For **Vercel**, open the deployment in the Vercel dashboard and read the **Build** log; search for `error` / `ELIFECYCLE`.
+
+### Common CI Failure Examples
+
+#### 1. Frontend Failure (`CI` → `Frontend Checks`)
+**Example Log:**
+```text
+FAIL src/components/dashboard/__tests__/ApyDashboard.test.tsx
+  ● ApyDashboard > renders APY metrics correctly
+    AssertionError: expected '12.4%' to be '12.5%'
+      at src/components/dashboard/__tests__/ApyDashboard.test.tsx:42:18
+```
+**Explanation:** A Vitest test assertion failed in `client/src/components/dashboard/__tests__/ApyDashboard.test.tsx`.
+**How to fix:** Navigate to `client/`, run `npm test` locally to reproduce, and update the component logic or fixture expectations.
+
+#### 2. Backend Failure (`CI` → `Backend Checks`)
+**Example Log:**
+```text
+FAIL src/__tests__/rebalanceQueueIntegration.test.ts
+  ● RebalanceQueueIntegration > enqueues reallocation intent
+    PrismaClientKnownRequestError: 
+    Invalid `prisma.rebalanceAuctionIntent.create()` invocation:
+    Unique constraint failed on the fields: (`intentHash`)
+```
+**Explanation:** A Jest backend integration test failed due to a Prisma database constraint violation.
+**How to fix:** Ensure Postgres is running locally, run `npx prisma db push` in `server/`, and execute `npm test` in `server/`.
+
+#### 3. Contract Formatting Failure (`CI` → `Soroban Contract Checks`)
+**Example Log:**
+```text
+Diff in contracts/rebalance_auction/src/lib.rs at line 45:
+-    let total = a+b;
++    let total = a + b;
+error: Line 45 formatted incorrectly
+```
+**Explanation:** `cargo fmt --all -- --check` detected code formatting violations in contract source code.
+**How to fix:** Navigate to `contracts/`, run `cargo fmt --all` locally to format all contract Rust files, and commit the changes.
 
 ---
 

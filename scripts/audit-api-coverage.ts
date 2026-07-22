@@ -62,6 +62,7 @@ const AUDIT_ALLOWLIST = [
   "/api/rewards/proof", // Reward proof generation — not yet implemented server-side
 ];
 
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Utility: Recursive file finder
 // ─────────────────────────────────────────────────────────────────────────────
@@ -180,23 +181,23 @@ function inferHttpMethod(
   content: string,
   matchIndex: number,
 ): "GET" | "POST" | "PUT" | "DELETE" | "PATCH" {
-  // Look backwards from match for HTTP method hints
-  const beforeMatch = content.substring(
-    Math.max(0, matchIndex - 200),
-    matchIndex,
+  // Look around match (before and after) for HTTP method hints
+  const contextWindow = content.substring(
+    Math.max(0, matchIndex - 100),
+    Math.min(content.length, matchIndex + 250),
   );
 
-  if (/method\s*:\s*["'`]?(POST|PUT|DELETE|PATCH)["'`]?/i.test(beforeMatch)) {
-    const methodMatch = beforeMatch.match(
+  if (/method\s*:\s*["'`]?(POST|PUT|DELETE|PATCH)["'`]?/i.test(contextWindow)) {
+    const methodMatch = contextWindow.match(
       /method\s*:\s*["'`]?(POST|PUT|DELETE|PATCH)["'`]?/i,
     );
     return (methodMatch?.[1]?.toUpperCase() as any) || "GET";
   }
 
   if (
-    /["']method["']\s*,\s*["'](POST|PUT|DELETE|PATCH)["']/i.test(beforeMatch)
+    /["']method["']\s*,\s*["'](POST|PUT|DELETE|PATCH)["']/i.test(contextWindow)
   ) {
-    const methodMatch = beforeMatch.match(/["'](POST|PUT|DELETE|PATCH)["']/i);
+    const methodMatch = contextWindow.match(/["'](POST|PUT|DELETE|PATCH)["']/i);
     return (methodMatch?.[1]?.toUpperCase() as any) || "GET";
   }
 
