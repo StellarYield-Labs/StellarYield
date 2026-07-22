@@ -1920,6 +1920,56 @@ paths:
         '429':
           description: Rate limit exceeded
 
+  /api/relayer/status:
+    get:
+      summary: Get relayer health status
+      description: Returns bridge relayer health metrics including queue depth, replay protection state, and recent activity.
+      tags:
+        - Relayer
+      responses:
+        '200':
+          description: Relayer status retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Failed to retrieve relayer status
+
+  /api/audit-replay/record:
+    post:
+      summary: Record an audit replay event
+      description: Records an audit replay event for compliance tracking.
+      tags:
+        - AuditMonitoring
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Event recorded
+        '500':
+          description: Failed to record event
+
+  /api/audit-replay/summary:
+    get:
+      summary: Get audit replay summary
+      description: Returns a summary of audit replay events for the reporting period.
+      tags:
+        - AuditMonitoring
+      responses:
+        '200':
+          description: Audit replay summary retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+        '500':
+          description: Failed to retrieve summary
+
   /api/events:
     get:
       summary: Get recent events

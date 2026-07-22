@@ -805,7 +805,7 @@ export class RebalanceAuctionService {
         intentId,
         eventType,
         actor,
-        details: details as Parameters<typeof prisma.executionAuditLog.create>[0]["data"]["details"],
+        details: JSON.parse(JSON.stringify(details)),
       },
     });
   }
