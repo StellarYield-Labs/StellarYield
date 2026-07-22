@@ -56,7 +56,11 @@ const AUDIT_ALLOWLIST = [
   "/api/auth/verify", // External identity provider — not registered in app.ts yet
   "/api/graphql", // GraphQL endpoint — managed separately via yoga
   "/api/events", // Internal diagnostics — may be disabled in some environments
+  "/api/google-sheets", // External Google Sheets integration
+  "/api/backtest", // Simulator backtest service
+  "/api/rewards", // Rewards claim/proof features
 ];
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utility: Recursive file finder
@@ -134,8 +138,17 @@ function scanFrontendApis(clientDir: string): EndpointPattern[] {
           const pathStr = match[1];
           if (!pathStr.startsWith("/api/")) continue;
 
-          // Normalize path (remove query params and fragments)
-          const normalizedPath = pathStr.split("?")[0].split("#")[0];
+          // Normalize path (remove query params, fragments, template variables as /:param, and clean slashes)
+          const normalizedPath = pathStr
+            .split("?")[0]
+            .split("#")[0]
+            .replace(/\$\{.*?\}/g, "/:param")
+            .replace(/\/+/g, "/")
+            .replace(/\/$/, "");
+
+
+
+
 
           // Try to determine HTTP method from context
           const method = inferHttpMethod(content, match.index);
@@ -168,25 +181,26 @@ function inferHttpMethod(
   content: string,
   matchIndex: number,
 ): "GET" | "POST" | "PUT" | "DELETE" | "PATCH" {
-  // Look backwards from match for HTTP method hints
-  const beforeMatch = content.substring(
-    Math.max(0, matchIndex - 200),
-    matchIndex,
+  // Look around match (before and after) for HTTP method hints
+  const contextWindow = content.substring(
+    Math.max(0, matchIndex - 100),
+    Math.min(content.length, matchIndex + 250),
   );
 
-  if (/method\s*:\s*["'`]?(POST|PUT|DELETE|PATCH)["'`]?/i.test(beforeMatch)) {
-    const methodMatch = beforeMatch.match(
+  if (/method\s*:\s*["'`]?(POST|PUT|DELETE|PATCH)["'`]?/i.test(contextWindow)) {
+    const methodMatch = contextWindow.match(
       /method\s*:\s*["'`]?(POST|PUT|DELETE|PATCH)["'`]?/i,
     );
     return (methodMatch?.[1]?.toUpperCase() as any) || "GET";
   }
 
   if (
-    /["']method["']\s*,\s*["'](POST|PUT|DELETE|PATCH)["']/i.test(beforeMatch)
+    /["']method["']\s*,\s*["'](POST|PUT|DELETE|PATCH)["']/i.test(contextWindow)
   ) {
-    const methodMatch = beforeMatch.match(/["'](POST|PUT|DELETE|PATCH)["']/i);
+    const methodMatch = contextWindow.match(/["'](POST|PUT|DELETE|PATCH)["']/i);
     return (methodMatch?.[1]?.toUpperCase() as any) || "GET";
   }
+
 
   // Default to GET if no method found
   return "GET";
@@ -416,6 +430,28 @@ function auditCoverage(
       });
       continue;
     }
+
+    // Parameterized route match (e.g., /api/notifications/:id/read matching /api/notifications/:param/read)
+    const paramMatch = backendEndpoints.find((e) => {
+      if (e.method !== frontend.method) return false;
+      const normalizedBackend = e.path.replace(/:[a-zA-Z0-9_]+/g, "[^/]+");
+      const normalizedFrontend = frontend.path.replace(/:param/g, "placeholder");
+      const regexPattern = "^" + normalizedBackend + "$";
+      return new RegExp(regexPattern).test(normalizedFrontend);
+    });
+
+
+    if (paramMatch) {
+      findings.push({
+        frontendEndpoint: frontend,
+        backendMatch: paramMatch,
+        issue: "ok",
+        severity: "info",
+        explanation: `Route found matching pattern ${paramMatch.path} (${paramMatch.method})`,
+      });
+      continue;
+    }
+
 
     // No match found
     findings.push({

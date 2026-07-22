@@ -32,7 +32,8 @@ describe('Analytics Mock Data Shape Validation', () => {
 
     it('fails validation when a required field is removed', () => {
       const report = AnalyticsMockDataGenerator.createAttributionReport('G_TEST_WALLET');
-      const { walletAddress, ...incompleteReport } = report as any;
+      const { walletAddress: _walletAddress, ...incompleteReport } = report as any;
+
 
       const validation = validateRequiredFields(
         incompleteReport,
@@ -96,7 +97,8 @@ describe('Analytics Mock Data Shape Validation', () => {
 
     it('fails validation when a required field is removed', () => {
       const report = AnalyticsMockDataGenerator.createCompatibilityReport();
-      const { overallStatus, ...incompleteReport } = report as any;
+      const { overallStatus: _overallStatus, ...incompleteReport } = report as any;
+
 
       const validation = validateRequiredFields(
         incompleteReport,
