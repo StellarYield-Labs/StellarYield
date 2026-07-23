@@ -805,7 +805,7 @@ export class RebalanceAuctionService {
         intentId,
         eventType,
         actor,
-        details: JSON.parse(JSON.stringify(details)),
+        details: details as any,
       },
     });
   }
