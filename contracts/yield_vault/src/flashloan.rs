@@ -67,6 +67,7 @@ impl YieldVault {
         params: &Bytes,
     ) -> Result<i128, VaultError> {
         Self::require_init(env)?;
+        Self::require_not_migrating(env)?;
 
         if amount <= 0 {
             return Err(VaultError::ZeroAmount);

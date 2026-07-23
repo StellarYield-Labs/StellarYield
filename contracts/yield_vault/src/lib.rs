@@ -46,6 +46,7 @@ enum DataKey {
     MigrationCursor(u32, u32),
     MigrationBatch(u32, u32),
     Governance,
+    MigrationActive,
 }
 
 mod admin;
@@ -85,6 +86,7 @@ pub enum VaultError {
     CodeHashMismatch = 3003,
     MigrationPathNotFound = 3004,
     MigrationInProgress = 3005,
+    Migrating = 3006,
 }
 
 // ── Contract ────────────────────────────────────────────────────────────
@@ -152,6 +154,7 @@ impl YieldVault {
         min_shares_out: i128,
     ) -> Result<i128, VaultError> {
         Self::require_init(&env)?;
+        Self::require_not_migrating(&env)?;
         from.require_auth();
         if Self::is_paused(&env) {
             return Err(VaultError::Paused);
@@ -232,6 +235,7 @@ impl YieldVault {
         min_shares_out: i128,
     ) -> Result<i128, VaultError> {
         Self::require_init(&env)?;
+        Self::require_not_migrating(&env)?;
         payer.require_auth();
         if Self::is_paused(&env) {
             return Err(VaultError::Paused);
@@ -300,6 +304,7 @@ impl YieldVault {
     /// Replaces standard zero-check with error. Uses secure price from oracle.
     pub fn withdraw(env: Env, to: Address, shares: i128) -> Result<i128, VaultError> {
         Self::require_init(&env)?;
+        Self::require_not_migrating(&env)?;
         to.require_auth();
 
         if shares <= 0 {
@@ -377,6 +382,7 @@ impl YieldVault {
         amount: i128,
     ) -> Result<(), VaultError> {
         Self::require_init(&env)?;
+        Self::require_not_migrating(&env)?;
         caller.require_auth();
         if Self::is_paused(&env) {
             return Err(VaultError::Paused);
@@ -420,6 +426,7 @@ impl YieldVault {
         to: Address,
         amount: i128,
     ) -> Result<(), VaultError> {
+        Self::require_not_migrating(&env)?;
         from.require_auth();
         if amount <= 0 {
             return Err(VaultError::ZeroAmount);
@@ -541,6 +548,7 @@ impl YieldVault {
     /// Re-entrancy protected via Soroban environment.
     pub fn harvest(env: Env, caller: Address, min_amount_out: i128) -> Result<i128, VaultError> {
         Self::require_init(&env)?;
+        Self::require_not_migrating(&env)?;
         caller.require_auth();
         let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
         let legacy_keeper: Option<Address> = env.storage().instance().get(&DataKey::Keeper);
@@ -748,6 +756,13 @@ impl YieldVault {
     pub(crate) fn require_init(env: &Env) -> Result<(), VaultError> {
         if !env.storage().instance().has(&DataKey::Initialized) {
             return Err(VaultError::NotInitialized);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn require_not_migrating(env: &Env) -> Result<(), VaultError> {
+        if env.storage().instance().has(&DataKey::MigrationActive) {
+            return Err(VaultError::Migrating);
         }
         Ok(())
     }

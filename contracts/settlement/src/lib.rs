@@ -31,6 +31,7 @@ pub enum StorageKey {
     MigrationRegistry,
     MigrationCursor(u32, u32),
     MigrationBatch(u32, u32),
+    MigrationActive,
 }
 
 // ── Data Structures ─────────────────────────────────────────────────────
@@ -87,6 +88,7 @@ pub enum SettlementError {
     MigrationPathNotFound = 15,
     MigrationInProgress = 16,
     TimelockActive = 17,
+    Migrating = 18,
 }
 
 // ── Contract ────────────────────────────────────────────────────────────
@@ -192,6 +194,7 @@ impl SettlementContract {
     ) -> Result<(), SettlementError> {
         Self::require_initialized(&env)?;
         Self::require_not_paused(&env)?;
+        Self::require_not_migrating(&env)?;
 
         // Check if trade already settled
         if Self::is_trade_settled(env.clone(), data.trade_id.clone()) {
@@ -266,6 +269,7 @@ impl SettlementContract {
     ) -> Result<(), SettlementError> {
         Self::require_initialized(&env)?;
         Self::require_not_paused(&env)?;
+        Self::require_not_migrating(&env)?;
 
         // Validate batch
         if batch.settlements.is_empty() {
@@ -328,6 +332,7 @@ impl SettlementContract {
     ) -> Result<(), SettlementError> {
         Self::require_initialized(&env)?;
         Self::require_admin(&env, &admin)?;
+        Self::require_not_migrating(&env)?;
 
         env.storage()
             .instance()
@@ -355,6 +360,7 @@ impl SettlementContract {
     ) -> Result<(), SettlementError> {
         Self::require_initialized(&env)?;
         Self::require_admin(&env, &admin)?;
+        Self::require_not_migrating(&env)?;
 
         env.storage()
             .instance()
@@ -508,6 +514,13 @@ impl SettlementContract {
     fn require_not_paused(env: &Env) -> Result<(), SettlementError> {
         if Self::is_paused(env.clone()) {
             return Err(SettlementError::Paused);
+        }
+        Ok(())
+    }
+
+    fn require_not_migrating(env: &Env) -> Result<(), SettlementError> {
+        if env.storage().instance().has(&StorageKey::MigrationActive) {
+            return Err(SettlementError::Migrating);
         }
         Ok(())
     }

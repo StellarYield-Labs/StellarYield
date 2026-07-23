@@ -182,6 +182,8 @@ impl OptimisticGovernance {
             MigrationKind::Batched => {
                 let batch_key = DataKey::MigrationBatch(from_version, to_version);
 
+                let is_first = !env.storage().instance().has(&batch_key);
+
                 let mut progress: MigrationStatus = env
                     .storage()
                     .instance()
@@ -194,6 +196,12 @@ impl OptimisticGovernance {
                         total_batches: 1,
                         cursor: None,
                     });
+
+                if is_first {
+                    env.storage()
+                        .instance()
+                        .set(&DataKey::MigrationActive, &true);
+                }
 
                 let next_cursor = Self::migrate_batch(
                     &env,
@@ -211,6 +219,7 @@ impl OptimisticGovernance {
                         .instance()
                         .set(&DataKey::StorageVersion, &to_version);
                     env.storage().instance().remove(&batch_key);
+                    env.storage().instance().remove(&DataKey::MigrationActive);
                 } else {
                     progress.cursor = next_cursor.clone();
                     env.storage().instance().set(&batch_key, &progress);
@@ -227,15 +236,27 @@ impl OptimisticGovernance {
     }
 
     pub fn migration_status(env: Env) -> MigrationStatus {
-        env.storage()
-            .instance()
-            .get(&DataKey::MigrationBatch(0, 0))
-            .unwrap_or(MigrationStatus {
+        let is_active = env.storage().instance().has(&DataKey::MigrationActive);
+        if !is_active {
+            return MigrationStatus {
                 is_active: false,
                 from_version: Self::storage_version(env.clone()),
                 to_version: Self::storage_version(env),
                 progress: 0,
                 total_batches: 0,
+                cursor: None,
+            };
+        }
+
+        env.storage()
+            .instance()
+            .get(&DataKey::MigrationBatch(0, 0))
+            .unwrap_or(MigrationStatus {
+                is_active: true,
+                from_version: Self::storage_version(env.clone()),
+                to_version: Self::storage_version(env),
+                progress: 0,
+                total_batches: 1,
                 cursor: None,
             })
     }

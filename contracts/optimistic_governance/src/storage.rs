@@ -18,6 +18,7 @@ pub enum DataKey {
     MigrationCursor(u32, u32),
     MigrationBatch(u32, u32),
     MigrationEdges,
+    MigrationActive,
 }
 
 #[contracttype]

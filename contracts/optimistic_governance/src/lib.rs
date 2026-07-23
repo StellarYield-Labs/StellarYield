@@ -31,6 +31,7 @@ pub enum Error {
     CodeHashMismatch = 12,
     MigrationPathNotFound = 13,
     MigrationInProgress = 14,
+    Migrating = 15,
 }
 
 // Interface for ve_tokenomics (veYIELD)
@@ -82,6 +83,7 @@ impl OptimisticGovernance {
         args: Vec<Val>,
     ) -> Result<u64, Error> {
         Self::require_init(&env)?;
+        Self::require_not_migrating(&env)?;
         proposer.require_auth();
 
         // Check if proposer is admin
@@ -133,6 +135,7 @@ impl OptimisticGovernance {
     /// Requires non-zero veYIELD voting power.
     pub fn dispute(env: Env, disputer: Address, proposal_id: u64) -> Result<(), Error> {
         Self::require_init(&env)?;
+        Self::require_not_migrating(&env)?;
         disputer.require_auth();
 
         let mut proposal: Proposal = env
@@ -177,6 +180,7 @@ impl OptimisticGovernance {
     /// Execute a proposal after the challenge window expires, if not disputed.
     pub fn execute(env: Env, proposal_id: u64) -> Result<Val, Error> {
         Self::require_init(&env)?;
+        Self::require_not_migrating(&env)?;
 
         let mut proposal: Proposal = env
             .storage()
@@ -237,6 +241,13 @@ impl OptimisticGovernance {
     fn require_init(env: &Env) -> Result<(), Error> {
         if !env.storage().instance().has(&DataKey::IsInitialized) {
             return Err(Error::NotInitialized);
+        }
+        Ok(())
+    }
+
+    fn require_not_migrating(env: &Env) -> Result<(), Error> {
+        if env.storage().instance().has(&DataKey::MigrationActive) {
+            return Err(Error::Migrating);
         }
         Ok(())
     }

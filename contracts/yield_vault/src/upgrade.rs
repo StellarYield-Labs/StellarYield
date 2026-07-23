@@ -158,6 +158,8 @@ impl YieldVault {
             MigrationKind::Batched => {
                 let batch_key = DataKey::MigrationBatch(from_version, to_version);
 
+                let is_first = !env.storage().instance().has(&batch_key);
+
                 let mut progress: MigrationStatus = env
                     .storage()
                     .instance()
@@ -170,6 +172,12 @@ impl YieldVault {
                         total_batches: 1,
                         cursor: None,
                     });
+
+                if is_first {
+                    env.storage()
+                        .instance()
+                        .set(&DataKey::MigrationActive, &true);
+                }
 
                 let next_cursor = Self::migrate_batch(
                     &env,
@@ -187,6 +195,7 @@ impl YieldVault {
                         .instance()
                         .set(&DataKey::StorageVersion, &to_version);
                     env.storage().instance().remove(&batch_key);
+                    env.storage().instance().remove(&DataKey::MigrationActive);
                 } else {
                     progress.cursor = next_cursor.clone();
                     env.storage().instance().set(&batch_key, &progress);
@@ -203,15 +212,27 @@ impl YieldVault {
     }
 
     pub fn migration_status(env: Env) -> MigrationStatus {
-        env.storage()
-            .instance()
-            .get(&DataKey::MigrationBatch(0, 0))
-            .unwrap_or(MigrationStatus {
+        let is_active = env.storage().instance().has(&DataKey::MigrationActive);
+        if !is_active {
+            return MigrationStatus {
                 is_active: false,
                 from_version: Self::storage_version(env.clone()),
                 to_version: Self::storage_version(env),
                 progress: 0,
                 total_batches: 0,
+                cursor: None,
+            };
+        }
+
+        env.storage()
+            .instance()
+            .get(&DataKey::MigrationBatch(0, 0))
+            .unwrap_or(MigrationStatus {
+                is_active: true,
+                from_version: Self::storage_version(env.clone()),
+                to_version: Self::storage_version(env),
+                progress: 0,
+                total_batches: 1,
                 cursor: None,
             })
     }
@@ -287,12 +308,31 @@ impl YieldVault {
     }
 
     fn migrate_batch(
-        _env: &Env,
-        _from_version: u32,
-        _to_version: u32,
-        _cursor: Bytes,
+        env: &Env,
+        from_version: u32,
+        to_version: u32,
+        cursor: Bytes,
         _limit: u32,
     ) -> Result<Option<Bytes>, VaultError> {
+        let fencing_key = DataKey::MigrationCursor(from_version, to_version);
+        let migrated: soroban_sdk::Map<Bytes, bool> = env
+            .storage()
+            .instance()
+            .get(&fencing_key)
+            .unwrap_or(soroban_sdk::Map::new(env));
+
+        if cursor.is_empty() {
+            return Ok(None);
+        }
+
+        if migrated.contains_key(cursor.clone()) {
+            return Err(VaultError::MigrationInProgress);
+        }
+
+        let mut migrated = migrated;
+        migrated.set(cursor.clone(), true);
+        env.storage().instance().set(&fencing_key, &migrated);
+
         Ok(None)
     }
 }

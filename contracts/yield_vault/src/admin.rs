@@ -36,6 +36,7 @@ impl YieldVault {
         amount: i128,
     ) -> Result<(), VaultError> {
         Self::require_admin(&env, &admin)?;
+        Self::require_not_migrating(&env)?;
         if amount <= 0 {
             return Err(VaultError::ZeroAmount);
         }
@@ -80,6 +81,7 @@ impl YieldVault {
     /// 2. After 24h, call `set_admin` again with the same `new_admin` address to finalize.
     pub fn set_admin(env: Env, admin: Address, new_admin: Address) -> Result<(), VaultError> {
         Self::require_admin(&env, &admin)?;
+        Self::require_not_migrating(&env)?;
 
         let now = env.ledger().timestamp();
 

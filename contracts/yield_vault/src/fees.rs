@@ -57,6 +57,7 @@ impl YieldVault {
         current_apy_bps: i128,
     ) -> Result<i128, VaultError> {
         Self::require_admin(&env, &admin)?;
+        Self::require_not_migrating(&env)?;
 
         let now = env.ledger().timestamp();
         let snapshot = ApySnapshot {

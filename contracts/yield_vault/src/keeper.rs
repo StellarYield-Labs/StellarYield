@@ -31,6 +31,7 @@ impl YieldVault {
     /// * `keeper` - Address of the keeper node to register.
     pub fn register_keeper(env: Env, admin: Address, keeper: Address) -> Result<(), VaultError> {
         Self::require_admin(&env, &admin)?;
+        Self::require_not_migrating(&env)?;
 
         let mut keepers: Vec<Address> = env
             .storage()

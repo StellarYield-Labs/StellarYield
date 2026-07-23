@@ -156,6 +156,8 @@ impl SettlementContract {
             MigrationKind::Batched => {
                 let batch_key = StorageKey::MigrationBatch(from_version, to_version);
 
+                let is_first = !env.storage().instance().has(&batch_key);
+
                 let mut progress: MigrationStatus = env
                     .storage()
                     .instance()
@@ -168,6 +170,12 @@ impl SettlementContract {
                         total_batches: 1,
                         cursor: None,
                     });
+
+                if is_first {
+                    env.storage()
+                        .instance()
+                        .set(&StorageKey::MigrationActive, &true);
+                }
 
                 let next_cursor = Self::migrate_batch(
                     &env,
@@ -185,6 +193,7 @@ impl SettlementContract {
                         .instance()
                         .set(&StorageKey::StorageVersion, &to_version);
                     env.storage().instance().remove(&batch_key);
+                    env.storage().instance().remove(&StorageKey::MigrationActive);
                 } else {
                     progress.cursor = next_cursor.clone();
                     env.storage().instance().set(&batch_key, &progress);
@@ -201,15 +210,27 @@ impl SettlementContract {
     }
 
     pub fn migration_status(env: Env) -> MigrationStatus {
-        env.storage()
-            .instance()
-            .get(&StorageKey::MigrationBatch(0, 0))
-            .unwrap_or(MigrationStatus {
+        let is_active = env.storage().instance().has(&StorageKey::MigrationActive);
+        if !is_active {
+            return MigrationStatus {
                 is_active: false,
                 from_version: Self::storage_version(env.clone()),
                 to_version: Self::storage_version(env),
                 progress: 0,
                 total_batches: 0,
+                cursor: None,
+            };
+        }
+
+        env.storage()
+            .instance()
+            .get(&StorageKey::MigrationBatch(0, 0))
+            .unwrap_or(MigrationStatus {
+                is_active: true,
+                from_version: Self::storage_version(env.clone()),
+                to_version: Self::storage_version(env),
+                progress: 0,
+                total_batches: 1,
                 cursor: None,
             })
     }
