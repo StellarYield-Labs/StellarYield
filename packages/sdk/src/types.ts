@@ -69,6 +69,7 @@ export interface UpgradeConfig {
   contractId: string;
   networkPassphrase: string;
   rpcUrl: string;
+  simulationAccount?: string;
 }
 
 export interface ContractVersionInfo {
