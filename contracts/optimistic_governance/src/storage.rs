@@ -9,6 +9,15 @@ pub enum DataKey {
     Proposal(u64),
     ProposalCount,
     IsInitialized,
+    // Upgrade / migration keys
+    ContractVersion,
+    StorageVersion,
+    CodeHash,
+    PendingUpgrade,
+    MigrationRegistry,
+    MigrationCursor(u32, u32),
+    MigrationBatch(u32, u32),
+    MigrationEdges,
 }
 
 #[contracttype]

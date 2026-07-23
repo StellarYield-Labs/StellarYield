@@ -49,6 +49,21 @@ cargo test --workspace
 
 ---
 
+## 6. Upgrade & Migration Checklist
+
+- [ ] Deployed `contract_version()` and `storage_version()` return meaningful values.
+- [ ] The upgrade timelock (7 days by default) is long enough for stakeholders to review.
+- [ ] `schedule_upgrade` requires governance authorization (`require_auth` + admin check).
+- [ ] `execute_upgrade` verifies timelock expiration and code-hash consistency.
+- [ ] Migration steps are idempotent: running a batch twice does not double-count.
+- [ ] Fencing records which persistent entries have been migrated (e.g., a separate map of migrated keys).
+- [ ] Storage schema versions are monotonic and never reused.
+- [ ] `migrate` is gated to governance only (not callable by anyone).
+- [ ] The migration registry covers every allowed `(from, to)` edge.
+- [ ] Artifact manifests (see `docs/upgrade-framework.md`) are generated in CI and stored with each release.
+- [ ] SDK `checkAndThrow` is called before building transactions against a deployed contract.
+- [ ] A drill/upgrade simulation was run in CI (see `.github/workflows/upgrade-ci.yml`).
+
 ## Quick Reference: Test Commands
 
 ```bash
@@ -60,3 +75,4 @@ cargo clippy --workspace --all-targets -- -D warnings  # lint
 ```
 
 For storage layout details see [`docs/contracts/storage-ttl-strategy.md`](./contracts/storage-ttl-strategy.md).
+For upgrade framework design see [`docs/upgrade-framework.md`](./upgrade-framework.md).

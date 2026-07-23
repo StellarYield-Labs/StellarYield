@@ -23,6 +23,14 @@ pub enum StorageKey {
     FeeRecipient,   // Address for fee collection
     FeeBps,         // u32 - Fee in basis points
     Paused,         // bool - Circuit breaker
+    // Upgrade / migration keys
+    ContractVersion,
+    StorageVersion,
+    CodeHash,
+    PendingUpgrade,
+    MigrationRegistry,
+    MigrationCursor(u32, u32),
+    MigrationBatch(u32, u32),
 }
 
 // ── Data Structures ─────────────────────────────────────────────────────
@@ -53,6 +61,8 @@ pub struct SettlementBatch {
     pub timestamp: u64,
 }
 
+mod upgrade;
+
 // ── Errors ──────────────────────────────────────────────────────────────
 
 #[contracterror]
@@ -70,6 +80,13 @@ pub enum SettlementError {
     Paused = 9,
     InvalidAmount = 10,
     MatchingEngineNotSet = 11,
+    // Upgrade errors
+    UpgradeAlreadyScheduled = 12,
+    NoPendingUpgrade = 13,
+    CodeHashMismatch = 14,
+    MigrationPathNotFound = 15,
+    MigrationInProgress = 16,
+    TimelockActive = 17,
 }
 
 // ── Contract ────────────────────────────────────────────────────────────

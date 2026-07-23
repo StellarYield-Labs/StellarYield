@@ -42,3 +42,64 @@ export interface SDKConfig {
   vault: VaultConfig;
   api?: ApiConfig;
 }
+
+// ── Upgrade / Version types ──────────────────────────────────────────
+
+export interface UpgradeConfig {
+  contractId: string;
+  networkPassphrase: string;
+  rpcUrl: string;
+}
+
+export interface ContractVersionInfo {
+  contractVersion: number;
+  storageVersion: number;
+}
+
+export interface ScheduleUpgradeParams {
+  governance: string;
+  wasmHash: string;
+  expectedCurrentHash: string;
+  migrationId: number;
+}
+
+export interface MigrateParams {
+  governance: string;
+  fromVersion: number;
+  toVersion: number;
+  cursor: string | null;
+  limit: number;
+}
+
+export interface MigrationStatusInfo {
+  isActive: boolean;
+  fromVersion: number;
+  toVersion: number;
+  progress: number;
+  totalBatches: number;
+  cursor: string | null;
+}
+
+export class IncompatibleContractError extends Error {
+  public readonly contractVersion: number;
+  public readonly storageVersion: number;
+  public readonly minSpecVersion: number;
+  public readonly minStorageVersion: number;
+
+  constructor(
+    contractVersion: number,
+    storageVersion: number,
+    minSpecVersion: number,
+    minStorageVersion: number,
+  ) {
+    super(
+      `Contract v${contractVersion} / storage v${storageVersion} is incompatible with ` +
+      `required spec v${minSpecVersion}+ / storage v${minStorageVersion}+`
+    );
+    this.name = "IncompatibleContractError";
+    this.contractVersion = contractVersion;
+    this.storageVersion = storageVersion;
+    this.minSpecVersion = minSpecVersion;
+    this.minStorageVersion = minStorageVersion;
+  }
+}

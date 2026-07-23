@@ -37,6 +37,15 @@ enum DataKey {
     Oracle,
     // Emergency settings
     EmergencyPenaltyBps, // optional haircut on withdrawals during emergency
+    // Upgrade / migration keys
+    ContractVersion,
+    StorageVersion,
+    CodeHash,
+    PendingUpgrade,
+    MigrationRegistry,
+    MigrationCursor(u32, u32),
+    MigrationBatch(u32, u32),
+    Governance,
 }
 
 mod admin;
@@ -47,6 +56,7 @@ mod flashloan;
 mod keeper;
 mod oracle;
 mod referrals;
+mod upgrade;
 mod verification;
 
 // ── Errors ──────────────────────────────────────────────────────────────
@@ -69,6 +79,12 @@ pub enum VaultError {
     InvalidDonationBps = 2001,
     /// Charity address is not on the protocol whitelist (maps to error code 2002).
     CharityNotWhitelisted = 2002,
+    // Upgrade errors
+    UpgradeAlreadyScheduled = 3001,
+    NoPendingUpgrade = 3002,
+    CodeHashMismatch = 3003,
+    MigrationPathNotFound = 3004,
+    MigrationInProgress = 3005,
 }
 
 // ── Contract ────────────────────────────────────────────────────────────
@@ -729,14 +745,14 @@ impl YieldVault {
 
     // ── Internal ────────────────────────────────────────────────────
 
-    fn require_init(env: &Env) -> Result<(), VaultError> {
+    pub(crate) fn require_init(env: &Env) -> Result<(), VaultError> {
         if !env.storage().instance().has(&DataKey::Initialized) {
             return Err(VaultError::NotInitialized);
         }
         Ok(())
     }
 
-    fn require_admin(env: &Env, caller: &Address) -> Result<(), VaultError> {
+    pub(crate) fn require_admin(env: &Env, caller: &Address) -> Result<(), VaultError> {
         caller.require_auth();
         let admin: Address = env
             .storage()

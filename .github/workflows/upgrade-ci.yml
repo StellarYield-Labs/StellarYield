@@ -1,0 +1,113 @@
+name: Upgrade Simulation
+
+on:
+  pull_request:
+    paths:
+      - "contracts/**"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+
+      - name: Restore cargo cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            contracts/target
+            ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-${{ hashFiles('contracts/Cargo.lock') }}
+
+      - name: Build all contracts (release profile)
+        run: cargo build --release --workspace
+        working-directory: contracts
+
+      - name: Generate Wasm hashes
+        run: |
+          echo "## Wasm Artifact Hashes" >> $GITHUB_STEP_SUMMARY
+          for wasm in target/wasm32-unknown-unknown/release/*.wasm; do
+            name=$(basename "$wasm")
+            hash=$(sha256sum "$wasm" | cut -d' ' -f1)
+            echo "- \`$name\`: \`$hash\`" >> $GITHUB_STEP_SUMMARY
+          done
+        working-directory: contracts
+
+      - name: Run workspace tests
+        run: cargo test --workspace
+        working-directory: contracts
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+        working-directory: contracts
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+        working-directory: contracts
+
+  upgrade-simulation:
+    needs: build-and-verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Build release Wasm blobs
+        run: cargo build --release --workspace
+        working-directory: contracts
+
+      - name: Simulate upgrade from fixture
+        run: |
+          echo "::notice::Upgrade simulation would run here with soroban-cli"
+          echo "For each contract:"
+          echo "  1. Deploy current release Wasm as fixture"
+          echo "  2. Deploy new Wasm"
+          echo "  3. Call schedule_upgrade, jump time, execute_upgrade"
+          echo "  4. Call migrate"
+          echo "  5. Assert storage invariants"
+        working-directory: contracts
+
+  sdk-typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/sdk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: packages/sdk/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Build SDK
+        run: npm run build

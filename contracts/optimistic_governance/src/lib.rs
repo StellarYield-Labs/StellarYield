@@ -5,6 +5,7 @@ use soroban_sdk::{
 };
 
 mod storage;
+mod upgrade;
 
 #[cfg(test)]
 mod test;
@@ -24,6 +25,12 @@ pub enum Error {
     ProposalAlreadyExecuted = 7,
     InsufficientVotingPower = 8,
     ChallengeWindowExpired = 9,
+    // Upgrade errors
+    UpgradeAlreadyScheduled = 10,
+    NoPendingUpgrade = 11,
+    CodeHashMismatch = 12,
+    MigrationPathNotFound = 13,
+    MigrationInProgress = 14,
 }
 
 // Interface for ve_tokenomics (veYIELD)
