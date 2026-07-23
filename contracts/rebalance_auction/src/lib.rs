@@ -93,14 +93,14 @@ pub enum ExecutionState {
     Expired = 8,
 }
 
-/// Partial fill policy for the intent.
+/// Partial fill mode for the intent.
 #[contracttype]
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[repr(u32)]
-pub enum PartialFillPolicy {
-    FullOnly = 0,    // Must fill entire intent or fail
-    ProRata = 1,     // Allow proportional partial fills
-    MinPercent(u32), // Minimum fill percentage (bps)
+pub enum PartialFillMode {
+    FullOnly = 0,   // Must fill entire intent or fail
+    ProRata = 1,    // Allow proportional partial fills
+    MinPercent = 2, // Minimum fill percentage; threshold in min_fill_bps
 }
 
 /// A single transfer leg in the rebalance route.
@@ -154,7 +154,8 @@ pub struct RebalanceIntent {
     pub allowed_tokens: Vec<Address>,
     pub allowed_protocols: Vec<Address>,
     pub route: Vec<RouteLeg>, // Suggested route (solver may find better)
-    pub partial_fill_policy: PartialFillPolicy,
+    pub partial_fill_mode: PartialFillMode,
+    pub min_fill_bps: u32,
     pub nonce: u64,
     pub creation_ledger: u64,
     pub expiry_ledger: u64,
@@ -323,12 +324,21 @@ impl RebalanceAuction {
         allowed_tokens: Vec<Address>,
         allowed_protocols: Vec<Address>,
         route_suggestion: Vec<RouteLeg>,
-        partial_fill_policy: PartialFillPolicy,
+        partial_fill_mode: PartialFillMode,
+        min_fill_bps: u32,
         expiry_ledger: u64,
     ) -> Result<u64, AuctionError> {
         Self::require_init(&env)?;
         Self::require_not_paused(&env)?;
         vault.require_auth();
+
+        // Validate partial fill params
+        if min_fill_bps > BPS_SCALE as u32 {
+            return Err(AuctionError::InvalidState);
+        }
+        if partial_fill_mode != PartialFillMode::MinPercent && min_fill_bps != 0 {
+            return Err(AuctionError::InvalidState);
+        }
 
         // Validate expiry
         let current_ledger = env.ledger().sequence() as u64;
@@ -403,7 +413,8 @@ impl RebalanceAuction {
             allowed_tokens,
             allowed_protocols,
             route: route_suggestion,
-            partial_fill_policy,
+            partial_fill_mode,
+            min_fill_bps,
             nonce,
             creation_ledger: current_ledger,
             expiry_ledger,
@@ -1307,7 +1318,7 @@ impl RebalanceAuction {
         total_output_value: i128,
         fees_bps: u32,
         slippage_bps: u32,
-        price_impact_bps: i128,
+        price_impact_bps: u32,
     ) -> Result<(), AuctionError> {
         // Check minimum output
         if total_output_value < intent.min_total_output_value {
@@ -1325,7 +1336,7 @@ impl RebalanceAuction {
         }
 
         // Check price impact
-        if price_impact_bps as u32 > intent.max_price_impact_bps {
+        if price_impact_bps > intent.max_price_impact_bps {
             return Err(AuctionError::PriceImpactExceeded);
         }
 
@@ -1616,7 +1627,8 @@ mod tests {
             &allowed_tokens,
             &allowed_protocols,
             &route,
-            &PartialFillPolicy::FullOnly,
+            &PartialFillMode::FullOnly,
+            &0u32,
             &(1000), // expiry_ledger
         );
 
@@ -1656,7 +1668,8 @@ mod tests {
             &allowed_tokens,
             &allowed_protocols,
             &route,
-            &PartialFillPolicy::FullOnly,
+            &PartialFillMode::FullOnly,
+            &0u32,
             &1000,
         );
 
@@ -1726,7 +1739,8 @@ mod tests {
             &allowed_tokens,
             &allowed_protocols,
             &route,
-            &PartialFillPolicy::FullOnly,
+            &PartialFillMode::FullOnly,
+            &0u32,
             &1000,
         );
 
