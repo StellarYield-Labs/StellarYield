@@ -95,10 +95,7 @@ impl SettlementContract {
             return Err(SettlementError::TimelockActive);
         }
 
-        let stored_hash: Option<BytesN<32>> = env
-            .storage()
-            .instance()
-            .get(&StorageKey::CodeHash);
+        let stored_hash: Option<BytesN<32>> = env.storage().instance().get(&StorageKey::CodeHash);
 
         if let Some(ref h) = stored_hash {
             if *h != pending.expected_current_hash {
@@ -115,10 +112,8 @@ impl SettlementContract {
 
         env.storage().instance().remove(&StorageKey::PendingUpgrade);
 
-        env.events().publish(
-            ("execute_upgrade", governance),
-            (pending.wasm_hash,),
-        );
+        env.events()
+            .publish(("execute_upgrade", governance), (pending.wasm_hash,));
 
         Ok(())
     }
@@ -193,7 +188,9 @@ impl SettlementContract {
                         .instance()
                         .set(&StorageKey::StorageVersion, &to_version);
                     env.storage().instance().remove(&batch_key);
-                    env.storage().instance().remove(&StorageKey::MigrationActive);
+                    env.storage()
+                        .instance()
+                        .remove(&StorageKey::MigrationActive);
                 } else {
                     progress.cursor = next_cursor.clone();
                     env.storage().instance().set(&batch_key, &progress);
@@ -201,7 +198,12 @@ impl SettlementContract {
 
                 env.events().publish(
                     ("migrate_batch", governance),
-                    (from_version, to_version, progress.progress, next_cursor.is_none()),
+                    (
+                        from_version,
+                        to_version,
+                        progress.progress,
+                        next_cursor.is_none(),
+                    ),
                 );
 
                 Ok(next_cursor)

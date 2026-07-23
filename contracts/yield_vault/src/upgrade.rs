@@ -96,10 +96,7 @@ impl YieldVault {
             return Err(VaultError::TimelockActive);
         }
 
-        let stored_hash: Option<BytesN<32>> = env
-            .storage()
-            .instance()
-            .get(&DataKey::CodeHash);
+        let stored_hash: Option<BytesN<32>> = env.storage().instance().get(&DataKey::CodeHash);
 
         if let Some(ref h) = stored_hash {
             if *h != pending.expected_current_hash {
@@ -116,10 +113,8 @@ impl YieldVault {
 
         env.storage().instance().remove(&DataKey::PendingUpgrade);
 
-        env.events().publish(
-            ("execute_upgrade", governance),
-            (pending.wasm_hash,),
-        );
+        env.events()
+            .publish(("execute_upgrade", governance), (pending.wasm_hash,));
 
         Ok(())
     }
@@ -134,8 +129,7 @@ impl YieldVault {
     ) -> Result<Option<Bytes>, VaultError> {
         Self::require_admin(&env, &governance)?;
 
-        let edge =
-            Self::lookup_migration_edge(env.clone(), from_version, to_version)?;
+        let edge = Self::lookup_migration_edge(env.clone(), from_version, to_version)?;
 
         match edge.kind {
             MigrationKind::ReadCompatible => {
@@ -203,7 +197,12 @@ impl YieldVault {
 
                 env.events().publish(
                     ("migrate_batch", governance),
-                    (from_version, to_version, progress.progress, next_cursor.is_none()),
+                    (
+                        from_version,
+                        to_version,
+                        progress.progress,
+                        next_cursor.is_none(),
+                    ),
                 );
 
                 Ok(next_cursor)
@@ -299,11 +298,7 @@ impl YieldVault {
             .ok_or(VaultError::MigrationPathNotFound)
     }
 
-    fn migrate_oneshot(
-        _env: &Env,
-        _from_version: u32,
-        _to_version: u32,
-    ) -> Result<(), VaultError> {
+    fn migrate_oneshot(_env: &Env, _from_version: u32, _to_version: u32) -> Result<(), VaultError> {
         Ok(())
     }
 

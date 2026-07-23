@@ -1,7 +1,7 @@
 use soroban_sdk::{Address, Bytes, BytesN, Env};
 
-use crate::{Error, OptimisticGovernance};
 use crate::storage::DataKey;
+use crate::{Error, OptimisticGovernance};
 
 #[path = "../../interfaces/upgrade.rs"]
 mod upgrade_types;
@@ -14,7 +14,6 @@ const STORAGE_VERSION: u32 = 1;
 const UPGRADE_TIMELOCK: u64 = UPGRADE_TIMELOCK_SECONDS;
 
 impl OptimisticGovernance {
-
     pub fn contract_version(env: Env) -> u32 {
         env.storage()
             .instance()
@@ -115,10 +114,7 @@ impl OptimisticGovernance {
             return Err(Error::ChallengeWindowActive);
         }
 
-        let stored_hash: Option<BytesN<32>> = env
-            .storage()
-            .instance()
-            .get(&DataKey::CodeHash);
+        let stored_hash: Option<BytesN<32>> = env.storage().instance().get(&DataKey::CodeHash);
 
         if let Some(ref h) = stored_hash {
             if *h != pending.expected_current_hash {
@@ -135,10 +131,8 @@ impl OptimisticGovernance {
 
         env.storage().instance().remove(&DataKey::PendingUpgrade);
 
-        env.events().publish(
-            ("execute_upgrade", governance),
-            (pending.wasm_hash,),
-        );
+        env.events()
+            .publish(("execute_upgrade", governance), (pending.wasm_hash,));
 
         Ok(())
     }
@@ -227,7 +221,12 @@ impl OptimisticGovernance {
 
                 env.events().publish(
                     ("migrate_batch", governance),
-                    (from_version, to_version, progress.progress, next_cursor.is_none()),
+                    (
+                        from_version,
+                        to_version,
+                        progress.progress,
+                        next_cursor.is_none(),
+                    ),
                 );
 
                 Ok(next_cursor)
@@ -323,16 +322,10 @@ impl OptimisticGovernance {
             .get(from_version)
             .ok_or(Error::MigrationPathNotFound)?;
 
-        from_map
-            .get(to_version)
-            .ok_or(Error::MigrationPathNotFound)
+        from_map.get(to_version).ok_or(Error::MigrationPathNotFound)
     }
 
-    fn migrate_oneshot(
-        _env: &Env,
-        _from_version: u32,
-        _to_version: u32,
-    ) -> Result<(), Error> {
+    fn migrate_oneshot(_env: &Env, _from_version: u32, _to_version: u32) -> Result<(), Error> {
         Ok(())
     }
 
