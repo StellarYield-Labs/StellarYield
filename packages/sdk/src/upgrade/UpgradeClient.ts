@@ -1,4 +1,4 @@
-import { Contract, SorobanRpc, Address, nativeToScVal, scValToNative } from "@stellar/stellar-sdk";
+import { Contract, Soroban, Address, nativeToScVal, scValToNative } from "@stellar/stellar-sdk";
 import type {
   UpgradeConfig,
   ContractVersionInfo,
@@ -10,11 +10,11 @@ import type {
 
 export class UpgradeClient {
   private config: UpgradeConfig;
-  private server: SorobanRpc.Server;
+  private server: Soroban.Server;
 
   constructor(config: UpgradeConfig) {
     this.config = config;
-    this.server = new SorobanRpc.Server(config.rpcUrl, {
+    this.server = new Soroban.Server(config.rpcUrl, {
       allowHttp: config.rpcUrl.startsWith("http://"),
     });
   }
