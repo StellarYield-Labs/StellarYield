@@ -4,17 +4,20 @@ import {
   recordRelaySuccess,
   recordRelayFailure,
   isHashSeen,
+  resetRelayerStatusForTests,
 } from "../services/relayerStatusService";
 
 describe("relayerStatusService", () => {
-  // Each test gets a fresh module, but since we use in-memory state,
-  // we just test the observable behavior.
+  beforeEach(() => {
+    resetRelayerStatusForTests();
+  });
 
   describe("getRelayerStatus", () => {
     it("returns a valid status object with defaults", () => {
       const status = getRelayerStatus();
 
       expect(status).toHaveProperty("isOnline");
+      expect(status).toHaveProperty("serviceState");
       expect(status).toHaveProperty("network");
       expect(status).toHaveProperty("queueDepth");
       expect(status).toHaveProperty("totalRelayed");
@@ -22,17 +25,21 @@ describe("relayerStatusService", () => {
       expect(status).toHaveProperty("failureCount");
       expect(status).toHaveProperty("successRate");
       expect(status).toHaveProperty("avgDurationMs");
+      expect(status).toHaveProperty("lastRelayAgeMs");
       expect(status).toHaveProperty("recentEvents");
       expect(status).toHaveProperty("replayProtection");
       expect(status).toHaveProperty("uptime");
       expect(status).toHaveProperty("checkedAt");
+      expect(status).toHaveProperty("alerts");
 
       expect(typeof status.isOnline).toBe("boolean");
+      expect(["online", "degraded", "offline"]).toContain(status.serviceState);
       expect(typeof status.queueDepth).toBe("number");
       expect(typeof status.successRate).toBe("number");
       expect(status.successRate).toBeGreaterThanOrEqual(0);
       expect(status.successRate).toBeLessThanOrEqual(100);
       expect(Array.isArray(status.recentEvents)).toBe(true);
+      expect(Array.isArray(status.alerts)).toBe(true);
     });
 
     it("reports replay protection as enabled", () => {
@@ -71,6 +78,28 @@ describe("relayerStatusService", () => {
       recordRelaySuccess(id, 100, testHash);
 
       expect(isHashSeen(testHash)).toBe(true);
+    });
+
+    it("reports degraded when the latest successful relay is stale", () => {
+      const staleTimestamp = new Date(Date.now() - 6 * 60 * 1000).toISOString();
+      const id = recordRelayStart();
+      recordRelaySuccess(id, 100, "hash_stale", undefined, staleTimestamp);
+
+      const status = getRelayerStatus();
+      expect(status.serviceState).toBe("degraded");
+      expect(status.isOnline).toBe(true);
+      expect(status.lastRelayAgeMs).not.toBeNull();
+      expect(status.alerts.some((alert) => /stale/i.test(alert))).toBe(true);
+    });
+
+    it("reports offline when the latest successful relay is very old", () => {
+      const offlineTimestamp = new Date(Date.now() - 16 * 60 * 1000).toISOString();
+      const id = recordRelayStart();
+      recordRelaySuccess(id, 100, "hash_offline", undefined, offlineTimestamp);
+
+      const status = getRelayerStatus();
+      expect(status.serviceState).toBe("offline");
+      expect(status.isOnline).toBe(false);
     });
   });
 

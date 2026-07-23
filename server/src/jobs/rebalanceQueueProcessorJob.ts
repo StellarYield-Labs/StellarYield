@@ -56,6 +56,34 @@ export interface JobConfig {
   auctionTimeoutMs?: number; // Timeout for auction phases
 }
 
+export interface RebalanceQueueProcessorService {
+  getPendingRetries(): Promise<RebalanceQueueEntryDTO[]>;
+  getDeferredEntries(): Promise<RebalanceQueueEntryDTO[]>;
+  markAsProcessing(queueEntryId: string): Promise<RebalanceQueueEntryDTO>;
+  recordPartialExecution(
+    queueEntryId: string,
+    result: RebalanceExecutionResult,
+    config?: Partial<PartialFillConfig>,
+  ): Promise<RebalanceQueueEntryDTO>;
+  recordFailedAttempt(
+    queueEntryId: string,
+    error: string,
+    config?: Partial<PartialFillConfig>,
+  ): Promise<RebalanceQueueEntryDTO>;
+}
+
+export interface RebalanceQueueProcessorDependencies {
+  queueService?: RebalanceQueueProcessorService;
+  executeRebalance?: (
+    entry: RebalanceQueueEntryDTO,
+  ) => Promise<RebalanceExecutionResult>;
+  now?: () => number;
+}
+
+const REBALANCE_RESULT_MAX_AGE_MS = Number(
+  process.env.REBALANCE_RESULT_MAX_AGE_MS ?? 2 * 60 * 1000,
+);
+
 let jobHandle: ReturnType<typeof setInterval> | null = null;
 
 /**
@@ -128,11 +156,12 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
   let processedDeferred = 0;
   let processedAuction = 0;
   let failedProcessing = 0;
+  const queueService = deps.queueService ?? rebalanceQueueService;
 
   try {
     // Process retries
     if (config.enableRetries) {
-      const pendingRetries = await rebalanceQueueService.getPendingRetries();
+      const pendingRetries = await queueService.getPendingRetries();
       const toProcess = pendingRetries.slice(0, config.batchSize);
 
       if (config.logResults && toProcess.length > 0) {
@@ -163,7 +192,7 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
 
     // Process deferred entries
     if (config.enableDeferredProcessing) {
-      const deferredEntries = await rebalanceQueueService.getDeferredEntries();
+      const deferredEntries = await queueService.getDeferredEntries();
       const toProcess = deferredEntries.slice(0, config.batchSize);
 
       if (config.logResults && toProcess.length > 0) {
