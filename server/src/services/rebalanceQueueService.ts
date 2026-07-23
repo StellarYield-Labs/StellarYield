@@ -25,6 +25,10 @@ export interface RebalanceQueueEntryDTO {
   deferredUntil: Date | null;
   followUpEntryId: string | null;
   lastError: string | null;
+  lastTransactionHash: string | null;
+  lastLedger: number | null;
+  lastErrorClass: string | null;
+  executionMetadata: Record<string, unknown> | null;
   completedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -135,7 +139,11 @@ export class RebalanceQueueService {
   async recordPartialExecution(
     queueEntryId: string,
     result: RebalanceExecutionResult,
-    config?: Partial<PartialFillConfig>,
+    config?: Partial<PartialFillConfig> & {
+      ledger?: number;
+      errorClass?: string;
+      executionMetadata?: Record<string, unknown>;
+    },
   ): Promise<RebalanceQueueEntryDTO> {
     const finalConfig = { ...this.defaultPartialFillConfig, ...config };
 
@@ -154,6 +162,8 @@ export class RebalanceQueueService {
         expectedAmount: result.expectedAmount,
         filledPercentage: result.filledPercentage,
         transactionHash: result.transactionHash,
+        ledger: config?.ledger,
+        errorClass: config?.errorClass,
         completedAt: new Date(),
       },
     });
@@ -186,6 +196,10 @@ export class RebalanceQueueService {
         partiallyExecuted: result.filledPercentage < 100,
         partialFillAmount: result.totalExecuted,
         followUpEntryId,
+        lastTransactionHash: result.transactionHash,
+        lastLedger: config?.ledger,
+        lastErrorClass: config?.errorClass,
+        executionMetadata: config?.executionMetadata as any,
         completedAt: newStatus === REBALANCE_STATUS.COMPLETED ? new Date() : undefined,
       },
     });
@@ -199,7 +213,12 @@ export class RebalanceQueueService {
   async recordFailedAttempt(
     queueEntryId: string,
     error: string,
-    config?: Partial<PartialFillConfig>,
+    config?: Partial<PartialFillConfig> & {
+      transactionHash?: string;
+      ledger?: number;
+      errorClass?: string;
+      executionMetadata?: Record<string, unknown>;
+    },
   ): Promise<RebalanceQueueEntryDTO> {
     const finalConfig = { ...this.defaultPartialFillConfig, ...config };
 
@@ -234,6 +253,10 @@ export class RebalanceQueueService {
         attemptCount: nextAttempt,
         nextRetryAt,
         lastError: error,
+        lastErrorClass: config?.errorClass,
+        lastTransactionHash: config?.transactionHash,
+        lastLedger: config?.ledger,
+        executionMetadata: config?.executionMetadata as any,
         completedAt: !shouldRetry ? new Date() : undefined,
       },
     });
@@ -259,7 +282,7 @@ export class RebalanceQueueService {
       },
     });
 
-    return entries.map((e) => this.mapToDTO(e));
+    return entries.map((e: any) => this.mapToDTO(e));
   }
 
   /**
@@ -280,7 +303,7 @@ export class RebalanceQueueService {
       },
     });
 
-    return entries.map((e) => this.mapToDTO(e));
+    return entries.map((e: any) => this.mapToDTO(e));
   }
 
   /**
@@ -317,17 +340,25 @@ export class RebalanceQueueService {
   /**
    * Mark entry as completed.
    */
-  async markAsCompleted(queueEntryId: string, txHash?: string): Promise<RebalanceQueueEntryDTO> {
+  async markAsCompleted(
+    queueEntryId: string,
+    txHash?: string,
+    ledger?: number,
+    errorClass?: string,
+    executionMetadata?: Record<string, unknown>,
+  ): Promise<RebalanceQueueEntryDTO> {
     await prisma.rebalanceHistory.create({
       data: {
         queueEntryId,
         vaultId: (await prisma.rebalanceQueueEntry.findUniqueOrThrow({ where: { id: queueEntryId } })).vaultId,
         executionType: EXECUTION_TYPE.FULL,
-        executionResult: { status: 'completed' },
+        executionResult: { status: 'completed', ...executionMetadata },
         totalExecuted: 100,
         expectedAmount: 100,
         filledPercentage: 100,
         transactionHash: txHash,
+        ledger,
+        errorClass,
         completedAt: new Date(),
       },
     });
@@ -337,6 +368,10 @@ export class RebalanceQueueService {
       data: {
         status: REBALANCE_STATUS.COMPLETED,
         completedAt: new Date(),
+        lastTransactionHash: txHash,
+        lastLedger: ledger,
+        lastErrorClass: errorClass,
+        executionMetadata: executionMetadata as any,
       },
     });
 
@@ -357,6 +392,64 @@ export class RebalanceQueueService {
     });
 
     return this.mapToDTO(entry);
+  }
+
+  /**
+   * Check if a queue entry already has a confirmed transaction.
+   * Used for idempotency checks before re-submitting.
+   */
+  async hasConfirmedTransaction(queueEntryId: string): Promise<boolean> {
+    const entry = await prisma.rebalanceQueueEntry.findUnique({
+      where: { id: queueEntryId },
+      select: { status: true, lastTransactionHash: true },
+    });
+
+    if (!entry) return false;
+    return entry.status === REBALANCE_STATUS.COMPLETED && !!entry.lastTransactionHash;
+  }
+
+  /**
+   * Record a transaction submission immediately for idempotency.
+   * Persists the hash so worker restarts can detect prior submissions.
+   */
+  async recordSubmission(
+    queueEntryId: string,
+    txHash: string,
+    ledger: number,
+    errorClass?: string,
+    executionMetadata?: Record<string, unknown>,
+  ): Promise<RebalanceQueueEntryDTO> {
+    const entry = await prisma.rebalanceQueueEntry.findUniqueOrThrow({
+      where: { id: queueEntryId },
+    });
+
+    await prisma.rebalanceHistory.create({
+      data: {
+        queueEntryId,
+        vaultId: entry.vaultId,
+        executionType: EXECUTION_TYPE.FULL,
+        executionResult: { status: 'submitted', ...executionMetadata },
+        totalExecuted: 0,
+        expectedAmount: 100,
+        filledPercentage: 0,
+        transactionHash: txHash,
+        ledger,
+        errorClass,
+        completedAt: new Date(),
+      },
+    });
+
+    const updated = await prisma.rebalanceQueueEntry.update({
+      where: { id: queueEntryId },
+      data: {
+        lastTransactionHash: txHash,
+        lastLedger: ledger,
+        lastErrorClass: errorClass,
+        executionMetadata: executionMetadata as any,
+      },
+    });
+
+    return this.mapToDTO(updated);
   }
 
   /**
@@ -487,6 +580,10 @@ export class RebalanceQueueService {
       deferredUntil: entry.deferredUntil,
       followUpEntryId: entry.followUpEntryId,
       lastError: entry.lastError,
+      lastTransactionHash: entry.lastTransactionHash,
+      lastLedger: entry.lastLedger,
+      lastErrorClass: entry.lastErrorClass,
+      executionMetadata: entry.executionMetadata as Record<string, unknown> | null,
       completedAt: entry.completedAt,
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,

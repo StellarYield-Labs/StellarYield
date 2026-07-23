@@ -1,0 +1,13 @@
+{
+  "name": "options_premium_exceeds_spot",
+  "subsystem": "options",
+  "seed": 0,
+  "model_version": "verification-model-v1",
+  "description": "At low iv/short tenor (which blow up d1's magnitude into exp()'s inaccurate range), black_scholes_call returns a premium greater than spot, violating the required bounded-by-spot property.",
+  "inputs": {
+    "spot": 611088150089906703,
+    "strike": 804925125670209319,
+    "t": 6606289893,
+    "iv": 1742719244
+  }
+}

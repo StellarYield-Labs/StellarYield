@@ -267,7 +267,7 @@
             "key": {
               "vec": [
                 {
-                  "symbol": "CDP"
+                  "symbol": "Cdp"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
@@ -287,7 +287,7 @@
                 "key": {
                   "vec": [
                     {
-                      "symbol": "CDP"
+                      "symbol": "Cdp"
                     },
                     {
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAARQG5"
@@ -405,7 +405,7 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "ICR"
+                              "symbol": "Icr"
                             }
                           ]
                         },
@@ -456,7 +456,7 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "MCR"
+                              "symbol": "Mcr"
                             }
                           ]
                         },

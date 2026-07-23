@@ -6,7 +6,7 @@ use soroban_sdk::{
     Val, Vec,
 };
 
-mod math;
+pub mod math;
 mod storage;
 
 #[cfg(test)]

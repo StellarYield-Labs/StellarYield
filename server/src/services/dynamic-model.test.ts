@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { BigNumber } from 'bignumber.js';
-import { pricingService, PriceImpactTooHighError } from '../../src/pricing/dynamic-model';
+import { pricingService, PriceImpactTooHighError } from './dynamic-model';
 
 describe('PricingService: calculateImpactPrice', () => {
   const liquidityX = new BigNumber(1000000); // 1M pool

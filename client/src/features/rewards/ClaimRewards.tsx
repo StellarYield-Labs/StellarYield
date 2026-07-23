@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useWallet } from "../../context/useWallet";
 import { Gift, CheckCircle, Loader2 } from "lucide-react";
-import { getApiBaseUrl } from "../../lib/api";
+import { apiUrl } from "../../lib/api";
 import ApiErrorBanner from "../../components/ApiErrorBanner/ApiErrorBanner";
 
 interface ClaimData {
@@ -9,8 +9,6 @@ interface ClaimData {
   amount: string;
   proof: string[];
 }
-
-const API_BASE = getApiBaseUrl();
 
 /**
  * ClaimRewards — Frontend UI for claiming Merkle-tree distributed $YIELD rewards.
@@ -33,7 +31,7 @@ export default function ClaimRewards() {
 
     try {
       const res = await fetch(
-        `${API_BASE}/api/rewards/proof/${encodeURIComponent(walletAddress)}`,
+        apiUrl(`/api/rewards/proof/${encodeURIComponent(walletAddress)}`),
       );
       if (res.status === 404) {
         setClaimData(null);
@@ -66,7 +64,7 @@ export default function ClaimRewards() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/rewards/claim`, {
+      const res = await fetch(apiUrl("/api/rewards/claim"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

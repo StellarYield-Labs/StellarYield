@@ -11,6 +11,7 @@ vi.mock("../../context/useWallet", () => ({
 // Mock API base URL
 vi.mock("../../lib/api", () => ({
     getApiBaseUrl: () => "http://localhost:3000",
+    apiUrl: (path: string) => `http://localhost:3000${path}`,
 }));
 
 describe("YieldForGood Summary Formatting", () => {

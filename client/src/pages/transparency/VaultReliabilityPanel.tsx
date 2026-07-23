@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
 import { Loader2, ShieldCheck, AlertTriangle, ShieldX, Activity } from "lucide-react";
-import { getApiBaseUrl } from "../../lib/api";
-
-const API_BASE = getApiBaseUrl();
+import { apiUrl } from "../../lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -103,7 +101,7 @@ export default function VaultReliabilityPanel() {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch(`${API_BASE}/api/reliability`);
+        const res = await fetch(apiUrl(`/api/reliability`));
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         const data: DataSourceReliability[] = await res.json();
         if (!cancelled) setProviders(data);

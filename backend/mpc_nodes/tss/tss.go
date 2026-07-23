@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
+	"github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
 	"github.com/pkg/errors"
 )
 
@@ -69,7 +70,11 @@ func (ks *KeyShare) PublicKey() (*secp256k1.PublicKey, error) {
 		aggY.Add(aggY, pk.Y())
 	}
 
-	return secp256k1.NewPublicKey(aggX, aggY), nil
+	// secp256k1.NewPublicKey requires FieldVal, not *big.Int
+	var fvX, fvY secp256k1.FieldVal
+	fvX.SetByteSlice(aggX.Bytes())
+	fvY.SetByteSlice(aggY.Bytes())
+	return secp256k1.NewPublicKey(&fvX, &fvY), nil
 }
 
 // LocalSecretShare holds the local secret share with commitment
@@ -374,7 +379,8 @@ func (c *TSSCoordinator) StartSigningSession(messageHash []byte) (*SigningSessio
 		}
 	}
 
-	sessionID := hex.EncodeToString(sha256.Sum256(messageHash))
+	h := sha256.Sum256(messageHash)
+	sessionID := hex.EncodeToString(h[:])
 
 	session := &SigningSession{
 		ID:          sessionID,
@@ -480,7 +486,11 @@ func (c *TSSCoordinator) GetSignatureResult(sessionID string) (*Signature, error
 
 // VerifySignature verifies a TSS signature
 func VerifySignature(publicKey *secp256k1.PublicKey, messageHash []byte, signature *Signature) bool {
-	return secp256k1.VerifySignature(publicKey.SerializeUncompressed(), messageHash, signature.R.Bytes(), signature.S.Bytes())
+	var r, s secp256k1.ModNScalar
+	r.SetByteSlice(signature.R.Bytes())
+	s.SetByteSlice(signature.S.Bytes())
+	sig := ecdsa.NewSignature(&r, &s)
+	return sig.Verify(messageHash, publicKey)
 }
 
 // ComputeMessageHash computes the SHA256 hash of a message for signing

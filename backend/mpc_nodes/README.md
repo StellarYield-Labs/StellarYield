@@ -312,6 +312,14 @@ go test ./coordinator -v
 go test ./storage -v
 ```
 
+These tests are local and deterministic: they use ephemeral memory storage and
+do not require Vault, an HSM, Horizon, or mainnet access. Ceremony startup
+rejects invalid thresholds, mismatched participant-key sets, missing local
+party keys, nil participant keys, missing message signatures, stale sessions,
+and duplicate submissions. Node startup also rejects unknown storage backends
+instead of silently falling back to memory storage. Successful completion and
+rejection/timeout paths assert their structured audit events.
+
 ## 📊 Monitoring
 
 ### Prometheus Metrics

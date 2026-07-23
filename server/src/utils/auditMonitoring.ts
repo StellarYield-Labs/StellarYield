@@ -198,9 +198,11 @@ export async function checkAuditTrailIntegrity(): Promise<void> {
       createAlert(
         "AUDIT_TRAIL_INTEGRITY_FAILURE",
         "CRITICAL",
-        `Audit trail integrity check failed: ${verification.invalidEntries.length} invalid entries detected`,
+        `Audit trail integrity check failed: ${verification.invalidEntries.length} invalid entries, ${verification.deletedEntries.length} deleted, ${verification.reorderedEntries.length} reordered`,
         {
           invalidEntries: verification.invalidEntries,
+          deletedEntries: verification.deletedEntries,
+          reorderedEntries: verification.reorderedEntries,
           totalEntries: logs.length,
         },
       );

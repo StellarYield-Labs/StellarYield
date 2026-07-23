@@ -50,6 +50,12 @@ export function validateServerEnv(env: Env = process.env): EnvValidationResult {
     errors.push("DEX_ROUTER_CONTRACT_ID and ZAP_QUOTE_SIM_SOURCE_ACCOUNT must be configured together.");
   }
 
+  if (!hasValue(env.AUDIT_SIGNING_KEY) || env.AUDIT_SIGNING_KEY === "default-key") {
+    const message = "AUDIT_SIGNING_KEY must be set to a real signing secret; the default key is forbidden in production.";
+    if (isProduction(env)) errors.push(message);
+    else warnings.push(message);
+  }
+
   if (!hasValue(env.SOROBAN_RPC_URL)) {
     warnings.push("SOROBAN_RPC_URL is not set; the server will use the public testnet RPC fallback.");
   }

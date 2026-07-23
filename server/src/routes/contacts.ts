@@ -80,6 +80,109 @@ router.get("/", async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/contacts/search
+ * Search contacts (limited implementation since data is encrypted)
+ */
+router.get("/search", async (req: Request, res: Response) => {
+  try {
+    const walletAddress = getWalletAddress(req);
+    const { q } = req.query;
+    
+    if (!walletAddress) {
+      return res.status(401).json({ 
+        error: "Wallet address required",
+        code: "WALLET_ADDRESS_REQUIRED"
+      });
+    }
+
+    if (!q || typeof q !== 'string') {
+      return res.status(400).json({ 
+        error: "Search query is required",
+        code: "INVALID_QUERY"
+      });
+    }
+
+    // Since data is encrypted, we can't search by content
+    // We'll return all contacts and let the client filter after decryption
+    const contacts = await prisma.contact.findMany({
+      where: { walletAddress },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        encryptedName: true,
+        encryptedAddress: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    res.json({
+      contacts: contacts.map(contact => ({
+        id: contact.id,
+        encrypted_name: contact.encryptedName,
+        encrypted_address: contact.encryptedAddress,
+        created_at: contact.createdAt.toISOString(),
+        updated_at: contact.updatedAt.toISOString(),
+      })),
+      total: contacts.length,
+    });
+  } catch (error) {
+    console.error("Failed to search contacts:", error);
+    res.status(500).json({ 
+      error: "Failed to search contacts",
+      code: "SEARCH_FAILED"
+    });
+  }
+});
+
+/**
+ * GET /api/contacts/export
+ * Export all contacts as encrypted backup
+ */
+router.get("/export", async (req: Request, res: Response) => {
+  try {
+    const walletAddress = getWalletAddress(req);
+    
+    if (!walletAddress) {
+      return res.status(401).json({ 
+        error: "Wallet address required",
+        code: "WALLET_ADDRESS_REQUIRED"
+      });
+    }
+
+    const contacts = await prisma.contact.findMany({
+      where: { walletAddress },
+      orderBy: { createdAt: "desc" },
+    });
+
+    // Create encrypted backup (client will handle the actual encryption)
+    const backupData = {
+      version: "1.0",
+      exportedAt: new Date().toISOString(),
+      contacts: contacts.map(contact => ({
+        id: contact.id,
+        encryptedName: contact.encryptedName,
+        encryptedAddress: contact.encryptedAddress,
+        createdAt: contact.createdAt.toISOString(),
+        updatedAt: contact.updatedAt.toISOString(),
+      })),
+    };
+
+    // In a real implementation, this would be encrypted on the client side
+    // For now, we'll return the data as-is
+    res.json({
+      encryptedBackup: JSON.stringify(backupData),
+    });
+  } catch (error) {
+    console.error("Failed to export contacts:", error);
+    res.status(500).json({ 
+      error: "Failed to export contacts",
+      code: "EXPORT_FAILED"
+    });
+  }
+});
+
+/**
  * GET /api/contacts/:id
  * Fetch a single contact by ID
  */
@@ -355,109 +458,6 @@ router.delete("/:id", async (req: Request, res: Response) => {
     res.status(500).json({ 
       error: "Failed to delete contact",
       code: "DELETE_FAILED"
-    });
-  }
-});
-
-/**
- * GET /api/contacts/search
- * Search contacts (limited implementation since data is encrypted)
- */
-router.get("/search", async (req: Request, res: Response) => {
-  try {
-    const walletAddress = getWalletAddress(req);
-    const { q } = req.query;
-    
-    if (!walletAddress) {
-      return res.status(401).json({ 
-        error: "Wallet address required",
-        code: "WALLET_ADDRESS_REQUIRED"
-      });
-    }
-
-    if (!q || typeof q !== 'string') {
-      return res.status(400).json({ 
-        error: "Search query is required",
-        code: "INVALID_QUERY"
-      });
-    }
-
-    // Since data is encrypted, we can't search by content
-    // We'll return all contacts and let the client filter after decryption
-    const contacts = await prisma.contact.findMany({
-      where: { walletAddress },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        encryptedName: true,
-        encryptedAddress: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-
-    res.json({
-      contacts: contacts.map(contact => ({
-        id: contact.id,
-        encrypted_name: contact.encryptedName,
-        encrypted_address: contact.encryptedAddress,
-        created_at: contact.createdAt.toISOString(),
-        updated_at: contact.updatedAt.toISOString(),
-      })),
-      total: contacts.length,
-    });
-  } catch (error) {
-    console.error("Failed to search contacts:", error);
-    res.status(500).json({ 
-      error: "Failed to search contacts",
-      code: "SEARCH_FAILED"
-    });
-  }
-});
-
-/**
- * GET /api/contacts/export
- * Export all contacts as encrypted backup
- */
-router.get("/export", async (req: Request, res: Response) => {
-  try {
-    const walletAddress = getWalletAddress(req);
-    
-    if (!walletAddress) {
-      return res.status(401).json({ 
-        error: "Wallet address required",
-        code: "WALLET_ADDRESS_REQUIRED"
-      });
-    }
-
-    const contacts = await prisma.contact.findMany({
-      where: { walletAddress },
-      orderBy: { createdAt: "desc" },
-    });
-
-    // Create encrypted backup (client will handle the actual encryption)
-    const backupData = {
-      version: "1.0",
-      exportedAt: new Date().toISOString(),
-      contacts: contacts.map(contact => ({
-        id: contact.id,
-        encryptedName: contact.encryptedName,
-        encryptedAddress: contact.encryptedAddress,
-        createdAt: contact.createdAt.toISOString(),
-        updatedAt: contact.updatedAt.toISOString(),
-      })),
-    };
-
-    // In a real implementation, this would be encrypted on the client side
-    // For now, we'll return the data as-is
-    res.json({
-      encryptedBackup: JSON.stringify(backupData),
-    });
-  } catch (error) {
-    console.error("Failed to export contacts:", error);
-    res.status(500).json({ 
-      error: "Failed to export contacts",
-      code: "EXPORT_FAILED"
     });
   }
 });

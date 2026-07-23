@@ -1,0 +1,13 @@
+{
+  "name": "clmm_amount0_always_zero",
+  "subsystem": "clmm_core",
+  "seed": 0,
+  "model_version": "verification-model-v1",
+  "description": "get_amount0_for_liquidity's saturating_sub operand order is inverted (numerator/sqrt_upper - numerator/sqrt_lower instead of the reverse), so get_amounts_for_liquidity returns amount0=0 for essentially every non-degenerate range priced at or below its lower bound. Minimal reproducer: tick range [0, 10000], price at/below the lower tick, liquidity=1_000_000_000.",
+  "inputs": {
+    "tick_lower": 0,
+    "tick_upper": 10000,
+    "liquidity": 1000000000,
+    "price_below_range": true
+  }
+}

@@ -1,6 +1,7 @@
 import { createApp } from "./app";
 import { initializeZapSupportedAssetsCache } from "./config/zapAssetsConfig";
 import { startIndexer } from "./indexer/indexer";
+import { startGovernanceIndexer } from "./indexer/governanceIndexer";
 import { startHistoricalYieldAggregationJob } from "./jobs/historicalYieldAggregation";
 import { startSharePriceSnapshotJob } from "./jobs/sharePriceSnapshot";
 import { startHealthMonitor } from "./monitoring/healthMonitor";
@@ -48,6 +49,7 @@ app.get('/api/yields', (req: Request, res: Response) => {
 });
 
 startIndexer().catch(console.error);
+startGovernanceIndexer().catch(console.error);
 startHistoricalYieldAggregationJob();
 startSharePriceSnapshotJob();
 startDriftDetectionJob();
@@ -102,7 +104,7 @@ const digestDeliveryService = new DigestDeliveryService(
   },
 );
 const digestGenerationQueue = new Queue(QUEUE_NAMES.DIGEST_GENERATION, {
-  connection: digestRedis,
+  connection: digestRedis as any,
 });
 createDigestGenerationWorker(digestRedis, digestBuilder, digestDeliveryService);
 createDigestThresholdCheckWorker(digestRedis, digestBuilder, digestGenerationQueue);

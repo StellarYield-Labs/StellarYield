@@ -9,9 +9,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Heart, Loader2, CheckCircle, AlertCircle, Users, TrendingUp } from "lucide-react";
 import { useWallet } from "../../context/useWallet";
-import { getApiBaseUrl } from "../../lib/api";
-
-const API_BASE = getApiBaseUrl();
+import { apiUrl } from "../../lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -92,11 +90,11 @@ export default function YieldForGood() {
         setLoading(true);
         try {
             const requests = [
-                fetch(`${API_BASE}/api/donations/summary`),
+                fetch(apiUrl("/api/donations/summary")),
             ];
             
             if (walletAddress) {
-                requests.push(fetch(`${API_BASE}/api/donations/config/${encodeURIComponent(walletAddress)}`));
+                requests.push(fetch(apiUrl(`/api/donations/config/${encodeURIComponent(walletAddress)}`)));
             }
 
             const [summaryRes, configRes] = await Promise.all(requests);
@@ -135,7 +133,7 @@ export default function YieldForGood() {
             const charity = CHARITIES.find((c) => c.id === selectedCharityId);
             if (!charity) throw new Error("Select a valid charity.");
 
-            const res = await fetch(`${API_BASE}/api/donations/set`, {
+            const res = await fetch(apiUrl("/api/donations/set"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -172,7 +170,7 @@ export default function YieldForGood() {
         setSaving(true);
         setError(null);
         try {
-            const res = await fetch(`${API_BASE}/api/donations/set`, {
+            const res = await fetch(apiUrl("/api/donations/set"), {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({

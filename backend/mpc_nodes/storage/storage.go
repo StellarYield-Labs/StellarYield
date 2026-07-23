@@ -82,6 +82,11 @@ func (c *StorageConfig) Validate() error {
 	if c.Type == "" {
 		return errors.New("storage type cannot be empty")
 	}
+	switch c.Type {
+	case "memory", "mongodb", "encrypted_file":
+	default:
+		return fmt.Errorf("unsupported storage type %q", c.Type)
+	}
 	if c.Type == "mongodb" && c.ConnectionString == "" {
 		return errors.New("mongodb connection string required")
 	}
@@ -149,12 +154,12 @@ func (s *MemoryStorage) ListKeyShares(ctx context.Context) ([]string, error) {
 
 // EncryptedStorage implements encrypted key share storage
 type EncryptedStorage struct {
-	config    *StorageConfig
-	cipher    cipher.Block
-	gcm       cipher.AEAD
-	db        *mongo.Database
+	config     *StorageConfig
+	cipher     cipher.Block
+	gcm        cipher.AEAD
+	db         *mongo.Database
 	collection *mongo.Collection
-	mu        sync.RWMutex
+	mu         sync.RWMutex
 }
 
 // NewEncryptedStorage creates a new encrypted storage
@@ -437,14 +442,14 @@ func (s *VaultStorage) ListKeyShares(ctx context.Context) ([]string, error) {
 
 // AuditLogEntry represents an audit log entry
 type AuditLogEntry struct {
-	Timestamp   time.Time `json:"timestamp"`
-	Action      string    `json:"action"`
-	SessionID   string    `json:"session_id"`
-	PartyID     string    `json:"party_id"`
-	IPAddress   string    `json:"ip_address"`
-	UserAgent   string    `json:"user_agent"`
-	Success     bool      `json:"success"`
-	ErrorMessage string   `json:"error_message,omitempty"`
+	Timestamp    time.Time `json:"timestamp"`
+	Action       string    `json:"action"`
+	SessionID    string    `json:"session_id"`
+	PartyID      string    `json:"party_id"`
+	IPAddress    string    `json:"ip_address"`
+	UserAgent    string    `json:"user_agent"`
+	Success      bool      `json:"success"`
+	ErrorMessage string    `json:"error_message,omitempty"`
 }
 
 // AuditLogger handles audit logging for key operations
@@ -500,10 +505,10 @@ func (m *KeyRotationManager) RotateKeyShare(ctx context.Context, oldSessionID, n
 	// Store new share
 	if err := m.storage.StoreKeyShare(ctx, newSessionID, newShare); err != nil {
 		m.audit.Log(&AuditLogEntry{
-			Timestamp:   time.Now(),
-			Action:      "ROTATE_KEY_FAILED",
-			SessionID:   newSessionID,
-			Success:     false,
+			Timestamp:    time.Now(),
+			Action:       "ROTATE_KEY_FAILED",
+			SessionID:    newSessionID,
+			Success:      false,
 			ErrorMessage: err.Error(),
 		})
 		return err
@@ -512,10 +517,10 @@ func (m *KeyRotationManager) RotateKeyShare(ctx context.Context, oldSessionID, n
 	// Delete old share
 	if err := m.storage.DeleteKeyShare(ctx, oldSessionID); err != nil {
 		m.audit.Log(&AuditLogEntry{
-			Timestamp:   time.Now(),
-			Action:      "DELETE_OLD_KEY_FAILED",
-			SessionID:   oldSessionID,
-			Success:     false,
+			Timestamp:    time.Now(),
+			Action:       "DELETE_OLD_KEY_FAILED",
+			SessionID:    oldSessionID,
+			Success:      false,
 			ErrorMessage: err.Error(),
 		})
 		// Don't fail the rotation, just log

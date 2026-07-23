@@ -38,7 +38,10 @@ export function mergeQuestsWithTemplate(
   const base = cloneQuests(template);
   if (!persisted?.length) return base;
 
-  const byId = new Map(persisted.map((q) => [q.id, q]));
+  const validPersisted = persisted.filter(
+    (q) => q && typeof q === "object" && q.id && q.title && Array.isArray(q.objectives)
+  );
+  const byId = new Map(validPersisted.map((q) => [q.id, q]));
   return base.map((q) => {
     const saved = byId.get(q.id);
     return saved ? structuredClone(saved) : q;
@@ -128,7 +131,13 @@ export function loadWalletQuestBundle(
   storage: StorageBackend = localStorage,
 ): PersistedWalletQuestBundle {
   const key = walletQuestStorageKey(walletAddress);
-  const fromDisk = parseBundle(storage.getItem(key));
+  let raw: string | null = null;
+  try {
+    raw = storage.getItem(key);
+  } catch {
+    /* ignore */
+  }
+  const fromDisk = parseBundle(raw);
 
   if (fromDisk) {
     return {

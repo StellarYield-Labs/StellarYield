@@ -115,7 +115,7 @@ export class VaultOrchestrator {
     // Check that at least one strategy is active
     const activeCount = this.config.strategies.filter((s) => s.isActive).length;
     if (activeCount === 0) {
-      errors.push("At least one strategy must be active");
+      errors.push("no active strategies: at least one strategy must have isActive=true");
     }
 
     // Check weight constraints
@@ -256,8 +256,14 @@ export class VaultOrchestrator {
       (sum, s) => sum + Math.pow(s.weight, 2),
       0,
     );
-    // Normalize to 0-100 scale
-    return (hhi / (1 / this.config.strategies.length)) * 100;
+    const n = this.config.strategies.length;
+    if (n === 0) return 0;
+    // Normalize: HHI ranges from 1/n (perfectly distributed) to 1 (fully concentrated)
+    // Map that to 0-100: (hhi - 1/n) / (1 - 1/n) * 100, clamped to [0, 100]
+    const minHhi = 1 / n;
+    const range = 1 - minHhi;
+    if (range <= 0) return 100;
+    return Math.min(100, Math.max(0, ((hhi - minHhi) / range) * 100));
   }
 
   /**

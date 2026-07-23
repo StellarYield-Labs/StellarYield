@@ -9,9 +9,9 @@ import {
   validateVaultMetadataInput,
   sanitizeSvg,
   type VaultMetadataInput,
-} from "../../services/ipfs/vaultMetadataService";
+} from "../services/ipfs/vaultMetadataService";
 
-const VALID_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>`;
+const VALID_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><circle cx="32" cy="32" r="30"/></svg>`;
 
 function makeValidInput(overrides: Partial<VaultMetadataInput> = {}): VaultMetadataInput {
   return {
@@ -142,5 +142,33 @@ describe("sanitizeSvg", () => {
     const result = sanitizeSvg(svg);
     expect(result).not.toContain("<script");
     expect(result).not.toContain("var x");
+  });
+
+  it("handles nested script tag bypass attempts", () => {
+    // After stripping inner <script>, the outer fragments rejoin into a new <script> tag
+    const svg = `<svg><scr<script></script>ipt>alert(1)</script><circle r="5"/></svg>`;
+    const result = sanitizeSvg(svg);
+    expect(result).not.toContain("<script");
+    expect(result).not.toContain("alert");
+  });
+
+  it("strips event handlers revealed after script tag removal", () => {
+    // Removing the <script> block reveals ` onload="evil()"` on the <svg> tag
+    const svg = `<svg<script></script> onload="evil()"><circle r="5"/></svg>`;
+    const result = sanitizeSvg(svg);
+    expect(result).not.toContain("onload");
+    expect(result).not.toContain("evil");
+  });
+
+  it("strips data: URIs", () => {
+    const svg = `<svg><image href="data:text/html,<script>alert(1)</script>"/></svg>`;
+    const result = sanitizeSvg(svg);
+    expect(result.toLowerCase()).not.toContain("data:");
+  });
+
+  it("strips vbscript: URIs", () => {
+    const svg = `<svg><a href="vbscript:MsgBox('xss')"><circle r="5"/></a></svg>`;
+    const result = sanitizeSvg(svg);
+    expect(result.toLowerCase()).not.toContain("vbscript:");
   });
 });

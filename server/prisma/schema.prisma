@@ -204,6 +204,12 @@ model RebalanceQueueEntry {
   nextRetryAt         DateTime?
   lastError           String?
   
+  // Execution tracking
+  lastTransactionHash String?
+  lastLedger          Int?
+  lastErrorClass      String?
+  executionMetadata   Json?
+  
   // Deferred execution details
   deferredReason      String?  // Reason for deferral
   deferredUntil       DateTime?
@@ -231,6 +237,8 @@ model RebalanceHistory {
   expectedAmount      Float    // Expected amount before partial fill
   filledPercentage    Float    // Percentage of expected amount
   transactionHash     String?  // Blockchain tx hash if applicable
+  ledger              Int?     // Ledger sequence when transaction was included
+  errorClass          String?  // transient | terminal | simulation
   completedAt         DateTime
   createdAt           DateTime @default(now())
 
@@ -317,4 +325,302 @@ model PortfolioRegimeShiftAlert {
 
   @@index([walletAddress, createdAt])
   @@index([walletAddress, currentRegime, createdAt])
+}
+
+// ── Unified Governance Control Plane Models (Issue #81) ─────────────────────
+
+// Canonical record of a privileged action proposal. Every admin mutation
+// covered by the governance control plane creates or references one of
+// these rather than reporting an unexecuted action as completed. Status is
+// ultimately reconciled from on-chain events/tx results, not just server
+// intent - see GovernanceEvent below.
+model GovernanceProposal {
+  id                  String   @id @default(uuid())
+
+  // Canonical action payload (see server/src/governance/actionSchema.ts).
+  // actionHash is the sha256 shared by client preview, server record,
+  // signatures, on-chain proposal, and execution event.
+  actionHash          String   @unique
+  schemaVersion       Int
+  network             String
+  targetContractId    String
+  method              String
+  argsJson            Json
+  expectedStateJson   Json
+  proposer            String
+  creationLedger      Int
+  executionWindowSecs Int
+  rationale           String
+
+  // Links (Issue #81 requirement: link every proposal to strategy version,
+  // risk forecast, audit record, and resulting state transition).
+  strategyVersionId   String?
+  riskForecastId      String?
+  auditLogId          String?
+
+  // On-chain identity, once proposed on the optimistic_governance contract.
+  onChainProposalId   BigInt?
+  governanceContractId String?
+
+  status              String   @default("PENDING")
+  // PENDING, CHALLENGED, APPROVED, EXECUTABLE, SUBMITTED, CONFIRMED,
+  // FAILED, CANCELLED, EXPIRED
+
+  executionTxHash     String?
+  executionLedger     Int?
+  failureReason       String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  simulations         GovernanceSimulation[]
+  events              GovernanceEvent[]
+
+  @@index([status])
+  @@index([proposer, createdAt])
+  @@index([method, createdAt])
+}
+
+// Simulation evidence recorded before a proposal may be approved for
+// execution. A stale simulation (state or ledger age beyond the configured
+// bound) must not be presented as current without a warning + execution
+// gate - see isSimulationStale in governanceProposalService.ts.
+model GovernanceSimulation {
+  id                  String   @id @default(uuid())
+  proposalId          String
+  proposal            GovernanceProposal @relation(fields: [proposalId], references: [id])
+
+  simulatedAtLedger   Int
+  simulationExpiry    DateTime
+
+  footprintJson       Json     // transaction footprint (read/write keys)
+  resultJson          Json     // simulated result payload
+  diagnosticEventsJson Json    // diagnostic events emitted during simulation
+  expectedStateDiffJson Json   // computed before/after state diff
+  resourceFee         String   // stroops, stored as string to avoid float precision loss
+  riskWarnings        String[] @default([])
+
+  createdAt           DateTime @default(now())
+
+  @@index([proposalId, createdAt])
+}
+
+// Indexed on-chain events for governance proposals (propose/dispute/resolve/
+// cancel/execute). Proposal status must be reconstructable from these events
+// and transaction results alone, so the application DB can be rebuilt from
+// an empty state by replaying them.
+model GovernanceEvent {
+  id                  String   @id @default(uuid())
+  proposalId          String?
+  proposal            GovernanceProposal? @relation(fields: [proposalId], references: [id])
+
+  onChainProposalId   BigInt
+  eventType           String   // PROPOSE, DISPUTE, RESOLVE, CANCEL, EXECUTE
+  ledger              Int
+  txHash              String
+  topic               String
+  dataJson            Json
+
+  createdAt           DateTime @default(now())
+
+  @@unique([txHash, topic, onChainProposalId])
+  @@index([onChainProposalId, ledger])
+}
+
+// ── Allocation Provenance Models ──────────────────────────────────────────────
+
+model AllocationProvenance {
+  decisionId          String   @id
+  vaultId             String
+  strategyVersion     String
+  timestamp           DateTime
+  triggerCondition    String
+  triggerInputs       Json
+  previousAllocation  Json
+  updatedAllocation   Json
+  signer              String
+
+  @@index([vaultId])
+  @@index([timestamp])
+}
+
+// ── Rebalance Auction Models (MEV-Resistant Solver Auction) ────────────────
+
+model RebalanceAuctionIntent {
+  id                      String   @id @default(uuid())
+  intentId                BigInt   @unique // On-chain intent ID
+  vaultId                 String
+  vaultContractId         String
+  
+  // Strategy snapshot reference
+  strategySnapshotId      String
+  strategyVersion         Int
+  
+  // Execution state machine
+  state                   String   @default("INTENT_CREATED") // INTENT_CREATED, AUCTION_OPEN, BIDDING_CLOSED, WINNER_SELECTED, SETTLEMENT_PENDING, SETTLED, FAILED, CANCELLED, EXPIRED
+  
+  // Intent constraints
+  inputPositions          Json     // Array of InputPosition
+  targetConstraints       Json     // Array of AllocationConstraint
+  maxTotalLossBps         Int
+  maxSlippageBps          Int
+  maxFeesBps              Int
+  maxPriceImpactBps       Int
+  minTotalOutputValue     BigInt
+  totalInputValue         BigInt
+  totalOutputValue        BigInt   @default(0)
+  
+  // Allowlists
+  allowedTokens           Json     // Array of token addresses
+  allowedProtocols        Json     // Array of protocol addresses
+  
+  // Partial fill policy
+  partialFillPolicy       String   @default("FULL_ONLY") // FULL_ONLY, PRO_RATA, MIN_PERCENT
+  
+  // Intent identity
+  nonce                   BigInt
+  intentHash              String   @unique
+  creationLedger          BigInt
+  expiryLedger            BigInt
+  cancellationAuthority   String
+  
+  // Timing
+  commitPhaseEnd          DateTime?
+  revealPhaseEnd          DateTime?
+  
+  // Settlement
+  winningSolver           String?
+  settlementTxHash        String?
+  settlementLedger        BigInt?
+  realizedSlippageBps     Int?
+  filledPercentage        Int      @default(10000) // bps
+  
+  // Audit
+  triggeredBy             String?
+  completedAt             DateTime?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([vaultId, state])
+  @@index([state, expiryLedger])
+  @@index([intentHash])
+  @@index([createdAt])
+  bids                    SolverBid[]
+  settlement              AuctionSettlement?
+}
+
+model SolverBid {
+  id                      String   @id @default(uuid())
+  intentId                String   // References RebalanceAuctionIntent.id
+  solverAddress           String
+  
+  // Commit phase
+  commitHash              String
+  commitTimestamp         DateTime
+  
+  // Reveal phase
+  revealed                Boolean  @default(false)
+  outputAmounts           Json     // Map of token → amount
+  totalOutputValue        BigInt
+  route                   Json     // Array of RouteLeg
+  feesBps                 Int
+  slippageBps             Int
+  priceImpactBps          Int
+  bidHash                 String?
+  revealTimestamp         DateTime?
+  
+  // Bond
+  bondAmount              BigInt   @default(0)
+  bondSlashed             Boolean  @default(false)
+  
+  // Ranking
+  rank                    Int?     // Final ranking (1 = winner)
+  
+  // Timing
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  intent                  RebalanceAuctionIntent @relation(fields: [intentId], references: [id])
+  
+  @@unique([intentId, solverAddress])
+  @@index([solverAddress])
+  @@index([intentId, revealed])
+}
+
+model AuctionSettlement {
+  id                      String   @id @default(uuid())
+  intentId                String   @unique // References RebalanceAuctionIntent.id
+  solverAddress           String
+  
+  // Execution details
+  txHash                  String
+  settlementLedger        BigInt
+  settledAt               DateTime
+  
+  // Balance reconciliation
+  preBalances             Json     // Map of token → balance before
+  postBalances            Json     // Map of token → balance after
+  fillDeltas              Json     // Map of token → actual delta
+  
+  // Fees and slippage
+  totalFees               BigInt
+  realizedSlippageBps     Int
+  protocolFeeBps          Int
+  
+  // Partial fill tracking
+  partialFill             Boolean  @default(false)
+  filledPercentage        Int      @default(10000) // bps
+  
+  // Audit
+  createdAt               DateTime @default(now())
+
+  intent                  RebalanceAuctionIntent @relation(fields: [intentId], references: [id])
+  
+  @@index([solverAddress])
+  @@index([txHash])
+}
+
+model SolverBond {
+  id                      String   @id @default(uuid())
+  solverAddress           String
+  intentId                String
+  bondAmount              BigInt
+  status                  String   @default("LOCKED") // LOCKED, RELEASED, SLASHED
+  depositedAt             DateTime @default(now())
+  releasedAt              DateTime?
+  
+  @@unique([solverAddress, intentId])
+  @@index([solverAddress, status])
+  @@index([intentId])
+}
+
+model ExecutionAuditLog {
+  id                      String   @id @default(uuid())
+  intentId                String
+  eventType               String   // INTENT_CREATED, BID_COMMITTED, BID_REVEALED, WINNER_SELECTED, SETTLEMENT_SUBMITTED, SETTLEMENT_CONFIRMED, CANCELLED, EXPIRED, BOND_SLASHED, BOND_RELEASED
+  actor                   String   // Address that triggered the event
+  details                 Json     // Event-specific details
+  ledgerSequence          BigInt?
+  txHash                  String?
+  createdAt               DateTime @default(now())
+
+  @@index([intentId, eventType])
+  @@index([createdAt])
+  @@index([actor])
+}
+
+model SolverReputation {
+  id                      String   @id @default(uuid())
+  solverAddress           String   @unique
+  score                   Int      @default(0)
+  totalSettled            Int      @default(0)
+  successfulSettles       Int      @default(0)
+  failedSettles           Int      @default(0)
+  bondsSlashed            Int      @default(0)
+  lastSettledAt           DateTime?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([score])
+  @@index([solverAddress])
 }

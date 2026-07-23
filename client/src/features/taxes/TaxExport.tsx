@@ -8,9 +8,7 @@ import {
   Eye,
   AlertTriangle,
 } from "lucide-react";
-import { getApiBaseUrl } from "../../lib/api";
-
-const API_BASE = getApiBaseUrl();
+import { apiUrl } from "../../lib/api";
 
 type PreviewWarningCode =
   | "MISSING_BASIS"
@@ -101,7 +99,7 @@ export default function TaxExport() {
     setPreviewLoading(true);
     try {
       const res = await fetch(
-        `${API_BASE}/api/users/${encodeURIComponent(walletAddress)}/export/preview`,
+        apiUrl(`/api/users/${encodeURIComponent(walletAddress)}/export/preview`),
       );
       if (res.status === 404) {
         setError("No transactions found for your address.");
@@ -131,7 +129,7 @@ export default function TaxExport() {
     setDownloading(true);
     try {
       const res = await fetch(
-        `${API_BASE}/api/users/${encodeURIComponent(walletAddress)}/export`,
+        apiUrl(`/api/users/${encodeURIComponent(walletAddress)}/export`),
       );
       if (res.status === 404) {
         setError("No transactions found for your address.");

@@ -62,14 +62,14 @@ describe("api URL helpers", () => {
     expect(apiUrl("/api/yields", configuredEnv)).toBe("https://api.example.com/api/yields");
   });
 
-  it("falls back to same-origin API routes when hosted env vars are missing", () => {
+  it("reports unavailable API configuration for hosted previews without env vars", () => {
     global.window = { location: { hostname: "stellar-yield-preview.vercel.app" } } as any;
 
     expect(getApiBaseUrlState(env({}))).toEqual({
-      available: true,
-      baseUrl: "",
+      available: false,
+      reason: "Backend URL is not configured. Set VITE_API_BASE_URL to enable API-backed views.",
     });
-    expect(getApiBaseUrl(env({}))).toBe("");
-    expect(apiUrl("/api/yields", env({}))).toBe("/api/yields");
+    expect(() => getApiBaseUrl(env({}))).toThrow(/Backend URL is not configured/);
+    expect(() => apiUrl("/api/yields", env({}))).toThrow(/Backend URL is not configured/);
   });
 });

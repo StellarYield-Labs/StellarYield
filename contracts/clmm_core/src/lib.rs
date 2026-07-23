@@ -9,9 +9,9 @@ use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Env,
 };
 
-mod math;
+pub mod math;
 mod position;
-mod tick;
+pub mod tick;
 
 // ── Storage Keys ────────────────────────────────────────────────────────
 

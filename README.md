@@ -159,11 +159,12 @@ After deploying the frontend + backend, run the included smoke test to validate 
 ```bash
 FRONTEND_URL="https://your-frontend-url" \
 BACKEND_URL="https://your-backend-url" \
+VITE_API_BASE_URL="https://your-backend-url" \
 bash scripts/smoke-test.sh
 ```
 
-- **Checks**: `GET /api/yields`, `GET /api/metrics`, and the frontend root.
-- **Config**: `FRONTEND_URL` and `BACKEND_URL` environment variables.
+- **Checks**: backend health, yields, an unauthenticated-safe backend route, the frontend root, and a frontend asset.
+- **Config**: `FRONTEND_URL`, `BACKEND_URL`, and for deployed frontends `VITE_API_BASE_URL` or `VITE_API_URL`.
   🌊 Contributing via Drips Wave
   We are proudly participating in the Stellar Wave Program via Drips! We are actively looking for Web3 full-stack and Rust developers.
   Check our open issues labeled `Stellar Wave`, apply via the Drips App, and submit your PR to earn rewards funded by the Stellar Development Foundation!
@@ -198,16 +199,19 @@ Override targets via environment variables:
 # Unix/Linux/macOS
 FRONTEND_URL="https://stellaryield.vercel.app" \
 BACKEND_URL="https://your-backend.example.com" \
+VITE_API_BASE_URL="https://your-backend.example.com" \
 npm run smoke-test
 
 # Windows PowerShell
 $env:FRONTEND_URL="https://stellaryield.vercel.app"
 $env:BACKEND_URL="https://your-backend.example.com"
+$env:VITE_API_BASE_URL="https://your-backend.example.com"
 npm run smoke-test:node
 
 # Windows Command Prompt
 set FRONTEND_URL=https://stellaryield.vercel.app
 set BACKEND_URL=https://your-backend.example.com
+set VITE_API_BASE_URL=https://your-backend.example.com
 npm run smoke-test:node
 ```
 
@@ -215,10 +219,11 @@ Optional path overrides:
 
 - `BACKEND_HEALTH_PATH` (default: `/api/health`)
 - `BACKEND_YIELDS_PATH` (default: `/api/yields`)
+- `BACKEND_SAFE_PATH` (default: `/api/openapi`)
 - `FRONTEND_ASSET_PATH` (default: `/favicon.svg`)
 
 ### CI Usage
 
-Both smoke test variants support the same environment variables and produce identical output. The Node.js version (`smoke-test:node`) is recommended for CI environments and Windows contributors as it has no Bash dependency.
+Both smoke test variants support the same environment variables and produce identical output. The Node.js version (`smoke-test:node`) is recommended for CI environments and Windows contributors as it has no Bash dependency. For preview and production checks, set `VITE_API_BASE_URL` or `VITE_API_URL`; the Node smoke test fails early when a deployed frontend lacks backend configuration or points at localhost.
 
 StellarYield is participating in the Stellar Wave Program via Drips. Contributors can pick up open issues, submit focused pull requests, and validate their work locally with the commands above before opening a PR.

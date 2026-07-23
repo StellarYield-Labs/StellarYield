@@ -531,3 +531,121 @@ export const FIELD_VALIDATORS = {
     return typeof value === 'number' && value >= 0;
   },
 } as const;
+
+/**
+ * Required field manifests for shape validation
+ */
+export const REQUIRED_ANALYTICS_FIELDS = {
+  attributionReport: [
+    'walletAddress',
+    'totalReturn',
+    'totalDeposited',
+    'attributionBreakdown',
+    'timeWindow',
+    'generatedAt',
+    'dataCompleteness',
+  ] as const,
+  attributionBreakdown: [
+    'decisionType',
+    'contribution',
+    'percentage',
+    'apyImpact',
+    'decisions',
+    'confidence',
+  ] as const,
+  compatibilityReport: [
+    'protocols',
+    'issues',
+    'overallStatus',
+    'generatedAt',
+    'checkDuration',
+  ] as const,
+  compatibilityProtocol: [
+    'protocolName',
+    'status',
+    'criticalIssues',
+    'lastChecked',
+  ] as const,
+  compatibilityIssue: [
+    'severity',
+    'protocol',
+    'message',
+    'timestamp',
+  ] as const,
+  healthScore: [
+    'strategyId',
+    'strategyName',
+    'overallScore',
+    'metrics',
+    'status',
+    'signals',
+    'lastUpdated',
+    'trend',
+    'recommendations',
+  ] as const,
+  healthScoreMetrics: [
+    'contractSafety',
+    'dataFreshness',
+    'providerUptime',
+    'liquidityConditions',
+    'executionOutcomes',
+    'volatilityIndex',
+    'errorRate',
+    'latency',
+  ] as const,
+  reliabilityScore: [
+    'providerId',
+    'providerName',
+    'overallScore',
+    'dataSource',
+    'metrics',
+    'historicalPerformance',
+    'lastUpdated',
+    'status',
+  ] as const,
+  reliabilityScoreMetrics: [
+    'uptime',
+    'accuracy',
+    'latency',
+    'errorRate',
+    'consistency',
+  ] as const,
+  stateTransitionGraph: [
+    'strategyId',
+    'transitions',
+    'currentState',
+    'totalTransitions',
+    'generatedAt',
+    'timeRange',
+  ] as const,
+  recommendationStabilityReport: [
+    'stability',
+    'differences',
+    'summary',
+    'generatedAt',
+  ] as const,
+} as const;
+
+/**
+ * Shape validator helper for analytics mock data
+ */
+export function validateRequiredFields<T extends Record<string, any>>(
+  target: T,
+  requiredFields: readonly string[]
+): { valid: boolean; missingFields: string[] } {
+  if (!target || typeof target !== 'object') {
+    return { valid: false, missingFields: ['<root>'] };
+  }
+
+  const missingFields: string[] = [];
+  for (const field of requiredFields) {
+    if (!(field in target) || target[field] === undefined) {
+      missingFields.push(field);
+    }
+  }
+
+  return {
+    valid: missingFields.length === 0,
+    missingFields,
+  };
+}

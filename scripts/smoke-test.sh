@@ -7,7 +7,9 @@ OUTPUT_MODE=${OUTPUT_MODE:-"text"}
 
 BACKEND_HEALTH_PATH=${BACKEND_HEALTH_PATH:-"/api/health"}
 BACKEND_YIELDS_PATH=${BACKEND_YIELDS_PATH:-"/api/yields"}
+BACKEND_SAFE_PATH=${BACKEND_SAFE_PATH:-"/api/openapi"}
 FRONTEND_ASSET_PATH=${FRONTEND_ASSET_PATH:-"/favicon.svg"}
+FRONTEND_API_BASE_URL=${VITE_API_BASE_URL:-${VITE_API_URL:-""}}
 
 curl_status() {
   local url="$1"
@@ -34,6 +36,34 @@ expect_200() {
   fi
 }
 
+is_local_url() {
+  local url="$1"
+  [[ "$url" == http://localhost* || "$url" == https://localhost* || "$url" == http://127.0.0.1* || "$url" == https://127.0.0.1* ]]
+}
+
+expect_frontend_api_config() {
+  if is_local_url "$FRONTEND_URL"; then
+    echo "[PASS] Frontend API env"
+    echo "   Local frontend smoke test may rely on BACKEND_URL."
+    return
+  fi
+
+  if [[ -z "$FRONTEND_API_BASE_URL" ]]; then
+    echo "[FAIL] Frontend API env"
+    echo "   Set VITE_API_BASE_URL or VITE_API_URL for deployed frontend smoke tests."
+    exit 1
+  fi
+
+  if is_local_url "$FRONTEND_API_BASE_URL"; then
+    echo "[FAIL] Frontend API env"
+    echo "   Frontend API base points at a local-only backend: $FRONTEND_API_BASE_URL"
+    exit 1
+  fi
+
+  echo "[PASS] Frontend API env"
+  echo "   Frontend API base: $FRONTEND_API_BASE_URL"
+}
+
 run_check() {
   local label="$1"
   local url="$2"
@@ -56,8 +86,10 @@ run_check() {
 if [[ "${1:-}" == "--json" || "$OUTPUT_MODE" == "json" ]]; then
   timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
   checks=(
+    "Frontend API env|VITE_API_BASE_URL || VITE_API_URL"
     "Backend ${BACKEND_HEALTH_PATH}|${BACKEND_URL}${BACKEND_HEALTH_PATH}"
     "Backend ${BACKEND_YIELDS_PATH}|${BACKEND_URL}${BACKEND_YIELDS_PATH}"
+    "Backend ${BACKEND_SAFE_PATH}|${BACKEND_URL}${BACKEND_SAFE_PATH}"
     "Frontend /|${FRONTEND_URL}/"
     "Frontend ${FRONTEND_ASSET_PATH}|${FRONTEND_URL}${FRONTEND_ASSET_PATH}"
   )
@@ -67,7 +99,16 @@ if [[ "${1:-}" == "--json" || "$OUTPUT_MODE" == "json" ]]; then
   for check in "${checks[@]}"; do
     label="${check%%|*}"
     url="${check##*|}"
-    result="$(run_check "$label" "$url")" || overall="fail"
+    if [[ "$label" == "Frontend API env" ]]; then
+      if is_local_url "$FRONTEND_URL" || { [[ -n "$FRONTEND_API_BASE_URL" ]] && ! is_local_url "$FRONTEND_API_BASE_URL"; }; then
+        result="{\"label\":\"$label\",\"url\":\"$url\",\"status\":\"pass\",\"httpCode\":200}"
+      else
+        result="{\"label\":\"$label\",\"url\":\"$url\",\"status\":\"fail\",\"httpCode\":0,\"message\":\"missing or local-only frontend API env\"}"
+        overall="fail"
+      fi
+    else
+      result="$(run_check "$label" "$url")" || overall="fail"
+    fi
     results+=("$result")
   done
 
@@ -82,22 +123,31 @@ echo "StellarYield Smoke Test"
 echo "----------------------------------------"
 echo "Target Frontend: $FRONTEND_URL"
 echo "Target Backend:  $BACKEND_URL"
+echo "Frontend API:    ${FRONTEND_API_BASE_URL:-"(not set)"}"
 echo "----------------------------------------"
 
 echo ""
-echo "[1/4] Checking backend health..."
+echo "[1/6] Checking frontend API environment..."
+expect_frontend_api_config
+
+echo ""
+echo "[2/6] Checking backend health..."
 expect_200 "Backend ${BACKEND_HEALTH_PATH}" "${BACKEND_URL}${BACKEND_HEALTH_PATH}"
 
 echo ""
-echo "[2/4] Checking backend yield endpoint..."
+echo "[3/6] Checking backend yield endpoint..."
 expect_200 "Backend ${BACKEND_YIELDS_PATH}" "${BACKEND_URL}${BACKEND_YIELDS_PATH}"
 
 echo ""
-echo "[3/4] Checking frontend root..."
+echo "[4/6] Checking backend unauthenticated-safe route..."
+expect_200 "Backend ${BACKEND_SAFE_PATH}" "${BACKEND_URL}${BACKEND_SAFE_PATH}"
+
+echo ""
+echo "[5/6] Checking frontend root..."
 expect_200 "Frontend /" "${FRONTEND_URL}/"
 
 echo ""
-echo "[4/4] Checking frontend static asset..."
+echo "[6/6] Checking frontend static asset..."
 expect_200 "Frontend ${FRONTEND_ASSET_PATH}" "${FRONTEND_URL}${FRONTEND_ASSET_PATH}"
 
 echo ""

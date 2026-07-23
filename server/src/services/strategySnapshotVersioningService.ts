@@ -205,7 +205,7 @@ export class StrategySnapshotVersioningService {
       orderBy: { version: 'desc' },
     });
 
-    return snapshots.map((s) => this.mapToDTO(s));
+    return snapshots.map((s: any) => this.mapToDTO(s));
   }
 
   /**
@@ -278,7 +278,7 @@ export class StrategySnapshotVersioningService {
       orderBy: { linkedAt: 'desc' },
     });
 
-    return references.map((r) => this.mapReferenceToDTO(r));
+    return references.map((r: any) => this.mapReferenceToDTO(r));
   }
 
   /**
@@ -297,7 +297,7 @@ export class StrategySnapshotVersioningService {
       orderBy: { linkedAt: 'desc' },
     });
 
-    return references.map((r) => this.mapReferenceToDTO(r));
+    return references.map((r: any) => this.mapReferenceToDTO(r));
   }
 
   /**
@@ -315,7 +315,7 @@ export class StrategySnapshotVersioningService {
       orderBy: { linkedAt: 'desc' },
     });
 
-    return references.map((r) => this.mapReferenceToDTO(r));
+    return references.map((r: any) => this.mapReferenceToDTO(r));
   }
 
   /**
@@ -327,7 +327,7 @@ export class StrategySnapshotVersioningService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return changes.map((c) => this.mapChangeRecordToDTO(c));
+    return changes.map((c: any) => this.mapChangeRecordToDTO(c));
   }
 
   /**
@@ -346,7 +346,7 @@ export class StrategySnapshotVersioningService {
       },
     });
 
-    return changes.map((c) => this.mapChangeRecordToDTO(c));
+    return changes.map((c: any) => this.mapChangeRecordToDTO(c));
   }
 
   /**
@@ -404,7 +404,7 @@ export class StrategySnapshotVersioningService {
       return 0;
     }
 
-    const archiveIds = toArchive.map((v) => v.id);
+    const archiveIds = toArchive.map((v: any) => v.id);
 
     const result = await prisma.strategySnapshot.updateMany({
       where: { id: { in: archiveIds } },
@@ -506,7 +506,7 @@ export class StrategySnapshotVersioningService {
     const scalarFields: Array<keyof typeof current> = ['name', 'description'];
     for (const field of scalarFields) {
       if (current[field] !== target[field]) {
-        diffs.push({ field, current: current[field], target: target[field] });
+        diffs.push({ field: field as string, current: current[field], target: target[field] });
       }
     }
 
@@ -515,7 +515,7 @@ export class StrategySnapshotVersioningService {
       const currentStr = JSON.stringify(current[field] ?? {});
       const targetStr = JSON.stringify(target[field] ?? {});
       if (currentStr !== targetStr) {
-        diffs.push({ field, current: current[field], target: target[field] });
+        diffs.push({ field: field as string, current: current[field], target: target[field] });
       }
     }
 

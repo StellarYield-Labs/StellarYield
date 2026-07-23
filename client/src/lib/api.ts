@@ -1,7 +1,6 @@
 const LOCAL_API_BASE_URL = "http://localhost:3001";
-const SAME_ORIGIN_API_BASE_URL = "";
 const API_UNAVAILABLE_MESSAGE =
-  "Backend URL is not configured. Falling back to same-origin API routes.";
+  "Backend URL is not configured. Set VITE_API_BASE_URL to enable API-backed views.";
 
 export class ApiUnavailableError extends Error {
   constructor(message = API_UNAVAILABLE_MESSAGE) {
@@ -38,7 +37,7 @@ export function getApiBaseUrlState(
     return { available: true, baseUrl: LOCAL_API_BASE_URL };
   }
 
-  return { available: true, baseUrl: SAME_ORIGIN_API_BASE_URL };
+  return { available: false, reason: API_UNAVAILABLE_MESSAGE };
 }
 
 export function isApiUnavailableError(error: unknown): error is ApiUnavailableError {

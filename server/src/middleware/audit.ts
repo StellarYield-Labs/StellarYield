@@ -23,6 +23,7 @@ export interface AuditLogEntry {
   ipAddress: string;
   userAgent: string;
   previousHash: string;
+  sequenceNumber: number;
   hash: string;
   signature?: string;
 }
@@ -39,6 +40,7 @@ export interface AuditContext {
 // In-memory audit log (in production, use a database)
 let auditLog: AuditLogEntry[] = [];
 let previousHash = "";
+let sequenceNumber = 0;
 
 // Audit log file path for persistence
 const AUDIT_LOG_DIR = process.env.AUDIT_LOG_DIR || "./audit-logs";
@@ -50,12 +52,14 @@ const AUDIT_LOG_FILE = path.join(AUDIT_LOG_DIR, "audit-trail.jsonl");
 export function resetAuditLog(): void {
   auditLog = [];
   previousHash = crypto.createHash("sha256").update("GENESIS").digest("hex");
+  sequenceNumber = 0;
 }
 
 /**
  * Initialize audit log directory and load existing logs
  */
 export async function initializeAuditLog(): Promise<void> {
+  validateAuditSigningKey();
   try {
     await fs.mkdir(AUDIT_LOG_DIR, { recursive: true });
 
@@ -69,6 +73,7 @@ export async function initializeAuditLog(): Promise<void> {
       if (lines.length > 0) {
         const lastEntry = JSON.parse(lines[lines.length - 1]);
         previousHash = lastEntry.hash;
+        sequenceNumber = lastEntry.sequenceNumber ?? lines.length - 1;
         auditLog = lines.map((line) => JSON.parse(line));
       }
     } catch {
@@ -77,6 +82,7 @@ export async function initializeAuditLog(): Promise<void> {
         .createHash("sha256")
         .update("GENESIS")
         .digest("hex");
+      sequenceNumber = 0;
     }
   } catch (error) {
     console.error("Failed to initialize audit log:", error);
@@ -102,16 +108,38 @@ function generateHash(
     changes: entry.changes,
     ipAddress: entry.ipAddress,
     previousHash: entry.previousHash,
+    sequenceNumber: entry.sequenceNumber,
   });
 
   return crypto.createHash("sha256").update(data).digest("hex");
 }
 
 /**
+ * Validate that audit signing key is configured and not using forbidden defaults.
+ * Throws in production if key is missing or is the forbidden default value.
+ */
+export function validateAuditSigningKey(): void {
+  const key = process.env.AUDIT_SIGNING_KEY;
+  if (!key || key === "default-key") {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "AUDIT_SIGNING_KEY is not configured or uses the forbidden default value. Set a real signing secret before starting in production.",
+      );
+    }
+    console.warn(
+      "[audit] AUDIT_SIGNING_KEY is not set or uses the default value. Audit log signatures will not be cryptographically verifiable.",
+    );
+  }
+}
+
+/**
  * Generate cryptographic signature for audit entry
  */
-function generateSignature(hash: string, privateKey?: string): string {
-  const key = privateKey || process.env.AUDIT_SIGNING_KEY || "default-key";
+function generateSignature(hash: string): string {
+  const key = process.env.AUDIT_SIGNING_KEY;
+  if (!key) {
+    throw new Error("AUDIT_SIGNING_KEY is not configured. Cannot sign audit entries.");
+  }
   return crypto.createHmac("sha256", key).update(hash).digest("hex");
 }
 
@@ -170,6 +198,7 @@ export async function createAuditEntry(
     ipAddress: getClientIp(req),
     userAgent: req.headers["user-agent"] || "UNKNOWN",
     previousHash,
+    sequenceNumber: sequenceNumber,
   };
 
   const hash = generateHash(entryData);
@@ -184,6 +213,7 @@ export async function createAuditEntry(
   // Store in memory
   auditLog.push(entry);
   previousHash = hash;
+  sequenceNumber += 1;
 
   // Persist to file
   try {
@@ -217,6 +247,19 @@ export function verifyAuditEntry(entry: AuditLogEntry): boolean {
   }
 
   return true;
+}
+
+/**
+ * Verify audit signature with an explicit signing key.
+ * Useful for external verification tooling where the key is supplied by the verifier.
+ */
+export function verifyAuditSignature(entry: AuditLogEntry, signingKey: string): boolean {
+  const { hash, signature } = entry;
+  if (!hash || !signature) {
+    return false;
+  }
+  const expected = crypto.createHmac("sha256", signingKey).update(hash).digest("hex");
+  return expected === signature;
 }
 
 /**
@@ -269,20 +312,25 @@ export async function getAuditLogs(filters?: {
 }
 
 /**
- * Verify audit trail integrity (chain of hashes)
+ * Verify audit trail integrity (chain of hashes + sequence continuity)
  */
 export function verifyAuditTrailIntegrity(entries: AuditLogEntry[]): {
   isValid: boolean;
   invalidEntries: string[];
+  deletedEntries: string[];
+  reorderedEntries: string[];
 } {
   const invalidEntries: string[] = [];
+  const deletedEntries: string[] = [];
+  const reorderedEntries: string[] = [];
   let expectedPreviousHash = crypto
     .createHash("sha256")
     .update("GENESIS")
     .digest("hex");
+  let expectedSequenceNumber = 0;
 
   for (const entry of entries) {
-    // Verify entry signature
+    // Verify entry signature and hash
     if (!verifyAuditEntry(entry)) {
       invalidEntries.push(entry.id);
       continue;
@@ -293,12 +341,24 @@ export function verifyAuditTrailIntegrity(entries: AuditLogEntry[]): {
       invalidEntries.push(entry.id);
     }
 
+    // Verify sequence continuity
+    if (entry.sequenceNumber !== expectedSequenceNumber) {
+      if (entry.sequenceNumber > expectedSequenceNumber) {
+        deletedEntries.push(entry.id);
+      } else {
+        reorderedEntries.push(entry.id);
+      }
+    }
+
     expectedPreviousHash = entry.hash;
+    expectedSequenceNumber = entry.sequenceNumber + 1;
   }
 
   return {
-    isValid: invalidEntries.length === 0,
+    isValid: invalidEntries.length === 0 && deletedEntries.length === 0 && reorderedEntries.length === 0,
     invalidEntries,
+    deletedEntries,
+    reorderedEntries,
   };
 }
 

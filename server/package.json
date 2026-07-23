@@ -10,7 +10,8 @@
     "lint": "npx eslint \"src/**/*.ts\"",
     "test": "jest",
     "check:metrics-token": "node scripts/check-metrics-token.js",
-    "seed": "ts-node scripts/seed.ts"
+    "seed": "ts-node scripts/seed.ts",
+    "governance:vectors": "ts-node scripts/generateGovernanceVectors.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -35,7 +36,7 @@
     "@types/cors": "^2.8.13",
     "@types/express": "^4.17.17",
     "@types/jest": "^30.0.0",
-    "@types/node": "^20.19.41",
+    "@types/node": "^20.0.0",
     "@types/supertest": "^7.2.0",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",

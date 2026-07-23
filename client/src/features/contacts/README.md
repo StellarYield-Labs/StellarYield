@@ -118,6 +118,88 @@ function AdvancedContactsExample() {
 
 ## 🔧 API Reference
 
+### Backend API Routes
+
+The backend provides RESTful endpoints for managing encrypted contacts at `/api/contacts`.
+
+#### Authentication
+
+All endpoints require a wallet address provided via the `x-wallet-address` header:
+
+```bash
+curl -H "x-wallet-address: GTEST123..." https://api.stellaryield.com/api/contacts
+```
+
+#### Endpoints
+
+**GET /api/contacts**
+- Fetches all contacts for the authenticated user
+- Returns: `{ contacts: Contact[], total: number }`
+- Response fields: `id`, `encrypted_name`, `encrypted_address`, `created_at`, `updated_at`
+
+**GET /api/contacts/:id**
+- Fetches a single contact by ID
+- Returns: `{ contact: Contact }`
+- Errors: 404 if contact not found or doesn't belong to user
+
+**POST /api/contacts**
+- Creates a new contact
+- Body: `{ encryptedName: string, encryptedAddress: string }`
+- Returns: `{ contact: Contact }` (201 Created)
+- Errors: 400 (validation), 409 (duplicate address)
+
+**PUT /api/contacts/:id**
+- Updates an existing contact
+- Body: `{ encryptedName?: string, encryptedAddress?: string }`
+- Returns: `{ contact: Contact }`
+- Errors: 404 (not found), 409 (duplicate address)
+
+**DELETE /api/contacts/:id**
+- Deletes a contact
+- Returns: 204 No Content
+- Errors: 404 (not found)
+
+**GET /api/contacts/search?q=query**
+- Searches contacts (returns all for client-side filtering due to encryption)
+- Returns: `{ contacts: Contact[], total: number }`
+
+**GET /api/contacts/export**
+- Exports all contacts as encrypted backup
+- Returns: `{ encryptedBackup: string }`
+
+**POST /api/contacts/import**
+- Imports contacts from encrypted backup
+- Body: `{ encryptedBackup: string }`
+- Returns: `{ contacts: Contact[], total: number }`
+- Skips duplicate contacts automatically
+
+#### Error Codes
+
+- `WALLET_ADDRESS_REQUIRED` (401): Missing authentication
+- `CONTACT_NOT_FOUND` (404): Contact doesn't exist or doesn't belong to user
+- `INVALID_REQUEST` (400): Validation failed
+- `INVALID_QUERY` (400): Missing or invalid search query
+- `INVALID_BACKUP` (400): Missing backup data
+- `INVALID_FORMAT` (400): Malformed backup format
+- `DUPLICATE_CONTACT` (409): Contact with this address already exists
+- `FETCH_FAILED` (500): Database read error
+- `CREATE_FAILED` (500): Database create error
+- `UPDATE_FAILED` (500): Database update error
+- `DELETE_FAILED` (500): Database delete error
+- `SEARCH_FAILED` (500): Search operation error
+- `EXPORT_FAILED` (500): Export operation error
+- `IMPORT_FAILED` (500): Import operation error
+
+#### Request/Response Contract
+
+All requests and responses use snake_case for field names (`encrypted_name`, `encrypted_address`, `created_at`, `updated_at`) in the API layer, which are transformed to camelCase (`encryptedName`, `encryptedAddress`, `createdAt`, `updatedAt`) in the client.
+
+**Security Notes:**
+- The server never receives or stores plaintext contact data
+- All validation occurs on encrypted blobs
+- Search is client-side due to encryption
+- Each user's contacts are isolated by wallet address
+
 ### Components
 
 #### `ContactsModal`

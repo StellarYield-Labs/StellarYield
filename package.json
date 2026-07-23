@@ -2,6 +2,7 @@
   "name": "stellaryield",
   "private": true,
   "scripts": {
+    "audit:api": "tsx scripts/audit-api-coverage.ts",
     "smoke-test": "bash scripts/smoke-test.sh",
     "smoke-test:node": "node scripts/smoke-test.js",
     "smoke-test:portable": "node scripts/smoke-test.js",
@@ -13,5 +14,8 @@
   },
   "optionalDependencies": {
     "@rolldown/binding-win32-x64-msvc": "^1.0.0-rc.17"
+  },
+  "devDependencies": {
+    "tsx": "^4.22.4"
   }
 }

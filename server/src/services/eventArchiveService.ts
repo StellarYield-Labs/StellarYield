@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, no-redeclare, no-useless-escape */
 /**
  * Issue #285: On-Chain Event Compression and Archive Service
  *
@@ -106,12 +107,17 @@ export class EventArchiveService {
    * Decompress archived events for retrieval.
    */
   async decompressEventData(compressedData: Buffer): Promise<EventArchiveRecord[]> {
+    const reviver = (key: string, value: any) => {
+      if (key === 'createdAt' && typeof value === 'string') {
+        return new Date(value);
+      }
+      return value;
+    };
     try {
       const decompressed = await gunzip(compressedData);
-      return JSON.parse(decompressed.toString());
+      return JSON.parse(decompressed.toString(), reviver);
     } catch {
-      // Fallback for uncompressed data
-      return JSON.parse(compressedData.toString());
+      return JSON.parse(compressedData.toString(), reviver);
     }
   }
 

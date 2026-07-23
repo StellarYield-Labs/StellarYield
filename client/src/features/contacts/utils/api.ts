@@ -11,12 +11,7 @@ import {
   UpdateContactRequest,
 } from '../types';
 import { encryptContactData } from './encryption';
-import { getApiBaseUrl } from '../../../lib/api';
-
-/**
- * API configuration
- */
-const API_BASE_URL = getApiBaseUrl();
+import { apiUrl } from '../../../lib/api';
 
 /**
  * API error class
@@ -39,7 +34,7 @@ async function apiRequest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_BASE_URL}/api/contacts${endpoint}`;
+  const url = apiUrl(`/api/contacts${endpoint}`);
 
   const defaultHeaders: Record<string, string> = {
     'Content-Type': 'application/json',

@@ -271,7 +271,7 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "ICR"
+                              "symbol": "Icr"
                             }
                           ]
                         },
@@ -322,7 +322,7 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "MCR"
+                              "symbol": "Mcr"
                             }
                           ]
                         },

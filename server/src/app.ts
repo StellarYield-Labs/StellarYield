@@ -40,6 +40,12 @@ import governanceRouter from "./routes/governance";
 import activityTimelineRouter from "./routes/activityTimeline";
 import presetsRouter from "./routes/presets";
 import analyticsRouter from "./routes/analytics";
+import sharePriceHistoryRouter from "./routes/sharePriceHistory";
+import fragmentationRouter from "./routes/fragmentation";
+import indexerRouter from "./routes/indexer";
+import contactsRouter from "./routes/contacts";
+import relayerStatusRouter from "./routes/relayerStatus";
+import auditReplayRouter from "./routes/auditReplay";
 
 import { createAuthChallenge, verifyAuthChallenge } from "./utils/stellarAuth";
 import {
@@ -100,6 +106,9 @@ export function createApp() {
   });
 
   app.post("/api/relayer/fee-bump", relayerLimiter, signFeeBump);
+  app.use("/api/vaults", sharePriceHistoryRouter);
+  app.use("/api/liquidity", fragmentationRouter);
+  app.use("/api/indexer", indexerRouter);
   app.use("/api/yields", yieldsRouter);
   app.use("/api/leaderboard", leaderboardRouter);
   app.use("/api/notifications", notificationsRouter);
@@ -127,6 +136,9 @@ export function createApp() {
   app.use("/api/portfolio/activity", activityTimelineRouter);
   app.use("/api/presets", presetsRouter);
   app.use("/api/analytics", analyticsRouter);
+  app.use("/api/contacts", contactsRouter);
+  app.use("/api/relayer", relayerStatusRouter);
+  app.use("/api/audit-replay", auditReplayRouter);
 
 
   // Legacy JSON metrics (internal tooling)

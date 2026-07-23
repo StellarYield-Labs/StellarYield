@@ -1,5 +1,11 @@
 use soroban_sdk::{contracttype, Address, Env};
 
+/// Low watermark: keys older than this many ledgers trigger a bump.
+pub const TTL_LOW_WATERMARK_LEDGERS: u32 = 100_000; // ~5-7 days at ~6 sec blocks
+
+/// Amount to extend TTL by when bumping.
+pub const TTL_BUMP_LEDGER_AMOUNT: u32 = 250_000; // ~14 days
+
 /// All persistent storage keys for the DeltaNeutral contract.
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -126,15 +132,25 @@ pub fn set_paused(e: &Env, paused: bool) {
 }
 
 pub fn read_position(e: &Env, owner: &Address) -> Option<Position> {
-    e.storage()
-        .persistent()
-        .get(&DataKey::Position(owner.clone()))
+    let key = DataKey::Position(owner.clone());
+    // Only bump TTL if the key exists to avoid MissingValue errors in tests
+    if e.storage().persistent().has(&key) {
+        e.storage().persistent().extend_ttl(
+            &key,
+            TTL_LOW_WATERMARK_LEDGERS,
+            TTL_BUMP_LEDGER_AMOUNT,
+        );
+    }
+    e.storage().persistent().get(&key)
 }
 
 pub fn write_position(e: &Env, owner: &Address, pos: &Position) {
+    let key = DataKey::Position(owner.clone());
+    e.storage().persistent().set(&key, pos);
+    // Bump TTL after writing to ensure it's persisted
     e.storage()
         .persistent()
-        .set(&DataKey::Position(owner.clone()), pos);
+        .extend_ttl(&key, TTL_LOW_WATERMARK_LEDGERS, TTL_BUMP_LEDGER_AMOUNT);
 }
 
 pub fn read_total_deposited(e: &Env) -> i128 {

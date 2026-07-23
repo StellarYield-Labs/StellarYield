@@ -9,9 +9,7 @@ import {
   Activity,
   AlertTriangle,
 } from "lucide-react";
-import { getApiBaseUrl } from "../../lib/api";
-
-const API_BASE = getApiBaseUrl();
+import { apiUrl } from "../../lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -106,7 +104,7 @@ export default function RelayerStatusPage() {
 
     async function fetchStatus() {
       try {
-        const res = await fetch(`${API_BASE}/api/relayer/status`);
+        const res = await fetch(apiUrl("/api/relayer/status"));
         if (!res.ok) throw new Error(`Server returned ${res.status}`);
         const data: RelayerStatus = await res.json();
         if (!cancelled) {

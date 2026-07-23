@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { AlertCircle, CheckCircle2, Clock, Zap, RefreshCw } from "lucide-react";
 import { useWallet } from "../../context/useWallet";
-import { getApiBaseUrl } from "../../lib/api";
+import { apiUrl } from "../../lib/api";
 import type { BatchClaimPreview, ClaimProofData } from "./types";
 import {
   buildBatchClaimPreview,
@@ -10,8 +10,6 @@ import {
   getStaleProofVaults,
   getUnavailableVaults,
 } from "./batchClaimUtils";
-
-const API_BASE = getApiBaseUrl();
 
 interface BatchClaimPreviewProps {
   vaultIds: string[];
@@ -43,7 +41,7 @@ export default function BatchClaimPreview({
       const proofPromises = vaultIds.map(async (vaultId) => {
         try {
           const res = await fetch(
-            `${API_BASE}/api/rewards/proof/${encodeURIComponent(walletAddress)}?vaultId=${vaultId}`,
+            apiUrl(`/api/rewards/proof/${encodeURIComponent(walletAddress)}?vaultId=${vaultId}`),
           );
 
           if (res.status === 404) {

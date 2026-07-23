@@ -6,6 +6,7 @@ version = 4
 name = "aa_factory"
 version = "0.1.0"
 dependencies = [
+ "p256",
  "soroban-sdk",
 ]
 
@@ -274,6 +275,13 @@ dependencies = [
  "num-traits",
  "serde",
  "windows-link",
+]
+
+[[package]]
+name = "clmm_core"
+version = "0.1.0"
+dependencies = [
+ "soroban-sdk",
 ]
 
 [[package]]
@@ -617,9 +625,9 @@ checksum = "2bfcf67fea2815c2fc3b90873fae90957be12ff417335dfadc7f52927feb03b2"
 
 [[package]]
 name = "ethnum"
-version = "1.5.2"
+version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca81e6b4777c89fd810c25a4be2b1bd93ea034fbe58e6a75216a34c6b82c539b"
+checksum = "40404c3f5f511ec4da6fe866ddf6a717c309fdbb69fbbad7b0f3edab8f2e835f"
 
 [[package]]
 name = "fastrand"
@@ -995,6 +1003,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-rational"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f83d14da390562dca69fc84082e73e548e1ad308d24accdedd2720017cb37824"
+dependencies = [
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1042,6 +1061,15 @@ name = "paste"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
+
+[[package]]
+name = "perpetuals"
+version = "0.1.0"
+dependencies = [
+ "proptest",
+ "soroban-sdk",
+ "soroban-token-sdk",
+]
 
 [[package]]
 name = "pkcs8"
@@ -1208,6 +1236,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "513962919efc330f829edb2535844d1b912b0fbe2ca165d613e4e8788bb05a5a"
 dependencies = [
  "rand_core 0.9.5",
+]
+
+[[package]]
+name = "rebalance-auction"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "soroban-sdk",
 ]
 
 [[package]]
@@ -1407,6 +1444,8 @@ dependencies = [
 name = "settlement"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "soroban-sdk",
 ]
 
@@ -1860,6 +1899,26 @@ dependencies = [
  "proptest",
  "soroban-sdk",
  "soroban-token-sdk",
+]
+
+[[package]]
+name = "verification"
+version = "0.1.0"
+dependencies = [
+ "clmm_core",
+ "num-bigint",
+ "num-rational",
+ "num-traits",
+ "options",
+ "perpetuals",
+ "proptest",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "serde",
+ "serde_json",
+ "soroban-sdk",
+ "stablecoin_manager",
+ "stableswap",
 ]
 
 [[package]]
