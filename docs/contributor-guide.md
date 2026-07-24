@@ -162,13 +162,13 @@ See [README — Vercel Deployment Settings](../README.md#vercel-deployment-setti
 
 ## README command verification
 
-CI runs:
+The CI job named "README Command Verification" in [.github/workflows/ci.yml](../.github/workflows/ci.yml) runs:
 
 ```bash
 node scripts/verify-readme-commands.js
 ```
 
-from the repository root. It checks that documented commands and doc links in `README.md` stay consistent with the repo (including this file).
+from the repository root. It verifies that the commands and documentation links in [README.md](../README.md) still match the repo layout, including the client/server/contracts commands and the contributor guide / release checklist links. If it fails locally, update the README entry or the referenced command/script before pushing.
 
 ---
 

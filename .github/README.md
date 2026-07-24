@@ -58,6 +58,7 @@ The triage workflow runs daily at 9:00 AM UTC and includes:
 
 - **[Triage Process Guide](../docs/triage-process.md)** - Complete maintainer documentation
 - **[CONTRIBUTING.md](../CONTRIBUTING.md)** - General contribution guidelines
+- **[README command verification](../docs/contributor-guide.md#readme-command-verification)** - Explains the CI workflow in [.github/workflows/ci.yml](workflows/ci.yml) and the local `node scripts/verify-readme-commands.js` check
 
 ## 🔧 Maintenance
 
