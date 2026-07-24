@@ -286,8 +286,9 @@ impl OptimisticGovernance {
             proposal.execution_time = execution_time;
             proposal.status = ProposalStatus::Pending;
         } else {
-            proposal.status = ProposalStatus::Cancelled;
-        }
+env.storage()
+    .persistent()
+    .set(&DataKey::Proposal(proposal_id), &proposal);        }
 
         env.storage()
             .persistent()
@@ -412,9 +413,26 @@ impl OptimisticGovernance {
     // ── Getters ───────────────────────────────────────────────────
 
     pub fn get_proposal(env: Env, proposal_id: u64) -> Option<Proposal> {
-        env.storage()
+        let mut proposal: Proposal = env
+            .storage()
             .persistent()
-            .get(&DataKey::Proposal(proposal_id))
+            .get(&DataKey::Proposal(proposal_id))?;
+
+        if matches!(
+            proposal.status,
+            ProposalStatus::Pending | ProposalStatus::Executable
+        ) {
+            let current_time = env.ledger().timestamp();
+            proposal.status = if current_time > proposal.expiry_time {
+                ProposalStatus::Expired
+            } else if current_time >= proposal.execution_time {
+                ProposalStatus::Executable
+            } else {
+                ProposalStatus::Pending
+            };
+        }
+
+        Some(proposal)
     }
 
     pub fn get_proposal_count(env: Env) -> u64 {

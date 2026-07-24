@@ -255,12 +255,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: packages/sdk/package-lock.json
 
       - name: Install Stellar CLI
         run: cargo install --locked stellar-cli --version 25.1.0
 
       - name: Install SDK dependencies
-        run: cd packages/sdk && npm install
+        run: cd packages/sdk && npm ci --no-audit --prefer-offline
 
       - name: Run SDK drift checks
         run: cd packages/sdk && npm run verify:drift

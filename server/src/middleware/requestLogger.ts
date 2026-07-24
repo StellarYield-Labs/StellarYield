@@ -3,7 +3,15 @@ import { getCorrelationId, getRequestId } from "./correlationId";
 
 type LogLevel = "info" | "warn" | "error";
 
+function shouldEmitRequestLogs(): boolean {
+  return process.env.NODE_ENV !== "test" && process.env.JEST_WORKER_ID === undefined;
+}
+
 function log(level: LogLevel, payload: Record<string, unknown>): void {
+  if (!shouldEmitRequestLogs()) {
+    return;
+  }
+
   const line = JSON.stringify({
     ts: new Date().toISOString(),
     level,

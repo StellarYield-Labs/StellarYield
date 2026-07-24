@@ -51,6 +51,14 @@ tags:
     description: Prometheus-compatible metrics scrape endpoint
   - name: Simulator
     description: Simulation endpoints for deposit, rebalance, and failover dry-runs (never executes on-chain)
+  - name: Risk
+    description: Risk analytics, drift detection, and stress matrix endpoints
+  - name: Backtest
+    description: Backtest request validation and analysis helpers
+  - name: GoogleSheets
+    description: Google Sheets integration endpoints
+  - name: AuditReplay
+    description: Strategy replay and audit trace endpoints
 
 paths:
   /api/health:
@@ -2003,6 +2011,54 @@ paths:
           description: Auth challenge verified
         '400':
           description: Invalid auth verification request
+
+  /api/audit-replay/record:
+    post:
+      summary: Record a strategy replay event
+      description: Stores an execution replay payload for later audit analysis.
+      tags:
+        - AuditReplay
+      responses:
+        '201':
+          description: Replay event recorded
+        '400':
+          description: Missing required replay fields
+
+  /api/risk/drift/detect:
+    post:
+      summary: Detect portfolio risk preference drift
+      description: Compares observed portfolio behavior with the user's stated risk preference.
+      tags:
+        - Risk
+      responses:
+        '200':
+          description: Drift analysis completed
+        '400':
+          description: Invalid drift detection request
+
+  /api/backtest:
+    get:
+      summary: Validate a backtest request
+      description: Validates a backtest request payload assembled from query parameters.
+      tags:
+        - Backtest
+      responses:
+        '200':
+          description: Backtest request validated
+        '400':
+          description: Backtest request failed validation
+
+  /api/google-sheets/token:
+    post:
+      summary: Request a Google Sheets integration token
+      description: Returns integration availability or setup failure for Google Sheets features.
+      tags:
+        - GoogleSheets
+      responses:
+        '200':
+          description: Token issued
+        '501':
+          description: Google Sheets integration is unavailable
 
   /api/incidents:
     get:

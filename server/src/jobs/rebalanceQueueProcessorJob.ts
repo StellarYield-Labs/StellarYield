@@ -96,10 +96,16 @@ const REBALANCE_RESULT_MAX_AGE_MS = Number(
 
 class JobEntryFailure extends Error {
   readonly alreadyRecorded: boolean;
+  readonly countsAsFailure: boolean;
 
-  constructor(message: string, alreadyRecorded: boolean) {
+  constructor(
+    message: string,
+    alreadyRecorded: boolean,
+    countsAsFailure = true,
+  ) {
     super(message);
     this.alreadyRecorded = alreadyRecorded;
+    this.countsAsFailure = countsAsFailure;
   }
 }
 
@@ -211,12 +217,18 @@ export async function runRebalanceQueueProcessorJob(
             processedRetries++;
           }
         } catch (error) {
-          console.error(`Failed to process retry for entry ${entry.id}:`, error);
-          failedProcessing++;
-
           if (error instanceof JobEntryFailure && error.alreadyRecorded) {
+            if (error.countsAsFailure) {
+              failedProcessing++;
+            } else {
+              processedRetries++;
+            }
             continue;
           }
+
+          console.error(`Failed to process retry for entry ${entry.id}:`, error);
+
+          failedProcessing++;
 
           await queueService.recordFailedAttempt(entry.id, String(error), {
             errorClass: 'terminal',
@@ -245,12 +257,18 @@ export async function runRebalanceQueueProcessorJob(
             processedDeferred++;
           }
         } catch (error) {
-          console.error(`Failed to process deferred entry ${entry.id}:`, error);
-          failedProcessing++;
-
           if (error instanceof JobEntryFailure && error.alreadyRecorded) {
+            if (error.countsAsFailure) {
+              failedProcessing++;
+            } else {
+              processedDeferred++;
+            }
             continue;
           }
+
+          console.error(`Failed to process deferred entry ${entry.id}:`, error);
+
+          failedProcessing++;
 
           await queueService.recordFailedAttempt(entry.id, String(error), {
             errorClass: 'terminal',
@@ -456,6 +474,7 @@ async function processQueueEntryLegacy(
     throw new JobEntryFailure(
       simulationResult.error ?? 'Simulation failed',
       true,
+      true,
     );
   }
 
@@ -471,7 +490,7 @@ async function processQueueEntryLegacy(
           'Stale execution result',
           { errorClass: 'terminal', executionMetadata: submitResult.metadata },
         );
-        throw new JobEntryFailure('Stale execution result', true);
+        throw new JobEntryFailure('Stale execution result', true, true);
       }
     }
 
@@ -490,7 +509,7 @@ async function processQueueEntryLegacy(
         'Malformed executor output',
         { errorClass: 'terminal', executionMetadata: submitResult.metadata },
       );
-      throw new JobEntryFailure('Malformed executor output', true);
+      throw new JobEntryFailure('Malformed executor output', true, true);
     }
 
     await rebalanceQueueService.recordSubmission(
@@ -545,7 +564,11 @@ async function processQueueEntryLegacy(
         executionMetadata: submitResult.metadata,
       },
     );
-    throw new JobEntryFailure(submitResult.error ?? 'Submission failed', true);
+    throw new JobEntryFailure(
+      submitResult.error ?? 'Submission failed',
+      true,
+      !isTerminal,
+    );
   }
 }
 
