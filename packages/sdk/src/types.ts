@@ -3,6 +3,8 @@ export interface VaultConfig {
   networkPassphrase: string;
   rpcUrl: string;
   specHashPin?: string;
+  contractVersionPin?: string;
+  storageVersionPin?: number;
 }
 
 export interface ApiConfig {
@@ -61,6 +63,27 @@ export interface HistoricalDataPoint {
 export interface SDKConfig {
   vault: VaultConfig;
   api?: ApiConfig;
+}
+
+export interface UpgradeProposal {
+  id: string;
+  network: string;
+  contractId: string;
+  currentWasmHash: string;
+  targetWasmHash: string;
+  migrationPlanDigest: string;
+  executionTime: string;
+  expiryTime: string;
+  migrationId: string;
+  proposedAt: string;
+}
+
+export interface MigrationStatus {
+  fromVersion: number;
+  toVersion: number;
+  cursor: string;
+  totalApplied: number;
+  complete: boolean;
 }
 
 export type {

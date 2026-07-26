@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0",
+  "migration_id": "v1_to_v2",
+  "from_version": 1,
+  "to_version": 2,
+  "steps": [
+    {
+      "kind": "read_compatible",
+      "description": "v2 adds the `StorageVersion` key. All existing v1 storage keys remain readable. No data transformation needed.",
+      "actions": []
+    }
+  ],
+  "invariants": [
+    "User balances survive upgrade exactly",
+    "Total supply survives upgrade exactly",
+    "Admin authority survives upgrade exactly",
+    "Pause state survives upgrade exactly",
+    "Processed nonces survive upgrade exactly"
+  ]
+}

@@ -49,6 +49,18 @@ cargo test --workspace
 
 ---
 
+## 6. Upgrade & Migration Review
+
+- [ ] `StorageVersion` is set during `initialize()` and matches the current storage schema.
+- [ ] All state-changing methods call `require_operational()` to gate during migration.
+- [ ] Upgrade scheduling binds the proposal to the network, contract ID, current Wasm hash, target Wasm hash, migration plan digest, and expiry.
+- [ ] Execution is rejected when the current code hash changed after scheduling.
+- [ ] Migration steps are idempotent and use a monotonic cursor for resumable batches.
+- [ ] Upgrade and migration events contain enough data for full lifecycle reconstruction.
+- [ ] An artifact manifest is generated during CI for reproducible build verification.
+- [ ] The migration registry documents all allowed version edges and step kinds.
+- [ ] Emergency rollback is documented as a forward upgrade to a previous artifact.
+
 ## Quick Reference: Test Commands
 
 ```bash
@@ -57,6 +69,10 @@ cargo test --workspace                          # all unit + integration tests
 cargo test --workspace -- --nocapture           # with stdout for debugging
 cargo test -p <crate-name> <test_name>          # single test
 cargo clippy --workspace --all-targets -- -D warnings  # lint
+
+# Upgrade dry-run
+bash contracts/scripts/dry-run-upgrade.sh yield_vault <old.wasm> <new.wasm> <plan.json>
 ```
 
 For storage layout details see [`docs/contracts/storage-ttl-strategy.md`](./contracts/storage-ttl-strategy.md).
+For the upgrade framework see [`docs/upgrade-migration-framework.md`](./upgrade-migration-framework.md).

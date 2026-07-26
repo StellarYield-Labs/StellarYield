@@ -24,6 +24,10 @@ export type RegistryDiff = Record<NetworkName, {
   missing: ContractName[]; // required but empty in new registry
 }>;
 
+function isBlank(value: string): boolean {
+  return value.trim() === "";
+}
+
 export function diffRegistries(oldReg: Registry, newReg: Registry): RegistryDiff {
   const networks: NetworkName[] = ["testnet", "mainnet", "local"];
   const contractNames: ContractName[] = ["vault","zap","token","governance","strategy","emissionController","liquidStaking","stableswap"];
@@ -41,17 +45,20 @@ export function diffRegistries(oldReg: Registry, newReg: Registry): RegistryDiff
       const oldAddr = oldNet[name] ?? "";
       const newAddr = newNet[name] ?? "";
 
-      if ((!oldAddr || oldAddr === "") && (newAddr && newAddr !== "")) {
+      const oldEmpty = isBlank(oldAddr);
+      const newEmpty = isBlank(newAddr);
+
+      if (oldEmpty && !newEmpty) {
         changes.push({ name, oldAddress: oldAddr || null, newAddress: newAddr || null, type: 'added' });
-      } else if ((oldAddr && oldAddr !== "") && (!newAddr || newAddr === "")) {
+      } else if (!oldEmpty && newEmpty) {
         changes.push({ name, oldAddress: oldAddr || null, newAddress: newAddr || null, type: 'removed' });
-      } else if ((oldAddr || "") !== (newAddr || "")) {
+      } else if (oldAddr !== newAddr) {
         changes.push({ name, oldAddress: oldAddr || null, newAddress: newAddr || null, type: 'changed' });
       } else {
         changes.push({ name, oldAddress: oldAddr || null, newAddress: newAddr || null, type: 'unchanged' });
       }
 
-      if (!newAddr || newAddr === "") {
+      if (newEmpty) {
         missing.push(name);
       }
     }
