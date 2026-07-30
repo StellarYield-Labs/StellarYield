@@ -40,7 +40,7 @@ const DOMAIN_SEPARATOR: [u8; 32] = [
     0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63, 0x65, 0x41, 0x75, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x3a, 0x76,
 ];
 
-// ── Constants ───────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────
 
 const BPS_SCALE: i128 = 10_000;
 const MAX_FEE_BPS: u32 = 500; // 5% max total fee
@@ -209,7 +209,7 @@ pub struct SettlementResult {
     pub filled_percentage: u32, // bps (10000 = 100%)
 }
 
-// ── Errors ──────────────────────────────────────────────────────────────
+// ── Errors ──────────────────────────────────────────────────────────
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -263,9 +263,9 @@ pub struct RebalanceAuction;
 #[allow(clippy::too_many_arguments)]
 #[contractimpl]
 impl RebalanceAuction {
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // INITIALIZATION
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     pub fn initialize(
         env: Env,
@@ -301,9 +301,9 @@ impl RebalanceAuction {
         Ok(())
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // INTENT CREATION
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Create a new rebalance intent. The vault authorizes this intent,
     /// locking the rebalance plan on-chain with all constraints.
@@ -433,9 +433,9 @@ impl RebalanceAuction {
         Ok(nonce)
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // COMMIT PHASE
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Solver commits a hash of their bid during the commit phase.
     /// The commit prevents bid copying and front-running.
@@ -503,9 +503,9 @@ impl RebalanceAuction {
         Ok(())
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // REVEAL PHASE
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Solver reveals their bid after the commit phase ends.
     /// The revealed bid must hash to the previously committed hash.
@@ -579,7 +579,7 @@ impl RebalanceAuction {
             total_output_value,
             fees_bps,
             slippage_bps,
-            price_impact_bps,
+            price_impact_bps as i128,
         )?;
 
         // Check for duplicate reveal
@@ -621,9 +621,9 @@ impl RebalanceAuction {
         Ok(())
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // WINNER SELECTION
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Operator selects the winning bid. Uses deterministic ranking:
     /// 1. Highest net output value (after fees)
@@ -677,9 +677,9 @@ impl RebalanceAuction {
         Ok(best_solver)
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // SETTLEMENT
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Execute the winning bid atomically. All route legs must succeed
     /// or the entire settlement reverts. Records exact post-trade balances.
@@ -833,9 +833,9 @@ impl RebalanceAuction {
         Ok(settlement)
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // CANCELLATION & EXPIRY
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Cancel an intent. Only the cancellation authority (vault) can cancel.
     pub fn cancel_intent(env: Env, caller: Address, intent_id: u64) -> Result<(), AuctionError> {
@@ -910,9 +910,9 @@ impl RebalanceAuction {
         Ok(())
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // ROUTE VALIDATION
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Validate a route against the allowlisted call graph.
     pub fn validate_route(
@@ -1000,9 +1000,9 @@ impl RebalanceAuction {
         Ok(())
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // ADMIN FUNCTIONS
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Add a protocol to the allowlist. Admin only.
     pub fn add_allowed_protocol(
@@ -1117,9 +1117,9 @@ impl RebalanceAuction {
         Ok(())
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     pub fn get_intent(env: Env, intent_id: u64) -> Result<RebalanceIntent, AuctionError> {
         env.storage()
@@ -1206,9 +1206,9 @@ impl RebalanceAuction {
         allowed.get(token).unwrap_or(false)
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // INTERNAL HELPERS
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     fn require_init(env: &Env) -> Result<(), AuctionError> {
         if !env.storage().instance().has(&DataKey::Initialized) {
@@ -1521,7 +1521,7 @@ impl RebalanceAuction {
     }
 }
 
-// ── Tests ───────────────────────────────────────────────────────────────
+// ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
