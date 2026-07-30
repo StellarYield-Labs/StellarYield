@@ -79,6 +79,33 @@ describe("classifySourceHealth", () => {
     });
     expect(result.status).toBe("unavailable");
   });
+
+  it("keeps a source healthy with a clearly fresh timestamp", () => {
+    const result = classifySourceHealth({
+      ...baseInput,
+      ageSeconds: 0,
+    });
+    expect(result.status).toBe("healthy");
+    expect(result.failureReason).toBeNull();
+  });
+
+  it("remains healthy at exactly the stale threshold", () => {
+    const result = classifySourceHealth({
+      ...baseInput,
+      ageSeconds: SOURCE_HEALTH_THRESHOLDS.staleAgeSeconds,
+    });
+    expect(result.status).toBe("healthy");
+    expect(result.failureReason).toBeNull();
+  });
+
+  it("marks a source stale just beyond the stale threshold", () => {
+    const result = classifySourceHealth({
+      ...baseInput,
+      ageSeconds: SOURCE_HEALTH_THRESHOLDS.staleAgeSeconds + 1,
+    });
+    expect(result.status).toBe("stale");
+    expect(result.failureReason).toMatch(/No fresh data/);
+  });
 });
 
 describe("toSourceHealth", () => {
@@ -134,13 +161,19 @@ describe("toSourceHealth", () => {
   });
 
   it("flags stale when the last fetch is far in the past", () => {
-    const stale = toSourceHealth({
-      ...reliability,
-      signals: {
-        ...reliability.signals,
-        lastSuccessfulFetch: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+    const fixedNow = 1_700_000_000_000;
+    const stale = toSourceHealth(
+      {
+        ...reliability,
+        signals: {
+          ...reliability.signals,
+          lastSuccessfulFetch: new Date(
+            fixedNow - 60 * 60 * 1000,
+          ).toISOString(),
+        },
       },
-    });
+      fixedNow,
+    );
     expect(stale.status).toBe("stale");
     expect(stale.ageSeconds).toBeGreaterThan(
       SOURCE_HEALTH_THRESHOLDS.staleAgeSeconds,
