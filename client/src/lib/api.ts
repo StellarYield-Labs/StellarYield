@@ -55,6 +55,7 @@ export function getApiBaseUrl(env: ImportMetaEnv = import.meta.env): string {
 }
 
 export function apiUrl(path: string, env?: ImportMetaEnv): string {
+  const baseUrl = trimTrailingSlash(getApiBaseUrl(env));
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  return `${getApiBaseUrl(env)}${normalizedPath}`;
+  return `${baseUrl}${normalizedPath}`;
 }
