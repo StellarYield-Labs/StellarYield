@@ -161,6 +161,49 @@ describe('batchClaimUtils', () => {
             expect(preview.allProofsAvailable).toBe(true);
             expect(preview.canClaimAll).toBe(true);
         });
+
+        it('handles an explicitly empty claim array with safe, deterministic output', () => {
+            const preview = buildBatchClaimPreview({}, {});
+
+            // Row output is safe: an empty array, never null/undefined.
+            expect(preview.vaults).toEqual([]);
+
+            // Totals are safe zero values, not NaN/undefined/negative.
+            expect(preview.totalClaimable).toBe('0');
+            expect(preview.totalEstimatedFees).toBe('0');
+            expect(preview.allProofsAvailable).toBe(true);
+            expect(preview.anyProofsStale).toBe(false);
+            expect(preview.canClaimAll).toBe(true);
+
+            // Deterministic: repeated calls with empty input produce identical output.
+            const second = buildBatchClaimPreview({}, {});
+            expect(second).toEqual(preview);
+        });
+
+        it('keeps non-empty claim behavior unchanged after an empty batch call', () => {
+            // Regression guard: an empty-input call must not leave any shared/mutated
+            // state that affects a subsequent non-empty call.
+            buildBatchClaimPreview({}, {});
+
+            const vaultProofs = {
+                vault1: {
+                    index: 0,
+                    amount: '5000000000',
+                    proof: ['hash1'],
+                    timestamp: Date.now() - 1000,
+                } as ClaimProofData,
+            };
+
+            const vaultMetadata = {
+                vault1: { name: 'USDC Vault' },
+            };
+
+            const preview = buildBatchClaimPreview(vaultProofs, vaultMetadata);
+
+            expect(preview.vaults).toHaveLength(1);
+            expect(preview.totalClaimable).toBe('5000000000');
+            expect(preview.canClaimAll).toBe(true);
+        });
     });
 
     describe('formatYieldAmount', () => {
