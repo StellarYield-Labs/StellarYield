@@ -4,6 +4,25 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 import YieldCalculator, { MetricCard } from '../YieldCalculator';
+import {
+  calculateCompoundProjection,
+  calculateProjectionMetrics,
+  formatCurrency,
+} from '../compoundMath';
+
+const DECIMAL_AMOUNT_FIXTURE = {
+  initialPrincipal: 1234.56,
+  initialMonthlyContribution: 100.25,
+  initialApy: 8.5,
+  initialYears: 1,
+} as const;
+
+const INTEGER_AMOUNT_FIXTURE = {
+  initialPrincipal: 10000,
+  initialMonthlyContribution: 500,
+  initialApy: 8.5,
+  initialYears: 5,
+} as const;
 
 // Mock Recharts to avoid rendering issues in tests
 vi.mock('recharts', () => ({
@@ -255,6 +274,34 @@ describe('YieldCalculator Component', () => {
     // Reset to default
     global.innerWidth = 1024;
     global.dispatchEvent(new Event('resize'));
+  });
+
+  it('formats decimal deposit amounts and projected yield consistently', () => {
+    const config = {
+      principal: DECIMAL_AMOUNT_FIXTURE.initialPrincipal,
+      monthlyContribution: DECIMAL_AMOUNT_FIXTURE.initialMonthlyContribution,
+      apy: DECIMAL_AMOUNT_FIXTURE.initialApy,
+      years: DECIMAL_AMOUNT_FIXTURE.initialYears,
+    };
+    const metrics = calculateProjectionMetrics(calculateCompoundProjection(config));
+    const formattedDeposit = formatCurrency(config.principal);
+    const formattedProjectedYield = formatCurrency(metrics.finalValue);
+
+    render(<YieldCalculator {...DECIMAL_AMOUNT_FIXTURE} />);
+
+    expect(formattedDeposit).toBe('$1,234.56');
+    expect(screen.getByText(formattedDeposit)).toBeInTheDocument();
+    expect(formattedProjectedYield).toBe('$2,595.36');
+    expect(screen.getByTestId('projected-yield')).toHaveTextContent('$2,595.36');
+  });
+
+  it('keeps integer amount formatting unchanged', () => {
+    render(<YieldCalculator {...INTEGER_AMOUNT_FIXTURE} />);
+
+    expect(formatCurrency(INTEGER_AMOUNT_FIXTURE.initialPrincipal)).toBe('$10,000');
+    expect(formatCurrency(INTEGER_AMOUNT_FIXTURE.initialMonthlyContribution)).toBe('$500');
+    expect(screen.getByText('$10,000')).toBeInTheDocument();
+    expect(screen.getByText('$500')).toBeInTheDocument();
   });
 });
 

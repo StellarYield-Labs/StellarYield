@@ -155,14 +155,18 @@ export function calculateProjectionMetrics(projections: ProjectionPoint[]) {
 }
 
 /**
- * Format currency value with proper formatting
+ * Format currency value with proper formatting.
+ * Integer amounts stay whole dollars; decimal amounts keep two cent digits.
  */
 export function formatCurrency(value: number): string {
+  const hasCents = Math.round(value * 100) % 100 !== 0;
+  const fractionDigits = hasCents ? 2 : 0;
+
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
   }).format(value);
 }
 

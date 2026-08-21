@@ -274,6 +274,7 @@ export default function YieldCalculator({
           label="Final Value"
           value={formatCurrency(metrics.finalValue)}
           color="text-green-400"
+          testId="projected-yield"
         />
         <MetricCard
           label="Total Contributed"
@@ -411,11 +412,12 @@ interface MetricCardProps {
   label: string;
   value: string;
   color: string;
+  testId?: string;
 }
 
-export function MetricCard({ label, value, color }: MetricCardProps) {
+export function MetricCard({ label, value, color, testId }: MetricCardProps) {
   return (
-    <div className="bg-slate-800/50 rounded-lg p-4">
+    <div className="bg-slate-800/50 rounded-lg p-4" data-testid={testId}>
       <p className="text-gray-400 text-sm mb-1">{label}</p>
       <p className={`text-xl font-bold ${color}`}>{value}</p>
     </div>
