@@ -224,4 +224,31 @@ describe("decodeTransactionError", () => {
             expect(result.code).toBe(Number(code));
         }
     });
+
+    it("handles null input safely and returns fallback message", () => {
+        expect(() => decodeTransactionError(null)).not.toThrow();
+        const result = decodeTransactionError(null);
+        expect(result.title).toBe("Transaction Failed");
+        expect(result.message).toBe("An unexpected error occurred while processing your transaction.");
+        expect(result.suggestion).toContain("developer log");
+        expect(result.raw).toBe("null");
+    });
+
+    it("handles undefined input safely and returns fallback message", () => {
+        expect(() => decodeTransactionError(undefined)).not.toThrow();
+        const result = decodeTransactionError(undefined);
+        expect(result.title).toBe("Transaction Failed");
+        expect(result.message).toBe("An unexpected error occurred while processing your transaction.");
+        expect(result.suggestion).toContain("developer log");
+        expect(result.raw).toBe("undefined");
+    });
+
+    it("handles missing input safely and returns fallback message", () => {
+        expect(() => decodeTransactionError()).not.toThrow();
+        const result = decodeTransactionError();
+        expect(result.title).toBe("Transaction Failed");
+        expect(result.message).toBe("An unexpected error occurred while processing your transaction.");
+        expect(result.suggestion).toContain("developer log");
+        expect(result.raw).toBe("undefined");
+    });
 });
