@@ -689,4 +689,85 @@ describe("TransactionBuilder Validation", () => {
       expect(actionSelect).toHaveValue("");
     });
   });
+
+  describe("Threshold Update Preview Hashes", () => {
+    const signerA = "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF";
+    const signerB = "GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+
+    it("shows preview hashes for valid threshold update input", async () => {
+      render(
+        <TransactionBuilder
+          threshold={2}
+          contractId="CCONTRACT123"
+          onTransactionCreated={mockOnTransactionCreated}
+        />,
+      );
+
+      const actionSelect = screen.getByRole("combobox", { name: /action/i });
+      fireEvent.change(actionSelect, { target: { value: "update_threshold" } });
+
+      fireEvent.change(screen.getByPlaceholderText(/G\.\.\.\nG\.\.\./i), {
+        target: { value: `${signerA}\n${signerB}` },
+      });
+      fireEvent.change(screen.getByPlaceholderText("2"), {
+        target: { value: "2" },
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId("signer-set-hash")).toBeInTheDocument();
+        expect(screen.getByTestId("payload-hash")).toBeInTheDocument();
+      });
+
+      expect(screen.getByTestId("signer-set-hash").textContent).toMatch(/^[a-f0-9]{64}$/);
+      expect(screen.getByTestId("payload-hash").textContent).toMatch(/^[a-f0-9]{64}$/);
+    });
+
+    it("rejects duplicate signers for threshold update", () => {
+      render(
+        <TransactionBuilder
+          threshold={2}
+          contractId="CCONTRACT123"
+          onTransactionCreated={mockOnTransactionCreated}
+        />,
+      );
+
+      const actionSelect = screen.getByRole("combobox", { name: /action/i });
+      fireEvent.change(actionSelect, { target: { value: "update_threshold" } });
+
+      fireEvent.change(screen.getByPlaceholderText(/G\.\.\.\nG\.\.\./i), {
+        target: { value: `${signerA}\n${signerA}` },
+      });
+      fireEvent.change(screen.getByPlaceholderText("2"), {
+        target: { value: "1" },
+      });
+
+      expect(
+        screen.getByText(/duplicate signer addresses are not allowed/i),
+      ).toBeInTheDocument();
+    });
+
+    it("rejects invalid threshold values", () => {
+      render(
+        <TransactionBuilder
+          threshold={2}
+          contractId="CCONTRACT123"
+          onTransactionCreated={mockOnTransactionCreated}
+        />,
+      );
+
+      const actionSelect = screen.getByRole("combobox", { name: /action/i });
+      fireEvent.change(actionSelect, { target: { value: "update_threshold" } });
+
+      fireEvent.change(screen.getByPlaceholderText(/G\.\.\.\nG\.\.\./i), {
+        target: { value: `${signerA}\n${signerB}` },
+      });
+      fireEvent.change(screen.getByPlaceholderText("2"), {
+        target: { value: "3" },
+      });
+
+      expect(
+        screen.getByText(/threshold cannot exceed the number of signers/i),
+      ).toBeInTheDocument();
+    });
+  });
 });

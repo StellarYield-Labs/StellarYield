@@ -1,10 +1,15 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import * as StellarSdk from "@stellar/stellar-sdk";
 import { useWallet } from "../../context/useWallet";
 import { ADMIN_ACTIONS } from "./governanceActions";
 import type { AdminAction, PendingTransaction } from "./types";
 import { AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 import { validateTransactionBuilder } from "./validation";
+import {
+  computeThresholdPreviewHashes,
+  parseSignerInput,
+  type ThresholdPreviewHashes,
+} from "./thresholdPreviewHash";
 
 interface TransactionBuilderProps {
   threshold: number;
@@ -42,6 +47,7 @@ export default function TransactionBuilder({
   const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [building, setBuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [previewHashes, setPreviewHashes] = useState<ThresholdPreviewHashes | null>(null);
 
   const action = ADMIN_ACTIONS.find((a) => a.method === selectedAction);
 
@@ -49,6 +55,46 @@ export default function TransactionBuilder({
     () => validateTransactionBuilder(action, walletAddress, fieldValues),
     [action, walletAddress, fieldValues],
   );
+
+  useEffect(() => {
+    if (
+      action?.method !== "update_threshold" ||
+      !walletAddress ||
+      !contractId ||
+      !validationSummary?.isValid
+    ) {
+      setPreviewHashes(null);
+      return;
+    }
+
+    let cancelled = false;
+    const signers = parseSignerInput(fieldValues.signers ?? "");
+    const threshold = Number(fieldValues.new_threshold);
+
+    void computeThresholdPreviewHashes({
+      contractId,
+      signers,
+      threshold,
+      proposer: walletAddress,
+    })
+      .then((hashes) => {
+        if (!cancelled) setPreviewHashes(hashes);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewHashes(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    action?.method,
+    contractId,
+    fieldValues.new_threshold,
+    fieldValues.signers,
+    validationSummary?.isValid,
+    walletAddress,
+  ]);
 
   async function handleBuild() {
     if (!walletAddress || !action || !contractId) return;
@@ -80,6 +126,10 @@ export default function TransactionBuilder({
           args.push(
             StellarSdk.nativeToScVal(BigInt(value), { type: "i128" }),
           );
+        } else if (field.name === "signers") {
+          for (const signer of parseSignerInput(value)) {
+            args.push(new StellarSdk.Address(signer).toScVal());
+          }
         }
       }
 
@@ -117,11 +167,13 @@ export default function TransactionBuilder({
         createdAt: Date.now(),
         createdBy: walletAddress,
         status: "pending",
+        previewHashes: previewHashes ?? undefined,
       };
 
       onTransactionCreated(pendingTx);
       setSelectedAction("");
       setFieldValues({});
+      setPreviewHashes(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -145,6 +197,7 @@ export default function TransactionBuilder({
               setSelectedAction(e.target.value as AdminAction);
               setFieldValues({});
               setError(null);
+              setPreviewHashes(null);
             }}
             className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-4 py-2 text-white"
           >
@@ -166,18 +219,33 @@ export default function TransactionBuilder({
                 <label className="block text-sm text-gray-400 mb-1">
                   {field.label}
                 </label>
-                <input
-                  type={field.type === "number" ? "number" : "text"}
-                  placeholder={field.placeholder}
-                  value={fieldValues[field.name] ?? ""}
-                  onChange={(e) =>
-                    setFieldValues((prev) => ({
-                      ...prev,
-                      [field.name]: e.target.value,
-                    }))
-                  }
-                  className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-4 py-2 text-white"
-                />
+                {field.name === "signers" ? (
+                  <textarea
+                    rows={4}
+                    placeholder={field.placeholder}
+                    value={fieldValues[field.name] ?? ""}
+                    onChange={(e) =>
+                      setFieldValues((prev) => ({
+                        ...prev,
+                        [field.name]: e.target.value,
+                      }))
+                    }
+                    className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-4 py-2 text-white font-mono text-sm"
+                  />
+                ) : (
+                  <input
+                    type={field.type === "number" ? "number" : "text"}
+                    placeholder={field.placeholder}
+                    value={fieldValues[field.name] ?? ""}
+                    onChange={(e) =>
+                      setFieldValues((prev) => ({
+                        ...prev,
+                        [field.name]: e.target.value,
+                      }))
+                    }
+                    className="w-full bg-[#1a1a2e] border border-gray-700 rounded-lg px-4 py-2 text-white"
+                  />
+                )}
               </div>
             ))}
 
@@ -245,6 +313,32 @@ export default function TransactionBuilder({
                         {validationSummary.risk.toUpperCase()}
                       </span>
                     </div>
+
+                    {action.method === "update_threshold" && previewHashes && (
+                      <div className="space-y-2 border-t border-gray-700 pt-3">
+                        <p className="text-xs uppercase tracking-wide text-gray-500">
+                          Submission Preview Hashes
+                        </p>
+                        <div>
+                          <span className="text-gray-400">Signer Set Hash:</span>
+                          <p
+                            data-testid="signer-set-hash"
+                            className="font-mono text-xs break-all text-indigo-300 mt-1"
+                          >
+                            {previewHashes.signerSetHash}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-gray-400">Payload Hash:</span>
+                          <p
+                            data-testid="payload-hash"
+                            className="font-mono text-xs break-all text-indigo-300 mt-1"
+                          >
+                            {previewHashes.payloadHash}
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -252,7 +346,12 @@ export default function TransactionBuilder({
 
             <button
               onClick={handleBuild}
-              disabled={building || !walletAddress || !validationSummary?.isValid}
+              disabled={
+                building ||
+                !walletAddress ||
+                !validationSummary?.isValid ||
+                (action.method === "update_threshold" && !previewHashes)
+              }
               className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
             >
               {building ? "Building Transaction..." : "Build & Propose"}
