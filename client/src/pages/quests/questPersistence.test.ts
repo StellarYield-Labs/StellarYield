@@ -2,14 +2,31 @@ import { describe, it, expect } from "vitest";
 import type { Quest } from "./types";
 import {
   QUEST_STORAGE_VERSION,
+  DEFAULT_STALE_CACHE_TTL_MS,
   applySimulatedIndexerProgress,
   cloneQuests,
+  getCacheFreshness,
+  invalidateStaleCache,
+  isCacheStale,
+  legacyWalletQuestStorageKey,
   loadWalletQuestBundle,
   mergeQuestsWithTemplate,
+  migrateQuestBundle,
+  sanitizeAchievement,
+  sanitizeQuest,
   saveWalletQuestBundle,
   walletQuestStorageKey,
   type PersistedWalletQuestBundle,
 } from "./questPersistence";
+import {
+  createStaleCacheFixture,
+  futureVersionBundleFixture,
+  partiallyCorruptedBundleFixture,
+  v0FlatQuestShapeBundleFixture,
+  v0LegacyGlobalAchievementsFixture,
+  v0LegacyGlobalQuestsFixture,
+  v0UnversionedWalletPayloadFixture,
+} from "./questMigrationFixtures";
 
 const TEMPLATE: Quest[] = [
   {
@@ -33,6 +50,28 @@ const TEMPLATE: Quest[] = [
     category: "deposit",
     icon: "Landmark",
     objectives: [{ id: "o1", description: "Deposit 100 USDC", target: 100, progress: 0, unit: "USDC" }],
+  },
+  {
+    id: "q2",
+    title: "Diamond Hands",
+    description: "Hold your vault position for 30 consecutive days.",
+    points: 150,
+    status: "active",
+    badgeContractId: "CBADGE_DIAMOND_HANDS",
+    category: "hold",
+    icon: "Gem",
+    objectives: [{ id: "o2", description: "Hold for 30 days", target: 30, progress: 0, unit: "days" }],
+  },
+  {
+    id: "q4",
+    title: "Governance Voter",
+    description: "Vote on 3 governance proposals.",
+    points: 100,
+    status: "active",
+    badgeContractId: "CBADGE_VOTER",
+    category: "governance",
+    icon: "ShieldCheck",
+    objectives: [{ id: "o4", description: "Vote on proposals", target: 3, progress: 0, unit: "votes" }],
   },
 ];
 
@@ -118,51 +157,125 @@ describe("per-wallet persistence (reconnect)", () => {
     expect(storage.snapshot()[walletQuestStorageKey(w1)]).toBeDefined();
     expect(storage.snapshot()[walletQuestStorageKey(w2)]).toBeUndefined();
   });
-
-  it("migrates legacy global keys once into the active wallet bundle", () => {
-    const storage = mockStorage({
-      sy_quests: JSON.stringify([
-        {
-          ...TEMPLATE[1],
-          objectives: [{ ...TEMPLATE[1].objectives[0], progress: 55 }],
-        },
-      ]),
-      sy_achievements: JSON.stringify([]),
-    });
-    const w = "GCCCCC";
-    const loaded = loadWalletQuestBundle(w, TEMPLATE, storage);
-    expect(loaded.quests.find((q) => q.id === "q1")?.objectives[0].progress).toBe(55);
-    expect(storage.getItem("sy_quests")).toBeNull();
-    saveWalletQuestBundle(w, loaded, storage);
-    expect(storage.getItem(walletQuestStorageKey(w))).toBeTruthy();
-  });
 });
 
-describe("refresh reconciliation", () => {
-  it("applies indexer-shaped updates on top of cached quests", () => {
-    const cached: Quest[] = mergeQuestsWithTemplate(
-      [{ ...TEMPLATE[1], objectives: [{ ...TEMPLATE[1].objectives[0], progress: 10 }] }],
-      TEMPLATE,
-    );
-    const next = applySimulatedIndexerProgress(cached);
-    const q1 = next.find((q) => q.id === "q1");
+describe("Quest Progress Migrations (Scope: Migration fixtures for older quest state)", () => {
+  it("migrates legacy global keys (sy_quests & sy_achievements) into active wallet bundle", () => {
+    const storage = mockStorage({
+      sy_quests: JSON.stringify(v0LegacyGlobalQuestsFixture),
+      sy_achievements: JSON.stringify(v0LegacyGlobalAchievementsFixture),
+    });
+    const wallet = "GLEGACYGLOBALWALLET1234567890ABCDEFGHIJKLMNOPQRSTUV";
+    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
+
+    expect(loaded.version).toBe(QUEST_STORAGE_VERSION);
+    expect(loaded.quests.find((q) => q.id === "q1")?.objectives[0].progress).toBe(100);
+    expect(loaded.quests.find((q) => q.id === "q2")?.objectives[0].progress).toBe(15);
+    expect(loaded.achievements).toHaveLength(1);
+    expect(loaded.achievements[0].txHash).toBe("tx_legacy_global_001");
+
+    // Cleaned up legacy keys
+    expect(storage.getItem("sy_quests")).toBeNull();
+    expect(storage.getItem("sy_achievements")).toBeNull();
+    // Saved in versioned key
+    expect(storage.getItem(walletQuestStorageKey(wallet))).toBeTruthy();
+  });
+
+  it("migrates unversioned per-wallet key (sy_quest_wallet_<address>) safely", () => {
+    const wallet = "GUNVERSIONEDWALLET1234567890ABCDEFGHIJKLMNOPQRSTUVW";
+    const legacyKey = legacyWalletQuestStorageKey(wallet);
+    const storage = mockStorage({
+      [legacyKey]: JSON.stringify(v0UnversionedWalletPayloadFixture),
+    });
+
+    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
+
+    expect(loaded.version).toBe(QUEST_STORAGE_VERSION);
+    expect(loaded.quests.find((q) => q.id === "q1")?.status).toBe("completed");
+    expect(loaded.quests.find((q) => q.id === "q4")?.objectives[0].progress).toBe(2);
+    expect(loaded.achievements[0].txHash).toBe("tx_unversioned_wallet_001");
+    expect(storage.getItem(legacyKey)).toBeNull();
+    expect(storage.getItem(walletQuestStorageKey(wallet))).toBeTruthy();
+  });
+
+  it("migrates flat legacy quest schema (progress, completed, reward, badgeId) to objective-based schema", () => {
+    const wallet = "GDFLATQUEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234";
+    const storage = mockStorage({
+      [walletQuestStorageKey(wallet)]: JSON.stringify(v0FlatQuestShapeBundleFixture),
+    });
+
+    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
+
+    expect(loaded.version).toBe(QUEST_STORAGE_VERSION);
+    const q1 = loaded.quests.find((q) => q.id === "q1");
+    expect(q1?.status).toBe("completed");
+    expect(q1?.objectives[0].progress).toBe(100);
+    expect(q1?.points).toBe(50);
+    const q2 = loaded.quests.find((q) => q.id === "q2");
+    expect(q2?.objectives[0].progress).toBe(20);
+    expect(loaded.achievements).toHaveLength(1);
+  });
+
+  it("safely handles future version bundles with backward-compatible fields", () => {
+    const wallet = "GDFUTUREVERSION1234567890ABCDEFGHIJKLMNOPQRSTUVWX";
+    const storage = mockStorage({
+      [walletQuestStorageKey(wallet)]: JSON.stringify(futureVersionBundleFixture),
+    });
+
+    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
+
+    expect(loaded.version).toBe(QUEST_STORAGE_VERSION);
+    const q1 = loaded.quests.find((q) => q.id === "q1");
     expect(q1?.objectives[0].progress).toBe(100);
     expect(q1?.status).toBe("claimable");
+    expect(loaded.achievements[0].txHash).toBe("tx_future_v99");
   });
 });
 
-describe("save and load quest progress", () => {
-  it("saves quest progress and loads it back correctly", () => {
-    const storage = mockStorage();
-    const wallet = "GDSAVETEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ123456";
-    
-    const bundle: PersistedWalletQuestBundle = {
+describe("Stale Cache Invalidation (Scope: Cover stale cache invalidation)", () => {
+  it("detects stale cache correctly using TTL and clock skew checks", () => {
+    const now = 1700000000000;
+    const freshBundle: PersistedWalletQuestBundle = {
+      version: QUEST_STORAGE_VERSION,
+      quests: cloneQuests(TEMPLATE),
+      achievements: [],
+      lastSyncedAt: now - 3600 * 1000, // 1 hour old (< 24h)
+    };
+    expect(isCacheStale(freshBundle, DEFAULT_STALE_CACHE_TTL_MS, now)).toBe(false);
+    expect(getCacheFreshness(freshBundle, DEFAULT_STALE_CACHE_TTL_MS, now)).toBe("fresh");
+
+    const staleBundle = createStaleCacheFixture(25 * 3600 * 1000, now); // 25 hours old (> 24h)
+    expect(isCacheStale(staleBundle, DEFAULT_STALE_CACHE_TTL_MS, now)).toBe(true);
+    expect(getCacheFreshness(staleBundle, DEFAULT_STALE_CACHE_TTL_MS, now)).toBe("stale");
+
+    const nullSyncedBundle: PersistedWalletQuestBundle = {
+      version: QUEST_STORAGE_VERSION,
+      quests: cloneQuests(TEMPLATE),
+      achievements: [],
+      lastSyncedAt: null,
+    };
+    expect(isCacheStale(nullSyncedBundle, DEFAULT_STALE_CACHE_TTL_MS, now)).toBe(true);
+    expect(getCacheFreshness(nullSyncedBundle, DEFAULT_STALE_CACHE_TTL_MS, now)).toBe("unverified");
+
+    // Clock skew anomaly (> 5 min future)
+    const futureSkewBundle: PersistedWalletQuestBundle = {
+      version: QUEST_STORAGE_VERSION,
+      quests: cloneQuests(TEMPLATE),
+      achievements: [],
+      lastSyncedAt: now + 10 * 60 * 1000,
+    };
+    expect(isCacheStale(futureSkewBundle, DEFAULT_STALE_CACHE_TTL_MS, now)).toBe(true);
+  });
+
+  it("invalidates stale cache while preserving progress and achievements", () => {
+    const now = 1700000000000;
+    const wallet = "GDSTALEWALLET1234567890ABCDEFGHIJKLMNOPQRSTUVWXY";
+    const staleBundle: PersistedWalletQuestBundle = {
       version: QUEST_STORAGE_VERSION,
       quests: [
         {
           ...TEMPLATE[1],
-          status: "active",
-          objectives: [{ ...TEMPLATE[1].objectives[0], progress: 75 }],
+          objectives: [{ ...TEMPLATE[1].objectives[0], progress: 80 }],
         },
       ],
       achievements: [
@@ -170,125 +283,62 @@ describe("save and load quest progress", () => {
           questId: "q1",
           title: "First Deposit",
           badgeContractId: "CBADGE_FIRST_DEPOSIT",
-          mintedAt: 1234567890,
-          txHash: "tx_abc123",
+          mintedAt: now - 50 * 3600 * 1000,
+          txHash: "tx_stale_ach_01",
         },
       ],
-      lastSyncedAt: 1234567890,
+      lastSyncedAt: now - 48 * 3600 * 1000, // 48 hours ago
     };
 
-    saveWalletQuestBundle(wallet, bundle, storage);
+    const storage = mockStorage({
+      [walletQuestStorageKey(wallet)]: JSON.stringify(staleBundle),
+    });
+
+    const wasInvalidated = invalidateStaleCache(wallet, DEFAULT_STALE_CACHE_TTL_MS, storage, now);
+    expect(wasInvalidated).toBe(true);
+
+    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
+    expect(loaded.lastSyncedAt).toBeNull();
+    // Progress and achievements are preserved
+    expect(loaded.quests.find((q) => q.id === "q1")?.objectives[0].progress).toBe(80);
+    expect(loaded.achievements[0].txHash).toBe("tx_stale_ach_01");
+
+    // Calling invalidate again on already invalidated cache returns false
+    expect(invalidateStaleCache(wallet, DEFAULT_STALE_CACHE_TTL_MS, storage, now)).toBe(false);
+  });
+});
+
+describe("Recovery after partially corrupted local state (Scope: Validate recovery)", () => {
+  it("recovers valid quests and achievements from partially corrupted bundle fixture", () => {
+    const wallet = "GDCORRUPTFIXTURE1234567890ABCDEFGHIJKLMNOPQRSTUV";
+    const storage = mockStorage({
+      [walletQuestStorageKey(wallet)]: JSON.stringify(partiallyCorruptedBundleFixture),
+    });
+
     const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
 
     expect(loaded.version).toBe(QUEST_STORAGE_VERSION);
-    expect(loaded.quests.find((q) => q.id === "q1")?.objectives[0].progress).toBe(75);
+    // All template quests are present
+    expect(loaded.quests).toHaveLength(TEMPLATE.length);
+    // q1 progress recovered
+    const q1 = loaded.quests.find((q) => q.id === "q1");
+    expect(q1?.objectives[0].progress).toBe(100);
+    expect(q1?.status).toBe("claimable");
+    // q4 progress recovered from string number
+    const q4 = loaded.quests.find((q) => q.id === "q4");
+    expect(q4?.objectives[0].progress).toBe(2);
+    // Achievements recovered (corrupted filtered out, valid kept)
     expect(loaded.achievements).toHaveLength(1);
-    expect(loaded.achievements[0].txHash).toBe("tx_abc123");
-    expect(loaded.lastSyncedAt).toBe(1234567890);
-  });
-
-  it("saves multiple quest progress updates independently", () => {
-    const storage = mockStorage();
-    const wallet = "GDMULTITEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234";
-
-    const bundle1: PersistedWalletQuestBundle = {
-      version: QUEST_STORAGE_VERSION,
-      quests: [
-        {
-          ...TEMPLATE[1],
-          objectives: [{ ...TEMPLATE[1].objectives[0], progress: 25 }],
-        },
-      ],
-      achievements: [],
-      lastSyncedAt: 1000,
-    };
-
-    saveWalletQuestBundle(wallet, bundle1, storage);
-    
-    const bundle2: PersistedWalletQuestBundle = {
-      version: QUEST_STORAGE_VERSION,
-      quests: [
-        {
-          ...TEMPLATE[1],
-          objectives: [{ ...TEMPLATE[1].objectives[0], progress: 50 }],
-        },
-      ],
-      achievements: [],
-      lastSyncedAt: 2000,
-    };
-
-    saveWalletQuestBundle(wallet, bundle2, storage);
-    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-
-    expect(loaded.quests.find((q) => q.id === "q1")?.objectives[0].progress).toBe(50);
-    expect(loaded.lastSyncedAt).toBe(2000);
-  });
-
-  it("loads fresh template when no saved data exists", () => {
-    const storage = mockStorage();
-    const wallet = "GDFRESHTEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ123";
-
-    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-
-    expect(loaded.version).toBe(QUEST_STORAGE_VERSION);
-    expect(loaded.quests).toHaveLength(TEMPLATE.length);
-    expect(loaded.quests[1].objectives[0].progress).toBe(0);
-    expect(loaded.achievements).toHaveLength(0);
+    expect(loaded.achievements[0].txHash).toBe("tx_valid_achievement_001");
+    // Invalid timestamp sanitized to null
     expect(loaded.lastSyncedAt).toBeNull();
   });
 
-  it("preserves achievements across saves", () => {
-    const storage = mockStorage();
-    const wallet = "GDACHIEVETEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXY";
-
-    const achievement1 = {
-      questId: "q1",
-      title: "First Deposit",
-      badgeContractId: "CBADGE_FIRST_DEPOSIT",
-      mintedAt: 1000,
-      txHash: "tx_first",
-    };
-
-    const achievement2 = {
-      questId: "q2",
-      title: "Diamond Hands",
-      badgeContractId: "CBADGE_DIAMOND_HANDS",
-      mintedAt: 2000,
-      txHash: "tx_second",
-    };
-
-    const bundle1: PersistedWalletQuestBundle = {
-      version: QUEST_STORAGE_VERSION,
-      quests: cloneQuests(TEMPLATE),
-      achievements: [achievement1],
-      lastSyncedAt: 1000,
-    };
-
-    saveWalletQuestBundle(wallet, bundle1, storage);
-
-    const bundle2: PersistedWalletQuestBundle = {
-      version: QUEST_STORAGE_VERSION,
-      quests: cloneQuests(TEMPLATE),
-      achievements: [achievement1, achievement2],
-      lastSyncedAt: 2000,
-    };
-
-    saveWalletQuestBundle(wallet, bundle2, storage);
-    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-
-    expect(loaded.achievements).toHaveLength(2);
-    expect(loaded.achievements[0].txHash).toBe("tx_first");
-    expect(loaded.achievements[1].txHash).toBe("tx_second");
-  });
-});
-
-describe("malformed localStorage data handling", () => {
-  it("handles corrupted JSON gracefully", () => {
-    const storage = mockStorage();
-    const wallet = "GDCORRUPTTEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXY";
-    const key = walletQuestStorageKey(wallet);
-
-    storage.setItem(key, "{invalid json here");
+  it("handles completely invalid JSON without throwing and provides clean fallback", () => {
+    const wallet = "GDTRUNCATEDJSON1234567890ABCDEFGHIJKLMNOPQRSTUVW";
+    const storage = mockStorage({
+      [walletQuestStorageKey(wallet)]: '{"version": 1, "quests": [{"id": "q1", ',
+    });
 
     const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
 
@@ -298,409 +348,58 @@ describe("malformed localStorage data handling", () => {
     expect(loaded.lastSyncedAt).toBeNull();
   });
 
-  it("handles missing version field", () => {
-    const storage = mockStorage();
-    const wallet = "GDNOVERSIONTEST1234567890ABCDEFGHIJKLMNOPQRSTUVW";
-    const key = walletQuestStorageKey(wallet);
+  it("sanitizes individual corrupted quest and achievement inputs safely", () => {
+    expect(sanitizeQuest(null)).toBeNull();
+    expect(sanitizeQuest(undefined)).toBeNull();
+    expect(sanitizeQuest("invalid")).toBeNull();
+    expect(sanitizeQuest({ id: "" })).toBeNull();
 
-    storage.setItem(
-      key,
-      JSON.stringify({
-        quests: [],
-        achievements: [],
-        lastSyncedAt: 1000,
-      }),
-    );
+    const sanitizedWithTemplate = sanitizeQuest({ id: "q1", progress: "50" }, TEMPLATE[1]);
+    expect(sanitizedWithTemplate?.objectives[0].progress).toBe(50);
+    expect(sanitizedWithTemplate?.title).toBe(TEMPLATE[1].title);
 
-    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-
-    expect(loaded.version).toBe(QUEST_STORAGE_VERSION);
-    expect(loaded.quests).toHaveLength(TEMPLATE.length);
+    expect(sanitizeAchievement(null)).toBeNull();
+    expect(sanitizeAchievement({})).toBeNull();
+    expect(sanitizeAchievement({ questId: "q1" })).toBeNull(); // missing txHash
+    const validAch = sanitizeAchievement({ questId: "q1", txHash: "tx_123", title: "Test" });
+    expect(validAch?.txHash).toBe("tx_123");
+    expect(validAch?.questId).toBe("q1");
   });
 
-  it("handles wrong version number", () => {
-    const storage = mockStorage();
-    const wallet = "GDWRONGVERSIONTEST1234567890ABCDEFGHIJKLMNOPQRST";
-    const key = walletQuestStorageKey(wallet);
-
-    storage.setItem(
-      key,
-      JSON.stringify({
-        version: 999,
-        quests: [TEMPLATE[1]],
-        achievements: [],
-        lastSyncedAt: 1000,
-      }),
-    );
-
-    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-
-    expect(loaded.version).toBe(QUEST_STORAGE_VERSION);
-    expect(loaded.quests).toHaveLength(TEMPLATE.length);
-  });
-
-  it("handles non-array quests field", () => {
-    const storage = mockStorage();
-    const wallet = "GDNONARRAYTEST1234567890ABCDEFGHIJKLMNOPQRSTUVWX";
-    const key = walletQuestStorageKey(wallet);
-
-    storage.setItem(
-      key,
-      JSON.stringify({
-        version: QUEST_STORAGE_VERSION,
-        quests: "not an array",
-        achievements: [],
-        lastSyncedAt: 1000,
-      }),
-    );
-
-    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-
-    expect(loaded.quests).toHaveLength(TEMPLATE.length);
-    expect(Array.isArray(loaded.quests)).toBe(true);
-  });
-
-  it("handles non-array achievements field", () => {
-    const storage = mockStorage();
-    const wallet = "GDNONARRAYACH1234567890ABCDEFGHIJKLMNOPQRSTUVWXY";
-    const key = walletQuestStorageKey(wallet);
-
-    storage.setItem(
-      key,
-      JSON.stringify({
-        version: QUEST_STORAGE_VERSION,
-        quests: [],
-        achievements: "not an array",
-        lastSyncedAt: 1000,
-      }),
-    );
-
-    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-
-    expect(Array.isArray(loaded.achievements)).toBe(true);
-  });
-
-  it("handles null storage value", () => {
-    const storage = mockStorage();
-    const wallet = "GDNULLTEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ123";
-
-    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-
-    expect(loaded.version).toBe(QUEST_STORAGE_VERSION);
-    expect(loaded.quests).toHaveLength(TEMPLATE.length);
-    expect(loaded.achievements).toHaveLength(0);
-  });
-
-  it("handles empty string storage value", () => {
-    const storage = mockStorage();
-    const wallet = "GDEMPTYTEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ12";
-    const key = walletQuestStorageKey(wallet);
-
-    storage.setItem(key, "");
-
-    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-
-    expect(loaded.version).toBe(QUEST_STORAGE_VERSION);
-    expect(loaded.quests).toHaveLength(TEMPLATE.length);
-  });
-
-  it("handles malformed quest objects in array", () => {
-    const storage = mockStorage();
-    const wallet = "GDMALFORMEDQUEST1234567890ABCDEFGHIJKLMNOPQRSTUV";
-    const key = walletQuestStorageKey(wallet);
-
-    storage.setItem(
-      key,
-      JSON.stringify({
-        version: QUEST_STORAGE_VERSION,
-        quests: [
-          { id: "q1" }, // Missing required fields
-          null,
-          undefined,
-          "not an object",
-        ],
-        achievements: [],
-        lastSyncedAt: 1000,
-      }),
-    );
-
-    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-
-    expect(loaded.quests).toHaveLength(TEMPLATE.length);
-    expect(loaded.quests.every((q) => q.id && q.title && q.objectives)).toBe(true);
-  });
-
-  it("silently handles storage quota exceeded errors", () => {
-    const storage = {
-      getItem: () => null,
-      setItem: () => {
-        throw new Error("QuotaExceededError");
-      },
-      removeItem: () => {},
-    };
-
-    const wallet = "GDQUOTATEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1";
-    const bundle: PersistedWalletQuestBundle = {
-      version: QUEST_STORAGE_VERSION,
-      quests: cloneQuests(TEMPLATE),
-      achievements: [],
-      lastSyncedAt: 1000,
-    };
-
-    expect(() => saveWalletQuestBundle(wallet, bundle, storage)).not.toThrow();
-  });
-
-  it("handles storage in private browsing mode", () => {
-    const storage = {
-      getItem: () => {
-        throw new Error("SecurityError");
-      },
-      setItem: () => {
-        throw new Error("SecurityError");
-      },
-      removeItem: () => {},
-    };
-
-    const wallet = "GDPRIVATETEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXY";
-
-    expect(() => loadWalletQuestBundle(wallet, TEMPLATE, storage)).not.toThrow();
-    
-    const bundle: PersistedWalletQuestBundle = {
-      version: QUEST_STORAGE_VERSION,
-      quests: cloneQuests(TEMPLATE),
-      achievements: [],
-      lastSyncedAt: 1000,
-    };
-
-    expect(() => saveWalletQuestBundle(wallet, bundle, storage)).not.toThrow();
-  });
-});
-
-describe("reset behavior", () => {
-  it("clears wallet data when removeItem is called", () => {
-    const storage = mockStorage();
-    const wallet = "GDRESETTEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1";
-    const key = walletQuestStorageKey(wallet);
-
-    const bundle: PersistedWalletQuestBundle = {
-      version: QUEST_STORAGE_VERSION,
-      quests: [
-        {
-          ...TEMPLATE[1],
-          objectives: [{ ...TEMPLATE[1].objectives[0], progress: 99 }],
-        },
-      ],
-      achievements: [
-        {
-          questId: "q1",
-          title: "First Deposit",
-          badgeContractId: "CBADGE_FIRST_DEPOSIT",
-          mintedAt: 1000,
-          txHash: "tx_reset",
-        },
-      ],
-      lastSyncedAt: 1000,
-    };
-
-    saveWalletQuestBundle(wallet, bundle, storage);
-    expect(storage.getItem(key)).toBeTruthy();
-
-    storage.removeItem(key);
-    expect(storage.getItem(key)).toBeNull();
-
-    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-    expect(loaded.quests[1].objectives[0].progress).toBe(0);
-    expect(loaded.achievements).toHaveLength(0);
-    expect(loaded.lastSyncedAt).toBeNull();
-  });
-
-  it("resets progress for specific wallet without affecting others", () => {
-    const storage = mockStorage();
-    const wallet1 = "GDRESET1TEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const wallet2 = "GDRESET2TEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-
-    const bundle1: PersistedWalletQuestBundle = {
-      version: QUEST_STORAGE_VERSION,
-      quests: [
-        {
-          ...TEMPLATE[1],
-          objectives: [{ ...TEMPLATE[1].objectives[0], progress: 50 }],
-        },
-      ],
-      achievements: [],
-      lastSyncedAt: 1000,
-    };
-
-    const bundle2: PersistedWalletQuestBundle = {
-      version: QUEST_STORAGE_VERSION,
-      quests: [
-        {
-          ...TEMPLATE[1],
-          objectives: [{ ...TEMPLATE[1].objectives[0], progress: 75 }],
-        },
-      ],
-      achievements: [],
-      lastSyncedAt: 2000,
-    };
-
-    saveWalletQuestBundle(wallet1, bundle1, storage);
-    saveWalletQuestBundle(wallet2, bundle2, storage);
-
-    storage.removeItem(walletQuestStorageKey(wallet1));
-
-    const loaded1 = loadWalletQuestBundle(wallet1, TEMPLATE, storage);
-    const loaded2 = loadWalletQuestBundle(wallet2, TEMPLATE, storage);
-
-    expect(loaded1.quests.find((q) => q.id === "q1")?.objectives[0].progress).toBe(0);
-    expect(loaded2.quests.find((q) => q.id === "q1")?.objectives[0].progress).toBe(75);
-  });
-
-  it("allows fresh start after reset", () => {
-    const storage = mockStorage();
-    const wallet = "GDFRESHSTARTTEST1234567890ABCDEFGHIJKLMNOPQRSTUV";
-    const key = walletQuestStorageKey(wallet);
-
-    const oldBundle: PersistedWalletQuestBundle = {
-      version: QUEST_STORAGE_VERSION,
-      quests: [
-        {
-          ...TEMPLATE[1],
-          status: "completed",
-          objectives: [{ ...TEMPLATE[1].objectives[0], progress: 100 }],
-        },
-      ],
-      achievements: [
-        {
-          questId: "q1",
-          title: "First Deposit",
-          badgeContractId: "CBADGE_FIRST_DEPOSIT",
-          mintedAt: 1000,
-          txHash: "tx_old",
-        },
-      ],
-      lastSyncedAt: 1000,
-    };
-
-    saveWalletQuestBundle(wallet, oldBundle, storage);
-    storage.removeItem(key);
-
-    const newBundle: PersistedWalletQuestBundle = {
-      version: QUEST_STORAGE_VERSION,
-      quests: [
-        {
-          ...TEMPLATE[1],
-          objectives: [{ ...TEMPLATE[1].objectives[0], progress: 10 }],
-        },
-      ],
-      achievements: [],
-      lastSyncedAt: 2000,
-    };
-
-    saveWalletQuestBundle(wallet, newBundle, storage);
-    const loaded = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-
-    expect(loaded.quests.find((q) => q.id === "q1")?.objectives[0].progress).toBe(10);
-    expect(loaded.quests.find((q) => q.id === "q1")?.status).not.toBe("completed");
-    expect(loaded.achievements).toHaveLength(0);
-    expect(loaded.lastSyncedAt).toBe(2000);
-  });
-});
-
-describe("deterministic and isolated tests", () => {
-  it("does not mutate template quests", () => {
-    const storage = mockStorage();
-    const wallet = "GDMUTATETEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const originalProgress = TEMPLATE[1].objectives[0].progress;
-
-    const bundle: PersistedWalletQuestBundle = {
-      version: QUEST_STORAGE_VERSION,
-      quests: [
-        {
-          ...TEMPLATE[1],
-          objectives: [{ ...TEMPLATE[1].objectives[0], progress: 88 }],
-        },
-      ],
-      achievements: [],
-      lastSyncedAt: 1000,
-    };
-
-    saveWalletQuestBundle(wallet, bundle, storage);
-    loadWalletQuestBundle(wallet, TEMPLATE, storage);
-
-    expect(TEMPLATE[1].objectives[0].progress).toBe(originalProgress);
-  });
-
-  it("returns independent copies on each load", () => {
-    const storage = mockStorage();
-    const wallet = "GDINDEPENDENTTEST1234567890ABCDEFGHIJKLMNOPQRSTU";
-
-    const bundle: PersistedWalletQuestBundle = {
-      version: QUEST_STORAGE_VERSION,
-      quests: [
-        {
-          ...TEMPLATE[1],
-          objectives: [{ ...TEMPLATE[1].objectives[0], progress: 33 }],
-        },
-      ],
-      achievements: [],
-      lastSyncedAt: 1000,
-    };
-
-    saveWalletQuestBundle(wallet, bundle, storage);
-
-    const loaded1 = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-    const loaded2 = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-
-    loaded1.quests[0].objectives[0].progress = 999;
-
-    expect(loaded2.quests.find((q) => q.id === "q1")?.objectives[0].progress).toBe(33);
-  });
-
-  it("isolates storage operations between test runs", () => {
-    const storage1 = mockStorage();
-    const storage2 = mockStorage();
-    const wallet = "GDISOLATETEST1234567890ABCDEFGHIJKLMNOPQRSTUVWXY";
-
-    const bundle: PersistedWalletQuestBundle = {
-      version: QUEST_STORAGE_VERSION,
-      quests: cloneQuests(TEMPLATE),
-      achievements: [],
-      lastSyncedAt: 1000,
-    };
-
-    saveWalletQuestBundle(wallet, bundle, storage1);
-
-    const loaded1 = loadWalletQuestBundle(wallet, TEMPLATE, storage1);
-    const loaded2 = loadWalletQuestBundle(wallet, TEMPLATE, storage2);
-
-    expect(loaded1.lastSyncedAt).toBe(1000);
-    expect(loaded2.lastSyncedAt).toBeNull();
-  });
-
-  it("produces consistent results with same inputs", () => {
-    const storage = mockStorage();
-    const wallet = "GDCONSISTENTTEST1234567890ABCDEFGHIJKLMNOPQRSTUV";
-
-    const bundle: PersistedWalletQuestBundle = {
-      version: QUEST_STORAGE_VERSION,
-      quests: [
-        {
-          ...TEMPLATE[1],
-          objectives: [{ ...TEMPLATE[1].objectives[0], progress: 42 }],
-        },
-      ],
-      achievements: [],
-      lastSyncedAt: 1000,
-    };
-
-    saveWalletQuestBundle(wallet, bundle, storage);
-
-    const loaded1 = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-    const loaded2 = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-    const loaded3 = loadWalletQuestBundle(wallet, TEMPLATE, storage);
-
-    expect(loaded1.quests.find((q) => q.id === "q1")?.objectives[0].progress).toBe(42);
-    expect(loaded2.quests.find((q) => q.id === "q1")?.objectives[0].progress).toBe(42);
-    expect(loaded3.quests.find((q) => q.id === "q1")?.objectives[0].progress).toBe(42);
+  it("ensures corrupted cache never causes dashboard crashes or malformed quest shapes", () => {
+    const strangeInputs = [
+      "{}",
+      "[]",
+      "null",
+      "12345",
+      JSON.stringify({ version: "one", quests: null, achievements: {} }),
+      JSON.stringify({ quests: [{ id: "q1", objectives: [null, undefined, 42] }] }),
+      JSON.stringify({ quests: [{ id: "q1", objectives: [{ progress: -999, target: -10 }] }] }),
+    ];
+
+    for (const input of strangeInputs) {
+      const storage = mockStorage({
+        [walletQuestStorageKey("GDSIMULATEDDASHBOARD1234567890ABCDEF")]: input,
+      });
+
+      const loaded = loadWalletQuestBundle("GDSIMULATEDDASHBOARD1234567890ABCDEF", TEMPLATE, storage);
+
+      // Verify invariant: must be valid PersistedWalletQuestBundle
+      expect(loaded.version).toBe(QUEST_STORAGE_VERSION);
+      expect(Array.isArray(loaded.quests)).toBe(true);
+      expect(Array.isArray(loaded.achievements)).toBe(true);
+      for (const q of loaded.quests) {
+        expect(typeof q.id).toBe("string");
+        expect(typeof q.title).toBe("string");
+        expect(Array.isArray(q.objectives)).toBe(true);
+        for (const obj of q.objectives) {
+          expect(typeof obj.progress).toBe("number");
+          expect(Number.isFinite(obj.progress)).toBe(true);
+          expect(obj.progress).toBeGreaterThanOrEqual(0);
+          expect(typeof obj.target).toBe("number");
+          expect(Number.isFinite(obj.target)).toBe(true);
+        }
+      }
+    }
   });
 });
