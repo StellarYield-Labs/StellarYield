@@ -1,3 +1,6 @@
+import type { RequestOptions } from "../../lib/requestCancellation";
+import { fetchJson } from "../../lib/requestCancellation";
+
 export interface SimulationAllocation {
   protocol: string;
   amount: number;
@@ -31,20 +34,15 @@ export interface SimulationRequestParams {
 }
 
 export async function fetchDepositSimulation(
-  params: SimulationRequestParams
+  params: SimulationRequestParams,
+  options?: RequestOptions,
 ): Promise<SimulationResult> {
-  const response = await fetch("/api/simulator/deposit", {
+  return fetchJson<SimulationResult>("/api/simulator/deposit", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(params),
+    ...options,
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || `Simulation failed: ${response.statusText}`);
-  }
-
-  return (await response.json()) as SimulationResult;
 }

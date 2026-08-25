@@ -77,4 +77,45 @@ describe("DepositSimulator", () => {
       expect(screen.getByText(/Error: Network Error/i)).toBeInTheDocument();
     });
   });
+
+  it("ignores stale simulation results after rapid input changes", async () => {
+    let resolveFirst: (value: unknown) => void = () => {};
+    const firstPromise = new Promise((resolve) => {
+      resolveFirst = resolve;
+    });
+
+    mockFetch
+      .mockReturnValueOnce(firstPromise)
+      .mockResolvedValueOnce({
+        isSimulationOnly: true,
+        allocations: [{ protocol: "Lend", amount: 2000, percentage: 100 }],
+        expectedShares: 222,
+        fees: [],
+        postDepositExposure: { expectedApy: 0.1 },
+        routing: { path: ["Lend"], expectedOutput: 222 },
+        warnings: [],
+      });
+
+    const { rerender } = render(
+      <DepositSimulator strategyId="Conservative" amount={1000} token="USDC" />,
+    );
+
+    rerender(<DepositSimulator strategyId="Conservative" amount={2000} token="USDC" />);
+
+    resolveFirst({
+      isSimulationOnly: true,
+      allocations: [{ protocol: "Lend", amount: 1000, percentage: 100 }],
+      expectedShares: 111,
+      fees: [],
+      postDepositExposure: { expectedApy: 0.1 },
+      routing: { path: ["Lend"], expectedOutput: 111 },
+      warnings: [],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("222")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText("111")).not.toBeInTheDocument();
+  });
 });

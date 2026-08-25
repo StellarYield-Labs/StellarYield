@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { fetchDepositSimulation } from "./simulationService";
 import type { SimulationResult } from "./simulationService";
+import { isRequestCancelledError } from "../../lib/requestCancellation";
 
 interface DepositSimulatorProps {
   strategyId: string;
@@ -18,27 +19,43 @@ export const DepositSimulator: React.FC<DepositSimulatorProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
+
     const load = async () => {
       if (!amount || amount <= 0) {
-        if (active) setSimulation(null);
+        setSimulation(null);
         return;
       }
-      if (active) {
-        setLoading(true);
-        setError(null);
-      }
+
+      setLoading(true);
+      setError(null);
+
       try {
-        const result = await fetchDepositSimulation({ strategyId, amount, token });
-        if (active) setSimulation(result);
+        const result = await fetchDepositSimulation(
+          { strategyId, amount, token },
+          { signal: controller.signal },
+        );
+        if (controller.signal.aborted) {
+          return;
+        }
+        setSimulation(result);
       } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : "Error running simulation");
+        if (isRequestCancelledError(err) || controller.signal.aborted) {
+          return;
+        }
+        setError(err instanceof Error ? err.message : "Error running simulation");
       } finally {
-        if (active) setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
-    load();
-    return () => { active = false; };
+
+    void load();
+
+    return () => {
+      controller.abort();
+    };
   }, [strategyId, amount, token]);
 
   if (loading) return <div className="p-4 text-gray-500 animate-pulse">Running simulation...</div>;

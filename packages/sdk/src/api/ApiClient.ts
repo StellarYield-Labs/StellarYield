@@ -1,4 +1,13 @@
-import type { ApiConfig, ApiVaultData, HistoricalDataPoint } from "../types";
+import type {
+  ApiConfig,
+  ApiVaultData,
+  DepositSimulationParams,
+  DepositSimulationResult,
+  HistoricalDataPoint,
+  RequestOptions,
+  ZapQuoteResult,
+} from "../types";
+import { apiRequest } from "./request";
 
 export class ApiClient {
   private config: ApiConfig;
@@ -7,55 +16,58 @@ export class ApiClient {
     this.config = config;
   }
 
-  async getHealth(): Promise<{ database: string; horizon: string }> {
-    const response = await fetch(`${this.config.baseUrl}/api/health`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch health: ${response.statusText}`);
-    }
-    return (await response.json()) as { database: string; horizon: string };
+  async getHealth(options?: RequestOptions): Promise<{ database: string; horizon: string }> {
+    return apiRequest(`${this.config.baseUrl}/api/health`, options);
   }
 
-  async getYields(): Promise<ApiVaultData[]> {
-    const response = await fetch(`${this.config.baseUrl}/api/yields`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch yields: ${response.statusText}`);
-    }
-    return (await response.json()) as ApiVaultData[];
+  async getYields(options?: RequestOptions): Promise<ApiVaultData[]> {
+    return apiRequest(`${this.config.baseUrl}/api/yields`, options);
   }
 
-  async getHistoricalYields(days: number = 30): Promise<HistoricalDataPoint[]> {
-    const response = await fetch(`${this.config.baseUrl}/api/yields/history?days=${days}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch historical yields: ${response.statusText}`);
-    }
-    return (await response.json()) as HistoricalDataPoint[];
+  async getHistoricalYields(
+    days: number = 30,
+    options?: RequestOptions,
+  ): Promise<HistoricalDataPoint[]> {
+    return apiRequest(`${this.config.baseUrl}/api/yields/history?days=${days}`, options);
   }
 
-  async getUserPnL(walletAddress: string): Promise<{ totalPnl: number; netYield: number }> {
-    const response = await fetch(`${this.config.baseUrl}/api/users/${walletAddress}/pnl`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch user PnL: ${response.statusText}`);
-    }
-    return (await response.json()) as { totalPnl: number; netYield: number };
+  async getUserPnL(
+    walletAddress: string,
+    options?: RequestOptions,
+  ): Promise<{ totalPnl: number; netYield: number }> {
+    return apiRequest(`${this.config.baseUrl}/api/users/${walletAddress}/pnl`, options);
   }
 
-  async getZapQuote(fromAsset: string, toAsset: string, amount: string): Promise<{ expectedAmount: string; priceImpact: number }> {
-    const response = await fetch(`${this.config.baseUrl}/api/zap/quote`, {
+  async getZapQuote(
+    fromAsset: string,
+    toAsset: string,
+    amount: string,
+    options?: RequestOptions,
+  ): Promise<ZapQuoteResult> {
+    return apiRequest(`${this.config.baseUrl}/api/zap/quote`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fromAsset, toAsset, amount }),
+      ...options,
     });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch zap quote: ${response.statusText}`);
-    }
-    return (await response.json()) as { expectedAmount: string; priceImpact: number };
   }
 
-  async getReferralData(walletAddress: string): Promise<{ totalReferredTvl: string; unclaimedRewards: string }> {
-    const response = await fetch(`${this.config.baseUrl}/api/referrals/${walletAddress}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch referral data: ${response.statusText}`);
-    }
-    return (await response.json()) as { totalReferredTvl: string; unclaimedRewards: string };
+  async getDepositSimulation(
+    params: DepositSimulationParams,
+    options?: RequestOptions,
+  ): Promise<DepositSimulationResult> {
+    return apiRequest(`${this.config.baseUrl}/api/simulator/deposit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+      ...options,
+    });
+  }
+
+  async getReferralData(
+    walletAddress: string,
+    options?: RequestOptions,
+  ): Promise<{ totalReferredTvl: string; unclaimedRewards: string }> {
+    return apiRequest(`${this.config.baseUrl}/api/referrals/${walletAddress}`, options);
   }
 }

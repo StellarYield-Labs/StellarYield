@@ -11,6 +11,10 @@ export interface ApiConfig {
   baseUrl: string;
 }
 
+export interface RequestOptions {
+  signal?: AbortSignal;
+}
+
 export interface DepositParams {
   from: string;
   amount: string;
@@ -58,6 +62,43 @@ export interface HistoricalDataPoint {
   timestamp: string;
   apy: number;
   tvl: number;
+}
+
+export interface ZapQuoteResult {
+  expectedAmount: string;
+  priceImpact: number;
+}
+
+export interface DepositSimulationAllocation {
+  protocol: string;
+  amount: number;
+  percentage: number;
+}
+
+export interface DepositSimulationFee {
+  type: string;
+  amount: number;
+}
+
+export interface DepositSimulationResult {
+  isSimulationOnly: true;
+  allocations: DepositSimulationAllocation[];
+  expectedShares: number;
+  fees: DepositSimulationFee[];
+  postDepositExposure: {
+    expectedApy: number;
+  };
+  routing: {
+    path: string[];
+    expectedOutput: number;
+  };
+  warnings: string[];
+}
+
+export interface DepositSimulationParams {
+  strategyId: string;
+  amount: number;
+  token: string;
 }
 
 export interface SDKConfig {

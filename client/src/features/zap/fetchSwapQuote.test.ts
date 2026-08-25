@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fetchSwapQuote } from "./fetchSwapQuote";
+import { RequestCancelledError } from "../../lib/requestCancellation";
 
 describe("fetchSwapQuote", () => {
   const origFetch = globalThis.fetch;
@@ -105,6 +106,24 @@ describe("fetchSwapQuote", () => {
         inputDecimals: 7,
         vaultDecimals: 7,
       }),
-    ).rejects.toThrow("Quote failed (502)");
+    ).rejects.toThrow("Request failed (502)");
+  });
+
+  it("throws RequestCancelledError when the quote request is aborted", async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      fetchSwapQuote(
+        {
+          inputTokenContract: "A",
+          vaultTokenContract: "B",
+          amountInStroops: "1",
+          inputDecimals: 7,
+          vaultDecimals: 7,
+        },
+        { signal: controller.signal },
+      ),
+    ).rejects.toBeInstanceOf(RequestCancelledError);
   });
 });

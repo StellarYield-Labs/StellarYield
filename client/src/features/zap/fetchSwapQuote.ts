@@ -1,5 +1,7 @@
 import type { ZapQuoteRequest, ZapQuoteResponse } from "./types";
 import { apiUrl } from "../../lib/api";
+import type { RequestOptions } from "../../lib/requestCancellation";
+import { fetchJson } from "../../lib/requestCancellation";
 
 /**
  * Ask the backend for the best known swap path and expected vault-token output.
@@ -8,17 +10,12 @@ import { apiUrl } from "../../lib/api";
  */
 export async function fetchSwapQuote(
   req: ZapQuoteRequest,
+  options?: RequestOptions,
 ): Promise<ZapQuoteResponse> {
-  const res = await fetch(apiUrl("/api/zap/quote"), {
+  return fetchJson<ZapQuoteResponse>(apiUrl("/api/zap/quote"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(req),
+    ...options,
   });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Quote failed (${res.status})`);
-  }
-
-  return res.json() as Promise<ZapQuoteResponse>;
 }

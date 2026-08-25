@@ -133,6 +133,17 @@ export class MigrationInProgressError extends SorobanSdkError {
   }
 }
 
+export class RequestCancelledError extends SorobanSdkError {
+  constructor(message: string = "Request was cancelled before completion.") {
+    super(message);
+    this.name = "RequestCancelledError";
+  }
+}
+
+export function isRequestCancelledError(error: unknown): error is RequestCancelledError {
+  return error instanceof RequestCancelledError;
+}
+
 export function parseContractError(code: number, rawResultXdr?: string, rawRpcResponse?: unknown): ContractExecutionError {
   const errorInfo = (VaultError as Record<number, { message: string }>)[code];
   const errorName = errorInfo ? errorInfo.message : `UnknownError_${code}`;
