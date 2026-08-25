@@ -706,10 +706,10 @@ describe("TransactionBuilder Validation", () => {
       const actionSelect = screen.getByRole("combobox", { name: /action/i });
       fireEvent.change(actionSelect, { target: { value: "update_threshold" } });
 
-      fireEvent.change(screen.getByPlaceholderText(/G\.\.\.\nG\.\.\./i), {
+      fireEvent.change(screen.getByLabelText("Signer Addresses"), {
         target: { value: `${signerA}\n${signerB}` },
       });
-      fireEvent.change(screen.getByPlaceholderText("2"), {
+      fireEvent.change(screen.getByLabelText("New Threshold"), {
         target: { value: "2" },
       });
 
@@ -734,10 +734,10 @@ describe("TransactionBuilder Validation", () => {
       const actionSelect = screen.getByRole("combobox", { name: /action/i });
       fireEvent.change(actionSelect, { target: { value: "update_threshold" } });
 
-      fireEvent.change(screen.getByPlaceholderText(/G\.\.\.\nG\.\.\./i), {
+      fireEvent.change(screen.getByLabelText("Signer Addresses"), {
         target: { value: `${signerA}\n${signerA}` },
       });
-      fireEvent.change(screen.getByPlaceholderText("2"), {
+      fireEvent.change(screen.getByLabelText("New Threshold"), {
         target: { value: "1" },
       });
 
@@ -758,10 +758,10 @@ describe("TransactionBuilder Validation", () => {
       const actionSelect = screen.getByRole("combobox", { name: /action/i });
       fireEvent.change(actionSelect, { target: { value: "update_threshold" } });
 
-      fireEvent.change(screen.getByPlaceholderText(/G\.\.\.\nG\.\.\./i), {
+      fireEvent.change(screen.getByLabelText("Signer Addresses"), {
         target: { value: `${signerA}\n${signerB}` },
       });
-      fireEvent.change(screen.getByPlaceholderText("2"), {
+      fireEvent.change(screen.getByLabelText("New Threshold"), {
         target: { value: "3" },
       });
 

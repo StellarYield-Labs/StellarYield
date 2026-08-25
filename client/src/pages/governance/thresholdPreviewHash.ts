@@ -1,5 +1,3 @@
-import * as StellarSdk from "@stellar/stellar-sdk";
-
 export const THRESHOLD_PREVIEW_SCHEMA_VERSION = 1;
 
 export interface ThresholdUpdateProposal {
@@ -19,14 +17,14 @@ export interface ThresholdPreviewHashes {
   payloadHash: string;
 }
 
+/** Match server-side governance/thresholdPreviewHash validation for hash parity. */
 function isValidStellarAddress(address: string): boolean {
-  if (!address || address.length !== 56 || !address.startsWith("G")) return false;
-  try {
-    new StellarSdk.Address(address);
-    return true;
-  } catch {
-    return false;
-  }
+  return (
+    typeof address === "string" &&
+    address.length === 56 &&
+    address.startsWith("G") &&
+    /^G[A-Z2-7]{55}$/.test(address)
+  );
 }
 
 /** Sort signers lexicographically for deterministic hashing. */

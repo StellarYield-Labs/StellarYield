@@ -216,11 +216,15 @@ export default function TransactionBuilder({
 
             {action.fields.map((field) => (
               <div key={field.name}>
-                <label className="block text-sm text-gray-400 mb-1">
+                <label
+                  htmlFor={`field-${field.name}`}
+                  className="block text-sm text-gray-400 mb-1"
+                >
                   {field.label}
                 </label>
                 {field.name === "signers" ? (
                   <textarea
+                    id={`field-${field.name}`}
                     rows={4}
                     placeholder={field.placeholder}
                     value={fieldValues[field.name] ?? ""}
@@ -234,6 +238,7 @@ export default function TransactionBuilder({
                   />
                 ) : (
                   <input
+                    id={`field-${field.name}`}
                     type={field.type === "number" ? "number" : "text"}
                     placeholder={field.placeholder}
                     value={fieldValues[field.name] ?? ""}
