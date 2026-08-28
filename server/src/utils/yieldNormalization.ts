@@ -2,6 +2,7 @@ import { calculateRiskScore } from "./riskScoring";
 import type { NormalizedYield, RawProtocolYield } from "../types/yields";
 import { calculateNetYield } from "../services/netYieldEngine";
 import { calculateCapitalEfficiency } from "../services/capitalEfficiencyService";
+import { evaluateAndRecordManipulationRisk } from "../services/apyManipulationGuardService";
 
 const roundTo = (value: number, digits: number) =>
   Math.round(value * 10 ** digits) / 10 ** digits;
@@ -44,6 +45,14 @@ export function normalizeYield(rawYield: RawProtocolYield): NormalizedYield {
   }
 
   const netYield = calculateNetYield(baseApy + rewardApy);
+  const totalApy = roundTo(baseApy + rewardApy, 2);
+  const fetchedAtMs = Date.parse(rawYield.fetchedAt);
+  const manipulationRisk = evaluateAndRecordManipulationRisk(
+    rawYield.protocolName,
+    totalApy,
+    rawYield.liquidityUsd,
+    Number.isFinite(fetchedAtMs) ? fetchedAtMs : Date.now(),
+  );
   const capitalEfficiency = calculateCapitalEfficiency({
     utilizationPct: Math.min(100, 45 + baseApy * 2.5),
     feeDragPct: netYield.feeDragApy,
@@ -58,7 +67,7 @@ export function normalizeYield(rawYield: RawProtocolYield): NormalizedYield {
     protocolName: rawYield.protocolName,
     apy: baseApy,
     rewardApy: roundTo(rewardApy, 2),
-    totalApy: roundTo(baseApy + rewardApy, 2),
+    totalApy,
     netApy: netYield.netApy,
     feeDragApy: netYield.feeDragApy,
     tvl: roundTo(rawYield.tvlUsd, 2),
@@ -80,6 +89,7 @@ export function normalizeYield(rawYield: RawProtocolYield): NormalizedYield {
       compounding: roundTo(rawYield.apyBps / 100 * 0.05, 2),
       tacticalRotation: roundTo(rawYield.apyBps / 100 * 0.05, 2),
     },
+    manipulationRisk,
   };
 }
 
