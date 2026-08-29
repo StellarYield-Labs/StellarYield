@@ -342,14 +342,14 @@ describe("zapQuote safety envelope", () => {
       expect(res.code).toBe("SIGNATURE_INVALID");
     });
 
-    it("rejects quote with missing signature as stale? At least not valid without verification", async () => {
+    it("rejects quote with missing signature (CodeQL: user-controlled bypass)", async () => {
       const q = await getZapQuote(baseBody);
       const noSig = { ...q } as ZapQuoteResult;
       delete (noSig as unknown as { quoteSignature?: string }).quoteSignature;
-      // Without signature, verification skips signature check and proceeds to other checks
-      // It should still be considered valid if other checks pass (signature optional for backward compat)
+      // Signature is now required — missing signature must be treated as tampering
       const res = validateZapQuoteForExecution({ quote: noSig, allowFallback: true });
-      expect(res.valid).toBe(true);
+      expect(res.valid).toBe(false);
+      expect(res.code).toBe("SIGNATURE_INVALID");
     });
   });
 

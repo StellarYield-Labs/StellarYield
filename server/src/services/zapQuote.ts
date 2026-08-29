@@ -361,16 +361,22 @@ export function validateZapQuoteForExecution(
     };
   }
 
-  // Signature verification if present
-  if (quote.quoteSignature) {
-    if (!verifyQuoteSignature(quote)) {
-      return {
-        valid: false,
-        code: "SIGNATURE_INVALID",
-        reason: "Quote signature is invalid — quote may have been tampered with. Please requote.",
-        requiresRequote: true,
-      };
-    }
+  // Signature is required — an omitted or user-controlled empty signature must not bypass verification (CodeQL: user-controlled bypass)
+  if (!quote.quoteSignature) {
+    return {
+      valid: false,
+      code: "SIGNATURE_INVALID",
+      reason: "Missing quote signature — quote is not from a trusted envelope. Please request a fresh quote.",
+      requiresRequote: true,
+    };
+  }
+  if (!verifyQuoteSignature(quote)) {
+    return {
+      valid: false,
+      code: "SIGNATURE_INVALID",
+      reason: "Quote signature is invalid — quote may have been tampered with. Please requote.",
+      requiresRequote: true,
+    };
   }
 
   // Expiry / TTL check
