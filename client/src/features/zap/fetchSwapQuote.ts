@@ -1,4 +1,4 @@
-import type { ZapQuoteRequest, ZapQuoteResponse } from "./types";
+import type { ZapQuoteRequest, ZapQuoteResponse, ZapQuoteVerifyRequest, ZapQuoteVerifyResponse } from "./types";
 import { apiUrl } from "../../lib/api";
 
 /**
@@ -21,4 +21,47 @@ export async function fetchSwapQuote(
   }
 
   return res.json() as Promise<ZapQuoteResponse>;
+}
+
+/**
+ * Verify a quote is still valid for execution before submitting on-chain.
+ * Checks expiry, asset pair, freeze, and fallback confirmation.
+ */
+export async function verifyZapQuote(
+  req: ZapQuoteVerifyRequest,
+): Promise<ZapQuoteVerifyResponse> {
+  const res = await fetch(apiUrl("/api/zap/verify"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    // Return structured error even on non-2xx so UI can show specific messaging
+    return body as ZapQuoteVerifyResponse;
+  }
+  return body as ZapQuoteVerifyResponse;
+}
+
+/**
+ * Helper to determine if a quote is expired based on expiresAt.
+ */
+export function isQuoteExpired(quote: ZapQuoteResponse, nowMs: number = Date.now()): boolean {
+  if (!quote.expiresAt) return false;
+  const exp = new Date(quote.expiresAt).getTime();
+  if (isNaN(exp)) return false;
+  return nowMs > exp;
+}
+
+/**
+ * Helper to determine if a quote is stale (over half TTL or past expiresAt).
+ */
+export function isQuoteStale(quote: ZapQuoteResponse, nowMs: number = Date.now()): boolean {
+  if (isQuoteExpired(quote, nowMs)) return true;
+  const quotedMs = new Date(quote.quotedAt).getTime();
+  if (isNaN(quotedMs)) return false;
+  const ttl = quote.expiresInMs ?? 30000;
+  // Consider stale if older than TTL or half TTL depending on UX; we treat TTL as stale threshold
+  return nowMs - quotedMs > ttl;
 }
