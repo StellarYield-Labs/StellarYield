@@ -12,6 +12,15 @@ export interface ApyAttribution {
   tacticalRotation: number;
 }
 
+export interface ManipulationRiskInfo {
+  riskLevel: "none" | "warning" | "high";
+  isSuspicious: boolean;
+  rule: string | null;
+  reason: string | null;
+  movementPct: number | null;
+  rankingWeight: number;
+}
+
 export interface RawProtocolYield {
   protocolName: string;
   protocolType: "blend" | "soroswap" | "defindex";
@@ -84,4 +93,5 @@ export interface NormalizedYield {
     confidence?: "low" | "medium" | "high";
   }[];
   attribution: ApyAttribution;
+  manipulationRisk: ManipulationRiskInfo;
 }
