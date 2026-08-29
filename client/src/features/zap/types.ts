@@ -13,6 +13,7 @@ export interface ZapQuoteRequest {
   inputDecimals: number;
   vaultDecimals: number;
   slippageTolerance?: number;
+  protocol?: string;
 }
 
 /** Quote used to show expected vault-token output and to derive `min_amount_out`. */
@@ -26,6 +27,38 @@ export interface ZapQuoteResponse {
   minAmountOutStroops: string;
   quoteAgeMs: number;
   isFallback: boolean;
+  // ── Safety envelope ──
+  quoteId: string;
+  expiresAt: string;
+  ttlMs: number;
+  protocol: string;
+  inputTokenContract: string;
+  vaultTokenContract: string;
+  amountInStroops: string;
+  quoteSignature: string;
+  freezeCheckedAt: string;
+}
+
+/** Verification request/response for quote execution binding */
+export interface ZapQuoteVerifyRequest {
+  quote: ZapQuoteResponse;
+  inputTokenContract?: string;
+  vaultTokenContract?: string;
+  amountInStroops?: string;
+  protocol?: string;
+  allowFallback?: boolean;
+}
+
+export interface ZapQuoteVerifyResponse {
+  valid: boolean;
+  code?: string;
+  reason?: string;
+  requiresRequote?: boolean;
+  isFallback?: boolean;
+  isExpired?: boolean;
+  quoteId?: string;
+  expiresAt?: string;
+  message?: string;
 }
 
 /** Asset the user can select as zap input (Soroban SAC contract id). */

@@ -1,8 +1,8 @@
 import { Router, Request, Response } from "express";
 import { getZapSupportedAssetsPayload } from "../config/zapAssetsConfig";
-import { getZapQuote, type ZapQuoteBody } from "../services/zapQuote";
+import { getZapQuote, validateZapQuoteForExecution, type ZapQuoteBody } from "../services/zapQuote";
 import { sendError } from "../utils/errorResponse";
-import { validateZapQuote } from "../middleware/validation";
+import { validateZapQuote, validateZapVerify } from "../middleware/validation";
 
 const router = Router();
 
@@ -31,6 +31,7 @@ router.post("/quote", validateZapQuote, async (req: Request, res: Response) => {
       inputDecimals: Number(b.inputDecimals ?? 7),
       vaultDecimals: Number(b.vaultDecimals ?? 7),
       slippageTolerance: b.slippageTolerance !== undefined ? Number(b.slippageTolerance) : undefined,
+      protocol: b.protocol !== undefined ? String(b.protocol) : undefined,
     };
 
     const quote = await getZapQuote(body);
@@ -44,6 +45,15 @@ router.post("/quote", validateZapQuote, async (req: Request, res: Response) => {
       minAmountOutStroops: quote.minAmountOutStroops,
       quoteAgeMs: quote.quoteAgeMs,
       isFallback: quote.isFallback,
+      quoteId: quote.quoteId,
+      expiresAt: quote.expiresAt,
+      ttlMs: quote.ttlMs,
+      protocol: quote.protocol,
+      inputTokenContract: quote.inputTokenContract,
+      vaultTokenContract: quote.vaultTokenContract,
+      amountInStroops: quote.amountInStroops,
+      quoteSignature: quote.quoteSignature,
+      freezeCheckedAt: quote.freezeCheckedAt,
     });
   } catch (e) {
     sendError(
@@ -51,6 +61,57 @@ router.post("/quote", validateZapQuote, async (req: Request, res: Response) => {
       500,
       "QUOTE_FAILED",
       "Quote failed",
+      e instanceof Error ? e.message : undefined
+    );
+  }
+});
+
+router.post("/verify", validateZapVerify, async (req: Request, res: Response) => {
+  try {
+    const { quote, inputTokenContract, vaultTokenContract, amountInStroops, protocol, allowFallback } = req.body as {
+      quote: import("../services/zapQuote").ZapQuoteResult;
+      inputTokenContract?: string;
+      vaultTokenContract?: string;
+      amountInStroops?: string;
+      protocol?: string;
+      allowFallback?: boolean;
+    };
+
+    const result = validateZapQuoteForExecution({
+      quote,
+      inputTokenContract: inputTokenContract ? String(inputTokenContract) : undefined,
+      vaultTokenContract: vaultTokenContract ? String(vaultTokenContract) : undefined,
+      amountInStroops: amountInStroops ? String(amountInStroops) : undefined,
+      protocol: protocol ? String(protocol) : undefined,
+      allowFallback: Boolean(allowFallback),
+    });
+
+    if (result.valid) {
+      res.json({
+        valid: true,
+        isFallback: result.isFallback,
+        quoteId: quote.quoteId,
+        expiresAt: quote.expiresAt,
+        message: result.isFallback
+          ? "Quote is valid but is a fallback quote — execution requires explicit acknowledgement."
+          : "Quote is valid and executable.",
+      });
+    } else {
+      res.status(422).json({
+        valid: false,
+        code: result.code,
+        reason: result.reason,
+        requiresRequote: result.requiresRequote,
+        isFallback: result.isFallback,
+        isExpired: result.isExpired,
+      });
+    }
+  } catch (e) {
+    sendError(
+      res,
+      500,
+      "VERIFY_FAILED",
+      "Quote verification failed",
       e instanceof Error ? e.message : undefined
     );
   }

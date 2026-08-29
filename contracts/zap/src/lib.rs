@@ -6,6 +6,22 @@
 //! Accepts any SAC token from the user, swaps it for the vault's required
 //! token via a DEX router, and deposits the result into the YieldVault in
 //! a single transaction. Handles slippage tolerance during the swap.
+//!
+//! ## Safety Envelope (off-chain quote binding)
+//!
+//! `zap_deposit` enforces `min_amount_out` on-chain, but a stale or mismatched
+//! off-chain quote could still bundle wrong assumptions (route, TVL, freeze
+//! state). The backend `POST /api/zap/quote` now binds every quote to a safety
+//! envelope: `quoteId` (UUID), `expiresAt`/`ttlMs` (default 30s), full route +
+//! `expectedAmountOut`/`minAmountOut`/`slippageApplied`/`source`/`protocol`,
+//! plus `quoteSignature` (HMAC-SHA256 over the envelope) and
+//! `freezeCheckedAt`. The frontend must call `POST /api/zap/verify` before
+//! invoking this contract — verification rejects expired quotes, asset-pair
+//! mismatches, route changes, fallback-vs-router confusion, and quotes
+//! produced before a protocol/global freeze. Fallback quotes are explicitly
+//! flagged and require user acknowledgement; they are never silently treated
+//! as `router_simulation`. The contract's `SlippageExceeded` remains the
+//! final on-chain guard if the swap would deliver less than `min_amount_out`.
 
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, token, vec, Address, Env,
@@ -76,6 +92,17 @@ impl Zap {
     /// `min_amount_out` of `vault_token`, so slippage is enforced on-chain before
     /// any deposit occurs.
     ///
+    /// # Safety
+    ///
+    /// `min_amount_out` and `min_shares_out` MUST be derived from a fresh,
+    /// backend-verified quote envelope (`POST /api/zap/verify` checks
+    /// `quoteId`/`expiresAt`/`ttlMs`, asset-pair binding, fallback vs
+    /// router distinction, and whether a freeze happened after `quotedAt`).
+    /// Callers that skip verification risk executing with stale TVL,
+    /// changed routes, or pre-freeze assumptions. The frontend blocks such
+    /// executions and requires an explicit fallback acknowledgement and a
+    /// `requote` after any `FROZEN_AFTER_QUOTE`/`QUOTE_EXPIRED` rejection.
+    ///
     /// # Arguments
     ///
     /// * `user` — End user; must authorize this call. Receives vault shares via `deposit_for`.
@@ -83,7 +110,7 @@ impl Zap {
     /// * `vault_token` — Asset the vault accepts (must match the vault’s configured token).
     /// * `vault` — Yield vault contract address.
     /// * `amount_in` — Amount of `input_token` to use.
-    /// * `min_amount_out` — Minimum `vault_token` amount after swap (0 if `input_token == vault_token`).
+    /// * `min_amount_out` — Minimum `vault_token` amount after swap (0 if `input_token == vault_token`). Must come from `minAmountOutStroops` of a verified fresh quote.
     /// * `min_shares_out` — Minimum acceptable vault shares after deposit.
     ///
     /// # Returns
