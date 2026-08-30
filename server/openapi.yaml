@@ -1208,6 +1208,46 @@ paths:
         '500':
           description: Failed to compare recommendation stability
 
+  /api/treasury/reallocations/evaluate:
+    post:
+      summary: Evaluate a treasury strategy reallocation
+      description: Applies configured size, risk, exposure, and incident policies before execution.
+      tags:
+        - Treasury
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [proposal]
+              properties:
+                proposal:
+                  $ref: '#/components/schemas/TreasuryReallocationProposal'
+                policy:
+                  $ref: '#/components/schemas/TreasuryReallocationPolicy'
+      responses:
+        '200':
+          description: Reallocation is eligible for automatic execution
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReallocationPolicyEvaluation'
+        '202':
+          description: Reallocation is paused for manual approval; blockedRules identifies every policy rule requiring approval
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReallocationPolicyEvaluation'
+        '400':
+          description: Proposal or policy configuration is invalid
+        '422':
+          description: Reallocation violates a rejection rule and cannot execute
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReallocationPolicyEvaluation'
+
   /api/treasury/simulate:
     post:
       summary: Run treasury simulation
@@ -2454,6 +2494,94 @@ paths:
 
 components:
   schemas:
+    TreasuryReallocationProposal:
+      type: object
+      required:
+        - id
+        - amountUsd
+        - treasuryValueUsd
+        - currentRiskScore
+        - proposedRiskScore
+        - assetExposurePct
+        - protocolExposurePct
+        - recentIncidentState
+      properties:
+        id:
+          type: string
+        amountUsd:
+          type: number
+          minimum: 0
+        treasuryValueUsd:
+          type: number
+          exclusiveMinimum: 0
+        currentRiskScore:
+          type: number
+          minimum: 0
+          maximum: 100
+        proposedRiskScore:
+          type: number
+          minimum: 0
+          maximum: 100
+        assetExposurePct:
+          type: object
+          additionalProperties:
+            type: number
+            minimum: 0
+            maximum: 100
+        protocolExposurePct:
+          type: object
+          additionalProperties:
+            type: number
+            minimum: 0
+            maximum: 100
+        recentIncidentState:
+          type: string
+          enum: [none, resolved, active, critical]
+
+    TreasuryReallocationPolicy:
+      type: object
+      description: Optional policy override. When omitted, the configured default treasury policy applies.
+      required: [size, risk, assetExposure, protocolExposure, incidents]
+      properties:
+        size:
+          type: object
+        risk:
+          type: object
+        assetExposure:
+          type: object
+        protocolExposure:
+          type: object
+        incidents:
+          type: object
+
+    ReallocationPolicyEvaluation:
+      type: object
+      required: [decision, proposalId, blockedRules]
+      properties:
+        decision:
+          type: string
+          enum: [auto_approved, approval_required, rejected]
+        proposalId:
+          type: string
+        blockedRules:
+          type: array
+          items:
+            type: object
+            required: [ruleId, category, effect, actual, threshold, message]
+            properties:
+              ruleId:
+                type: string
+              category:
+                type: string
+                enum: [size, risk, asset_exposure, protocol_exposure, incident]
+              effect:
+                type: string
+                enum: [require_approval, reject]
+              actual: {}
+              threshold: {}
+              message:
+                type: string
+
 
     # ── Simulator schemas ───────────────────────────────────────────────────
 
