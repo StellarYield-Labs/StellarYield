@@ -1,0 +1,15 @@
+## Summary
+
+Resolves #213 by introducing a `TransactionIntentLedger` to track wallet action intents (deposit, withdrawal, zap, reward claim, governance) across preview, signing, submission, confirmation, and failure phases.
+
+## Changes Made
+
+- Created `frontend/src/lib/transactionIntentLedger.ts` defining intent state tracking and persistence.
+
+## Contribution Reminder Compliance
+
+- Base branch: `dev`
+
+## Related Issue
+
+Closes #213
