@@ -30,6 +30,7 @@ const TransparencyDashboard = lazy(
 import RiskChronology from "./pages/transparency/RiskChronology";
 import RelayerStatusPage from "./pages/transparency/RelayerStatusPage";
 const StressTestDashboard = lazy(() => import("./pages/StressTestDashboard"));
+const VaultManagePage = lazy(() => import("./pages/vault/VaultManagePage"));
 import YieldForGood from "./features/donations/YieldForGood";
 import YieldCalculator from "./components/calculator/YieldCalculator";
 import StrategyLeaderboard from "./pages/leaderboard/StrategyLeaderboard";
@@ -256,6 +257,14 @@ const router = createBrowserRouter([
       {
         path: "/vault/:slug",
         element: <Vault />,
+      },
+      {
+        path: "/vault/:slug/manage",
+        element: (
+          <RouteBoundary>
+            <VaultManagePage />
+          </RouteBoundary>
+        ),
       },
       {
         path: "/strategy",
