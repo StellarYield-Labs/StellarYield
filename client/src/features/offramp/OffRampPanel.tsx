@@ -16,17 +16,20 @@ import type { TxPhase } from "../../services/transactionPhase";
 import { ExitImpactEstimator } from "../ExitImpactEstimator";
 import { OffRampService } from "./offRampService";
 import type { OffRampTransaction, WithdrawalRequest } from "./types";
+import { clientEnv } from "../../config/env";
 
 export interface OffRampPanelProps {
   walletAddress: string | null;
   vaultContractId: string;
   vaultTokenSymbol: string;
+  configured?: boolean;
 }
 
 export default function OffRampPanel({
   walletAddress,
   vaultContractId,
   vaultTokenSymbol,
+  configured,
 }: OffRampPanelProps) {
   const [shares, setShares] = useState("");
   const [usdcAmount, setUsdcAmount] = useState("");
@@ -37,6 +40,7 @@ export default function OffRampPanel({
   const [currentTxId, setCurrentTxId] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<OffRampTransaction[]>([]);
   const [error, setError] = useState("");
+  const isConfigured = configured ?? Boolean(clientEnv.OFFRAMP_BASE_URL.trim());
 
   // API key and base URL are no longer passed from the frontend; all provider
   // calls are now proxied through /api/offramp/* so secrets stay server-side.
@@ -44,6 +48,7 @@ export default function OffRampPanel({
 
   // Load transaction history and auto-resume pending
   useEffect(() => {
+    if (!isConfigured) return;
     const history = service.getAllTransactions();
     setTransactions(history);
 
@@ -56,10 +61,11 @@ export default function OffRampPanel({
       setCurrentTxId(pending.id);
       setTxPhase("polling");
     }
-  }, [txPhase]);
+  }, [isConfigured, txPhase]);
 
   // Poll current transaction status
   useEffect(() => {
+    if (!isConfigured) return;
     if (!currentTxId || txPhase === "success" || txPhase === "failure") return;
 
     const interval = setInterval(async () => {
@@ -76,9 +82,13 @@ export default function OffRampPanel({
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [currentTxId, txPhase]);
+  }, [currentTxId, isConfigured, txPhase]);
 
   const handleInitiateWithdrawal = useCallback(async () => {
+    if (!isConfigured) {
+      setError("Bank withdrawals are not configured yet");
+      return;
+    }
     if (!walletAddress) {
       setError("Wallet not connected");
       return;
@@ -119,6 +129,7 @@ export default function OffRampPanel({
     bankName,
     accountHolder,
     vaultContractId,
+    isConfigured,
   ]);
 
   const handleRetry = useCallback(async (txId: string) => {
@@ -153,6 +164,12 @@ export default function OffRampPanel({
       {/* Withdrawal Form */}
       <div className="glass-panel p-6 space-y-4">
         <h2 className="text-xl font-semibold">Withdraw to Bank Account</h2>
+
+        {!isConfigured && (
+          <div role="status" className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-amber-300">
+            Bank withdrawals are not configured yet. Your vault funds remain available in-app.
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -248,7 +265,7 @@ export default function OffRampPanel({
 
         <button
           onClick={handleInitiateWithdrawal}
-          disabled={txPhase !== "idle"}
+          disabled={!isConfigured || txPhase !== "idle"}
           className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2"
         >
           <ArrowRight className="w-5 h-5" />

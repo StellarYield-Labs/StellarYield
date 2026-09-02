@@ -6,6 +6,15 @@ Off-ramp flows depend on external providers (MoonPay, Stellar Anchor) to convert
 
 ## Common Failure Modes
 
+### 0. Partner Not Configured
+
+When `VITE_OFFRAMP_BASE_URL` is empty, the panel renders a disabled
+"not configured" state. It does not call provider endpoints, resume polling,
+or expose backend credential names or values. Configure only the public proxy
+base URL in the client; provider credentials remain server-side.
+
+---
+
 ### 1. Unsupported Region
 
 **Cause:** User's bank account country or region is not supported by the provider.
