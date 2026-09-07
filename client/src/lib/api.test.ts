@@ -62,6 +62,14 @@ describe("api URL helpers", () => {
     expect(apiUrl("/api/yields", configuredEnv)).toBe("https://api.example.com/api/yields");
   });
 
+  it("does not insert a double slash when the base URL ends with a slash", () => {
+    const configuredEnv = env({ VITE_API_BASE_URL: "https://api.example.com/" });
+    const url = apiUrl("/api/yields", configuredEnv);
+    const parsed = new URL(url);
+
+    expect(url).toBe("https://api.example.com/api/yields");
+    expect(parsed.pathname).toBe("/api/yields");
+    expect(parsed.pathname).not.toContain("//");
   it("handles endpoint paths with or without a leading slash (#173)", () => {
     const configuredEnv = env({ VITE_API_BASE_URL: "https://api.example.com" });
 
