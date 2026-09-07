@@ -111,4 +111,26 @@ export const ADMIN_ACTIONS: AdminActionOption[] = [
       },
     ],
   },
+  {
+    label: "Update Threshold",
+    method: "update_threshold",
+    description:
+      "Update the multi-signature signer set and approval threshold. Preview hashes are shown before submission.",
+    fields: [
+      {
+        name: "signers",
+        label: "Signer Addresses",
+        type: "text",
+        placeholder: "G...\nG...",
+        required: true,
+      },
+      {
+        name: "new_threshold",
+        label: "New Threshold",
+        type: "number",
+        placeholder: "2",
+        required: true,
+      },
+    ],
+  },
 ];

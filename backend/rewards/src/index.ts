@@ -7,3 +7,14 @@ export {
   getUserProof,
 } from "./generateTree";
 export type { UserRewardInput } from "./generateTree";
+
+export { simulateCampaignDryRun } from "./dryRunSimulator";
+export type {
+  CampaignRecipient,
+  CampaignSegment,
+  CampaignClaimWindow,
+  CampaignDryRunInput,
+  DryRunIssue,
+  DryRunIssueCode,
+  DryRunReport,
+} from "./dryRunSimulator";

@@ -4,6 +4,25 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 import YieldCalculator, { MetricCard } from '../YieldCalculator';
+import {
+  calculateCompoundProjection,
+  calculateProjectionMetrics,
+  formatCurrency,
+} from '../compoundMath';
+
+const DECIMAL_AMOUNT_FIXTURE = {
+  initialPrincipal: 1234.56,
+  initialMonthlyContribution: 100.25,
+  initialApy: 8.5,
+  initialYears: 1,
+} as const;
+
+const INTEGER_AMOUNT_FIXTURE = {
+  initialPrincipal: 10000,
+  initialMonthlyContribution: 500,
+  initialApy: 8.5,
+  initialYears: 5,
+} as const;
 
 // Mock Recharts to avoid rendering issues in tests
 vi.mock('recharts', () => ({
@@ -185,20 +204,49 @@ describe('YieldCalculator Component', () => {
     });
   });
 
-  it('should show error state for invalid inputs', async () => {
-    const { container } = render(<YieldCalculator />);
+  it('should show error state for invalid initial deposit', () => {
+    render(<YieldCalculator initialPrincipal={-1000} />);
     
-    // Try to set an invalid value through direct DOM manipulation
-    // (In real usage, sliders prevent this, but we test the error handling)
-    const principalInput = container.querySelector('input[type="range"]');
+    expect(screen.getByText('Please correct the following errors:')).toBeInTheDocument();
+    expect(screen.getByText('Initial deposit cannot be negative')).toBeInTheDocument();
+    expect(screen.queryByText(/NaN/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Final Value')).not.toBeInTheDocument();
+  });
+
+  it('should show error state for invalid duration (less than 1 year) with no NaN displayed', () => {
+    render(<YieldCalculator initialYears={0} />);
     
-    if (principalInput) {
-      // Simulate validation error by triggering state update
-      fireEvent.change(principalInput, { target: { value: '-1000' } });
-    }
+    expect(screen.getByText('Please correct the following errors:')).toBeInTheDocument();
+    expect(screen.getByText('Time horizon must be at least 1 year')).toBeInTheDocument();
+    expect(screen.queryByText(/NaN/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Final Value')).not.toBeInTheDocument();
+  });
+
+  it('should show error state for negative duration with no NaN displayed', () => {
+    render(<YieldCalculator initialYears={-5} />);
     
-    // Component should still render without crashing
-    expect(container.querySelector('h2')).toHaveTextContent('Yield Calculator');
+    expect(screen.getByText('Please correct the following errors:')).toBeInTheDocument();
+    expect(screen.getByText('Time horizon must be at least 1 year')).toBeInTheDocument();
+    expect(screen.queryByText(/NaN/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Final Value')).not.toBeInTheDocument();
+  });
+
+  it('should show error state for invalid duration exceeding maximum limit with no NaN displayed', () => {
+    render(<YieldCalculator initialYears={55} />);
+    
+    expect(screen.getByText('Please correct the following errors:')).toBeInTheDocument();
+    expect(screen.getByText('Time horizon exceeds maximum limit')).toBeInTheDocument();
+    expect(screen.queryByText(/NaN/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Final Value')).not.toBeInTheDocument();
+  });
+
+  it('should show error state when duration is NaN with no NaN displayed', () => {
+    render(<YieldCalculator initialYears={NaN} />);
+    
+    expect(screen.getByText('Please correct the following errors:')).toBeInTheDocument();
+    expect(screen.getByText('Time horizon must be at least 1 year')).toBeInTheDocument();
+    expect(screen.queryByText(/NaN/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Final Value')).not.toBeInTheDocument();
   });
 
   it('should have proper accessibility attributes', () => {
@@ -226,6 +274,34 @@ describe('YieldCalculator Component', () => {
     // Reset to default
     global.innerWidth = 1024;
     global.dispatchEvent(new Event('resize'));
+  });
+
+  it('formats decimal deposit amounts and projected yield consistently', () => {
+    const config = {
+      principal: DECIMAL_AMOUNT_FIXTURE.initialPrincipal,
+      monthlyContribution: DECIMAL_AMOUNT_FIXTURE.initialMonthlyContribution,
+      apy: DECIMAL_AMOUNT_FIXTURE.initialApy,
+      years: DECIMAL_AMOUNT_FIXTURE.initialYears,
+    };
+    const metrics = calculateProjectionMetrics(calculateCompoundProjection(config));
+    const formattedDeposit = formatCurrency(config.principal);
+    const formattedProjectedYield = formatCurrency(metrics.finalValue);
+
+    render(<YieldCalculator {...DECIMAL_AMOUNT_FIXTURE} />);
+
+    expect(formattedDeposit).toBe('$1,234.56');
+    expect(screen.getByText(formattedDeposit)).toBeInTheDocument();
+    expect(formattedProjectedYield).toBe('$2,595.36');
+    expect(screen.getByTestId('projected-yield')).toHaveTextContent('$2,595.36');
+  });
+
+  it('keeps integer amount formatting unchanged', () => {
+    render(<YieldCalculator {...INTEGER_AMOUNT_FIXTURE} />);
+
+    expect(formatCurrency(INTEGER_AMOUNT_FIXTURE.initialPrincipal)).toBe('$10,000');
+    expect(formatCurrency(INTEGER_AMOUNT_FIXTURE.initialMonthlyContribution)).toBe('$500');
+    expect(screen.getByText('$10,000')).toBeInTheDocument();
+    expect(screen.getByText('$500')).toBeInTheDocument();
   });
 });
 

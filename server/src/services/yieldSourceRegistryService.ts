@@ -15,6 +15,10 @@ import {
   yieldReliabilityEngine,
   type DataSourceReliability,
 } from "./yieldReliabilityService";
+import {
+  findLatestManipulationAssessmentByLabel,
+  type ManipulationRiskAssessment,
+} from "./apyManipulationGuardService";
 
 export type SourceHealthStatus =
   | "healthy"
@@ -37,6 +41,8 @@ export interface SourceHealthSummary {
   consecutiveFailures: number;
   failureReason: string | null;
   trend: DataSourceReliability["trend"];
+  /** Thin-liquidity APY manipulation warning for this source, if any is currently flagged. */
+  manipulationWarning: ManipulationRiskAssessment | null;
 }
 
 export interface SourceHealthRegistry {
@@ -159,6 +165,12 @@ export function toSourceHealth(
     ageSeconds,
   });
 
+  const manipulationMatch = findLatestManipulationAssessmentByLabel(reliability.providerName);
+  const manipulationWarning =
+    manipulationMatch && manipulationMatch.assessment.isSuspicious
+      ? manipulationMatch.assessment
+      : null;
+
   return {
     providerId: reliability.providerId,
     providerName: reliability.providerName,
@@ -174,6 +186,7 @@ export function toSourceHealth(
     consecutiveFailures: signals.consecutiveFailures,
     failureReason,
     trend: reliability.trend,
+    manipulationWarning,
   };
 }
 

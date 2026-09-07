@@ -155,10 +155,27 @@ describe("decodeTransactionError", () => {
         expect(result.suggestion).toBeTruthy();
     });
 
-    it("handles empty string without throwing", () => {
+    it("handles empty string errors with the generic fallback message", () => {
+        expect(() => decodeTransactionError("")).not.toThrow();
+
         const result = decodeTransactionError("");
-        expect(result.title).toBeTruthy();
+        expect(result.title).toBe("Transaction Failed");
+        expect(result.message).toBe(
+            "An unexpected error occurred while processing your transaction.",
+        );
+        expect(result.suggestion).toBe(
+            "Expand the developer log below and share it with support.",
+        );
         expect(result.raw).toBe("");
+        expect(result.code).toBeUndefined();
+    });
+
+    it("keeps known error code decoding unchanged after empty string handling", () => {
+        const result = decodeTransactionError("Error(Contract, #3)");
+        expect(result.code).toBe(3);
+        expect(result.title).toBe("Zero Amount");
+        expect(result.message).toContain("greater than zero");
+        expect(result.raw).toBe("Error(Contract, #3)");
     });
 
     it("handles unknown object-shaped errors and preserves their context", () => {

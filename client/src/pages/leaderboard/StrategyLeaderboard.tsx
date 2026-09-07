@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { Trophy, Medal, TrendingUp, Filter, AlertCircle, RefreshCw, BarChart3, RotateCcw } from "lucide-react";
 import { apiUrl } from "../../lib/api";
 import { ConfidenceBadge } from "../../components/AIAdvisor/ConfidenceBadge";
@@ -13,11 +13,29 @@ interface RankedStrategy {
   id: string;
   name: string;
   strategyType: string;
-  apy: number;
+  apy?: number | null;
   tvlUsd: number;
   riskScore: number;
   riskAdjustedYield: number;
   drawdownProxy: number;
+}
+
+interface RotationDecision {
+  action: string;
+  reason: string;
+  fromId: string | null;
+  toId: string | null;
+  scoreDelta: number | null;
+  detail: string;
+  evaluatedAt: string;
+  confidenceBreakdown?: Record<string, unknown>;
+  confidenceStrength?: "borderline" | "strongly_favored";
+  confidenceWhy?: string[];
+}
+
+interface RotationData {
+  current: { id: string | null; score: number | null; lastRotatedAt: string | null };
+  decisions: RotationDecision[];
 }
 
 interface LeaderboardResponse {
@@ -42,27 +60,19 @@ const StrategyLeaderboard: React.FC = () => {
   } = useLeaderboardFilters();
 
   // #375 Rotation Confidence Explorer
-  const [rotationData, setRotationData] = useState<{
-    current: { id: string | null; score: number | null; lastRotatedAt: string | null };
-    decisions: Array<{
-      action: string;
-      reason: string;
-      fromId: string | null;
-      toId: string | null;
-      scoreDelta: number | null;
-      detail: string;
-      evaluatedAt: string;
-      confidenceBreakdown?: any;
-      confidenceStrength?: "borderline" | "strongly_favored";
-      confidenceWhy?: string[];
-    }>;
-  } | null>(null);
+  const [rotationData, setRotationData] = useState<RotationData | null>(null);
   const [rotationLoading, setRotationLoading] = useState(true);
   const [rotationError, setRotationError] = useState<string | null>(null);
+  const [fetchTrigger, setFetchTrigger] = useState(0);
 
-  const fetchLeaderboard = () => {
+  const fetchLeaderboard = useCallback(() => {
     setLoading(true);
     setError(null);
+    setFetchTrigger((c) => c + 1);
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
     const params = new URLSearchParams({ timeWindow, strategyType });
     fetch(apiUrl(`/api/strategies/leaderboard?${params}`))
       .then((res) => {
@@ -72,30 +82,29 @@ const StrategyLeaderboard: React.FC = () => {
         return res.json();
       })
       .then((d: LeaderboardResponse) => {
-        setData(d);
-        setLoading(false);
+        if (!ignore) {
+          setData(d);
+          setLoading(false);
+        }
       })
       .catch((err) => {
-        console.error("Failed to fetch strategy leaderboard", err);
-        setError(err instanceof Error ? err.message : "Failed to load strategy leaderboard");
-        setLoading(false);
+        if (!ignore) {
+          console.error("Failed to fetch strategy leaderboard", err);
+          setError(err instanceof Error ? err.message : "Failed to load strategy leaderboard");
+          setLoading(false);
+        }
       });
-  };
+
+    return () => {
+      ignore = true;
+    };
+  }, [timeWindow, strategyType, fetchTrigger]);
 
   useEffect(() => {
-    fetchLeaderboard();
-  }, [timeWindow, strategyType]);
-
-  useEffect(() => {
-    setRotationLoading(true);
-    setRotationError(null);
     fetch(apiUrl("/api/strategies/rotation?limit=10"))
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return (await res.json()) as {
-          current: { id: string | null; score: number | null; lastRotatedAt: string | null };
-          decisions: any[];
-        };
+        return (await res.json()) as RotationData;
       })
       .then((d) => setRotationData(d))
       .catch((err) => setRotationError(err instanceof Error ? err.message : "Failed to load rotation data"))
@@ -236,7 +245,13 @@ const StrategyLeaderboard: React.FC = () => {
                       {s.strategyType}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-green-400 font-bold">{s.apy.toFixed(2)}%</td>
+                  <td
+                    className={`px-6 py-4 font-bold ${
+                      s.apy != null && !Number.isNaN(s.apy) ? "text-green-400" : "text-gray-400"
+                    }`}
+                  >
+                    {s.apy != null && !Number.isNaN(s.apy) ? `${s.apy.toFixed(2)}%` : "N/A"}
+                  </td>
                   <td className="px-6 py-4">
                     <span
                       className={`font-semibold ${

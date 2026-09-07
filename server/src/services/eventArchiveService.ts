@@ -107,6 +107,7 @@ export class S3ArchiveStorage implements ArchiveStorage {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async getClient(): Promise<any> {
     if (this.client) return this.client;
+    // @ts-ignore
     const { S3Client } = await import("@aws-sdk/client-s3");
     this.client = new S3Client({
       region: this.cfg.region,
@@ -121,6 +122,7 @@ export class S3ArchiveStorage implements ArchiveStorage {
   }
 
   async put(key: string, body: Buffer, meta: { contentType: string; contentEncoding: string }): Promise<void> {
+    // @ts-ignore
     const { PutObjectCommand } = await import("@aws-sdk/client-s3");
     const client = await this.getClient();
     await client.send(
@@ -135,6 +137,7 @@ export class S3ArchiveStorage implements ArchiveStorage {
   }
 
   async getStream(key: string): Promise<Readable | null> {
+    // @ts-ignore
     const { GetObjectCommand } = await import("@aws-sdk/client-s3");
     const client = await this.getClient();
     try {
@@ -155,12 +158,14 @@ export class S3ArchiveStorage implements ArchiveStorage {
   }
 
   async delete(key: string): Promise<void> {
+    // @ts-ignore
     const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
     const client = await this.getClient();
     await client.send(new DeleteObjectCommand({ Bucket: this.cfg.bucket, Key: key }));
   }
 
   async exists(key: string): Promise<boolean> {
+    // @ts-ignore
     const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
     const client = await this.getClient();
     try {

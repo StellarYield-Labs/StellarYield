@@ -14,6 +14,8 @@ import {
   distributeAmount,
   normalizeWeights,
   applyPreset,
+  calculateTotalAllocation,
+  formatAllocationSum,
 } from "./portfolioUtils";
 import RebalancePreview from "./RebalancePreviewPanel";
 
@@ -57,6 +59,11 @@ export default function PortfolioBuilder({
   );
 
   const isValid = useMemo(() => isValidAllocation(allocations), [allocations]);
+
+  const totalAllocation = useMemo(
+    () => calculateTotalAllocation(allocations),
+    [allocations],
+  );
 
   const blendedApy = useMemo(
     () => calculateBlendedApy(allocations),
@@ -170,7 +177,17 @@ export default function PortfolioBuilder({
 
       {/* Allocation Sliders */}
       <div className="glass-panel p-6 space-y-4">
-        <h3 className="text-lg font-semibold">Vault Allocation</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Vault Allocation</h3>
+          <span
+            className={`text-sm font-medium ${
+              isValid ? "text-green-400" : "text-yellow-400"
+            }`}
+            data-testid="total-allocation-display"
+          >
+            Total: {formatAllocationSum(totalAllocation)}
+          </span>
+        </div>
 
         {allocations.map((alloc, idx) => (
           <div key={alloc.vaultContractId} className="space-y-2">
@@ -209,10 +226,13 @@ export default function PortfolioBuilder({
         ))}
 
         {!isValid && (
-          <div className="flex items-center gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+          <div
+            className="flex items-center gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg"
+            data-testid="allocation-warning"
+          >
             <AlertCircle className="w-5 h-5 text-yellow-500" />
             <span className="text-sm text-yellow-400">
-              Allocations must sum to 100%
+              Allocations must sum to 100% (currently {formatAllocationSum(totalAllocation)})
             </span>
           </div>
         )}

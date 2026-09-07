@@ -5,6 +5,7 @@ import {
   getYieldDataWithCacheStatus,
 } from "../services/yieldService";
 import { calculateNetYield } from "../services/netYieldEngine";
+import { applyManipulationResistantRanking } from "../services/apyManipulationGuardService";
 
 const yieldsRouter = Router();
 
@@ -22,7 +23,7 @@ yieldsRouter.get("/", async (_req, res) => {
       slippageBps: parseBps(_req.query.slippageBps),
     };
     const hasCustomAssumptions = Object.values(assumptions).some((value) => value != null);
-    const payload = yields.map((entry) => {
+    const withNetYield = yields.map((entry) => {
       const netYield = calculateNetYield(
         entry.totalApy,
         hasCustomAssumptions ? assumptions : undefined,
@@ -36,6 +37,10 @@ yieldsRouter.get("/", async (_req, res) => {
         feeAttribution: netYield.feeAttribution,
       };
     });
+    // Suspicious thin-liquidity APY spikes are down-ranked (or excluded via a
+    // zero ranking weight) rather than dropped, so the response is still
+    // transparent about what was flagged and why.
+    const payload = applyManipulationResistantRanking(withNetYield);
     res.setHeader(
       "Cache-Control",
       `public, max-age=${CURRENT_YIELDS_TTL_SECONDS}, stale-while-revalidate=30`,

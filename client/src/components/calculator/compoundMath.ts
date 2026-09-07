@@ -155,14 +155,18 @@ export function calculateProjectionMetrics(projections: ProjectionPoint[]) {
 }
 
 /**
- * Format currency value with proper formatting
+ * Format currency value with proper formatting.
+ * Integer amounts stay whole dollars; decimal amounts keep two cent digits.
  */
 export function formatCurrency(value: number): string {
+  const hasCents = Math.round(value * 100) % 100 !== 0;
+  const fractionDigits = hasCents ? 2 : 0;
+
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
   }).format(value);
 }
 
@@ -179,35 +183,27 @@ export function formatPercentage(value: number, decimals: number = 2): string {
 export function validateConfig(config: CompoundConfig): string[] {
   const errors: string[] = [];
   
-  if (config.principal < 0) {
+  if (typeof config.principal !== 'number' || Number.isNaN(config.principal) || !Number.isFinite(config.principal) || config.principal < 0) {
     errors.push('Initial deposit cannot be negative');
-  }
-  
-  if (config.principal > 1000000000) {
+  } else if (config.principal > 1000000000) {
     errors.push('Initial deposit exceeds maximum limit');
   }
   
-  if (config.apy < 0) {
+  if (typeof config.apy !== 'number' || Number.isNaN(config.apy) || !Number.isFinite(config.apy) || config.apy < 0) {
     errors.push('APY cannot be negative');
-  }
-  
-  if (config.apy > 1000) {
+  } else if (config.apy > 1000) {
     errors.push('APY exceeds reasonable maximum');
   }
   
-  if (config.monthlyContribution < 0) {
+  if (typeof config.monthlyContribution !== 'number' || Number.isNaN(config.monthlyContribution) || !Number.isFinite(config.monthlyContribution) || config.monthlyContribution < 0) {
     errors.push('Monthly contribution cannot be negative');
-  }
-  
-  if (config.monthlyContribution > 1000000) {
+  } else if (config.monthlyContribution > 1000000) {
     errors.push('Monthly contribution exceeds maximum limit');
   }
   
-  if (config.years < 1) {
+  if (typeof config.years !== 'number' || Number.isNaN(config.years) || !Number.isFinite(config.years) || config.years < 1) {
     errors.push('Time horizon must be at least 1 year');
-  }
-  
-  if (config.years > 50) {
+  } else if (config.years > 50) {
     errors.push('Time horizon exceeds maximum limit');
   }
   

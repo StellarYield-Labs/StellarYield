@@ -46,6 +46,7 @@ import indexerRouter from "./routes/indexer";
 import contactsRouter from "./routes/contacts";
 import relayerStatusRouter from "./routes/relayerStatus";
 import auditReplayRouter from "./routes/auditReplay";
+import vaultAccessRouter from "./routes/vaultAccess";
 
 import { createAuthChallenge, verifyAuthChallenge } from "./utils/stellarAuth";
 import {
@@ -106,6 +107,7 @@ export function createApp() {
   });
 
   app.post("/api/relayer/fee-bump", relayerLimiter, signFeeBump);
+  app.use("/api/vaults", vaultAccessRouter);
   app.use("/api/vaults", sharePriceHistoryRouter);
   app.use("/api/liquidity", fragmentationRouter);
   app.use("/api/indexer", indexerRouter);

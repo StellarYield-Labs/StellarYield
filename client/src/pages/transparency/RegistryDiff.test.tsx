@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 vi.mock("../../../../contracts/registry.json", () => ({
@@ -39,14 +39,13 @@ import RegistryDiffPage from "./RegistryDiff";
 
 describe("RegistryDiffPage copy actions", () => {
   beforeEach(() => {
-    Object.defineProperty(navigator, "clipboard", {
-      value: { writeText: vi.fn().mockResolvedValue(undefined) },
-      configurable: true,
+    Object.assign(navigator, {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
     });
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it("copies contract address and shows success feedback", async () => {
@@ -55,9 +54,7 @@ describe("RegistryDiffPage copy actions", () => {
 
     fireEvent.click(buttons[0]);
 
-    await waitFor(() => {
-      expect(navigator.clipboard.writeText).toHaveBeenCalled();
-      expect(screen.getByText("Copied!")).toBeInTheDocument();
-    });
+    expect(await screen.findByText("Copied!")).toBeInTheDocument();
+    expect(navigator.clipboard.writeText).toHaveBeenCalled();
   });
 });

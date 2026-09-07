@@ -27,15 +27,15 @@ describe("api URL helpers", () => {
     }) as ImportMetaEnv;
 
   it("uses the local backend by default when on localhost", () => {
-    global.window = { location: { hostname: "localhost" } } as any;
+    global.window = { location: { hostname: "localhost" } } as unknown as Window & typeof globalThis;
     expect(getApiBaseUrl(env({}))).toBe("http://localhost:3001");
   });
 
   it("uses the local backend by default for IPv4 and IPv6 local hosts", () => {
-    global.window = { location: { hostname: "127.0.0.1" } } as any;
+    global.window = { location: { hostname: "127.0.0.1" } } as unknown as Window & typeof globalThis;
     expect(getApiBaseUrl(env({}))).toBe("http://localhost:3001");
 
-    global.window = { location: { hostname: "::1" } } as any;
+    global.window = { location: { hostname: "::1" } } as unknown as Window & typeof globalThis;
     expect(getApiBaseUrl(env({}))).toBe("http://localhost:3001");
   });
 
@@ -70,10 +70,31 @@ describe("api URL helpers", () => {
     expect(url).toBe("https://api.example.com/api/yields");
     expect(parsed.pathname).toBe("/api/yields");
     expect(parsed.pathname).not.toContain("//");
+  it("handles endpoint paths with or without a leading slash (#173)", () => {
+    const configuredEnv = env({ VITE_API_BASE_URL: "https://api.example.com" });
+
+    // Path without leading slash
+    expect(apiUrl("api/v1/strategies", configuredEnv)).toBe("https://api.example.com/api/v1/strategies");
+    // Path with leading slash
+    expect(apiUrl("/api/v1/strategies", configuredEnv)).toBe("https://api.example.com/api/v1/strategies");
+
+    // Single segment path without leading slash
+    expect(apiUrl("health", configuredEnv)).toBe("https://api.example.com/health");
+    expect(apiUrl("/health", configuredEnv)).toBe("https://api.example.com/health");
+
+    // Path with query parameters without leading slash
+    expect(apiUrl("api/strategies?limit=10&window=30d", configuredEnv)).toBe(
+      "https://api.example.com/api/strategies?limit=10&window=30d",
+    );
+
+    // Verify local runtime default with and without leading slash
+    global.window = { location: { hostname: "localhost" } } as unknown as Window & typeof globalThis;
+    expect(apiUrl("api/leaderboard", env({}))).toBe("http://localhost:3001/api/leaderboard");
+    expect(apiUrl("/api/leaderboard", env({}))).toBe("http://localhost:3001/api/leaderboard");
   });
 
   it("reports unavailable API configuration for hosted previews without env vars", () => {
-    global.window = { location: { hostname: "stellar-yield-preview.vercel.app" } } as any;
+    global.window = { location: { hostname: "stellar-yield-preview.vercel.app" } } as unknown as Window & typeof globalThis;
 
     expect(getApiBaseUrlState(env({}))).toEqual({
       available: false,
@@ -81,5 +102,6 @@ describe("api URL helpers", () => {
     });
     expect(() => getApiBaseUrl(env({}))).toThrow(/Backend URL is not configured/);
     expect(() => apiUrl("/api/yields", env({}))).toThrow(/Backend URL is not configured/);
+    expect(() => apiUrl("api/yields", env({}))).toThrow(/Backend URL is not configured/);
   });
 });

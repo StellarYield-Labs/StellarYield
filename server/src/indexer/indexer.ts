@@ -10,7 +10,7 @@ import { recordReplayError } from "./indexerStatus";
 const POLL_INTERVAL = 5000; // 5 seconds
 const PAGE_LIMIT = Number(process.env.INDEXER_PAGE_LIMIT || 100);
 
-type IndexerPrismaClient = {
+export type IndexerPrismaClient = {
   $transaction<T>(fn: (tx: IndexerPrismaClient) => Promise<T>): Promise<T>;
   indexerContractStream: {
     upsert(args: {
@@ -280,7 +280,7 @@ async function loadCheckpoint(
   };
 }
 
-async function persistBatchTransactionally(
+export async function persistBatchTransactionally(
   prisma: IndexerPrismaClient,
   stream: ContractStreamConfig,
   normalizedEvents: NormalizedSorobanEvent[],

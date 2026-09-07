@@ -8,8 +8,42 @@ import {
   type TreasuryScenario,
   type AllocationPosition,
 } from "../services/treasurySimulationService";
+import {
+  evaluateTreasuryReallocation,
+  type TreasuryReallocationPolicy,
+  type TreasuryReallocationProposal,
+} from "../services/treasuryReallocationPolicyService";
 
 const router = Router();
+
+/**
+ * POST /api/treasury/reallocations/evaluate
+ * Evaluate a proposed strategy reallocation before it reaches execution.
+ */
+router.post("/reallocations/evaluate", (req: Request, res: Response) => {
+  const { proposal, policy } = req.body as {
+    proposal?: TreasuryReallocationProposal;
+    policy?: TreasuryReallocationPolicy;
+  };
+
+  try {
+    const evaluation = evaluateTreasuryReallocation(
+      proposal as TreasuryReallocationProposal,
+      policy,
+    );
+    const statusCode = evaluation.decision === "rejected"
+      ? 422
+      : evaluation.decision === "approval_required"
+        ? 202
+        : 200;
+    res.status(statusCode).json(evaluation);
+  } catch (error) {
+    res.status(400).json({
+      error: "INVALID_REALLOCATION",
+      message: error instanceof Error ? error.message : "Invalid reallocation request",
+    });
+  }
+});
 
 function validateAllocations(allocations: unknown): allocations is AllocationPosition[] {
   if (!Array.isArray(allocations) || allocations.length === 0) return false;

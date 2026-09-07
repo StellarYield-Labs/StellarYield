@@ -9,6 +9,10 @@ export interface PendingTransaction {
   createdAt: number;
   createdBy: string;
   status: "pending" | "ready" | "executed" | "expired";
+  previewHashes?: {
+    signerSetHash: string;
+    payloadHash: string;
+  };
 }
 
 export interface SignerRecord {
@@ -30,7 +34,8 @@ export type AdminAction =
   | "register_keeper"
   | "remove_keeper"
   | "rescue_funds"
-  | "set_admin";
+  | "set_admin"
+  | "update_threshold";
 
 export interface AdminActionOption {
   label: string;

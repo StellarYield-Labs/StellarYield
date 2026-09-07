@@ -128,6 +128,28 @@ export function normalizeWeights(allocations: VaultAllocation[]): VaultAllocatio
 }
 
 /**
+ * Calculate total allocation sum from vault weights
+ */
+export function calculateTotalAllocation(allocations: VaultAllocation[]): number {
+    return allocations.reduce(
+        (sum, a) => sum + (Number.isFinite(a.weight) ? a.weight : 0),
+        0,
+    );
+}
+
+/**
+ * Format allocation sum in a deterministic percentage format (e.g., "100.0%", "85.5%")
+ */
+export function formatAllocationSum(
+    value: number | VaultAllocation[],
+    decimals: number = 1,
+): string {
+    const sum = typeof value === "number" ? value : calculateTotalAllocation(value);
+    const safeSum = Number.isFinite(sum) ? (Math.abs(sum) < 1e-12 ? 0 : sum) : 0;
+    return `${safeSum.toFixed(decimals)}%`;
+}
+
+/**
  * Create portfolio allocation record
  */
 export function createPortfolioAllocation(

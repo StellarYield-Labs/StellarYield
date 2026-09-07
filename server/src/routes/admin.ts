@@ -17,6 +17,14 @@ import {
   type GovernanceActionArg,
   type GovernanceMethod,
 } from "../governance/actionSchema";
+import {
+  PrismaRebalanceSagaRepository,
+  RebalanceSagaService,
+  REBALANCE_SAGA_PHASES,
+  type RebalanceSagaPhase,
+  type RebalanceSagaPrismaClient,
+} from "../services/rebalanceSagaService";
+import { prisma } from "../utils/prisma";
 
 const GOVERNANCE_NETWORK = (process.env.STELLAR_NETWORK ?? "TESTNET").toUpperCase() as
   | "TESTNET"
@@ -712,5 +720,84 @@ adminRouter.post(
     }
   },
 );
+
+// ── Rebalance Execution Saga debug view (Issue #184) ────────────────────────
+// Read-only admin endpoints exposing durable saga state and retry history so
+// operators can diagnose timed-out, failed, or manual-review attempts.
+
+const VALID_SAGA_PHASES = new Set<string>(Object.values(REBALANCE_SAGA_PHASES));
+
+let sagaAdminService: RebalanceSagaService | null = null;
+function getSagaAdminService(): RebalanceSagaService {
+  if (!sagaAdminService) {
+    sagaAdminService = new RebalanceSagaService(
+      new PrismaRebalanceSagaRepository(prisma as unknown as RebalanceSagaPrismaClient),
+    );
+  }
+  return sagaAdminService;
+}
+
+function toSagaPhase(value: string | undefined): RebalanceSagaPhase | undefined {
+  if (!value) return undefined;
+  return VALID_SAGA_PHASES.has(value) ? (value as RebalanceSagaPhase) : undefined;
+}
+
+/**
+ * GET /api/admin/rebalance-saga
+ * List rebalance execution sagas, optionally filtered by vault, phase, or
+ * recovery state, with retry history attached.
+ */
+adminRouter.get("/rebalance-saga", requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const vaultId = typeof req.query.vaultId === "string" ? req.query.vaultId : undefined;
+    const phase = toSagaPhase(typeof req.query.phase === "string" ? req.query.phase : undefined);
+    const limit = Math.min(Math.max(Number(req.query.limit ?? 25), 1), 500);
+    const sagas = await getSagaAdminService().listSagas({ vaultId, phase, limit });
+    res.json({ success: true, count: sagas.length, sagas });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to list rebalance sagas",
+    });
+  }
+});
+
+/**
+ * GET /api/admin/rebalance-saga/stalled
+ * Sagas stuck in a non-terminal phase with an expired/no lease (worker crash
+ * or relayer timeout) that a recovery worker may safely act on.
+ */
+adminRouter.get("/rebalance-saga/stalled", requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const limit = Math.max(Number(req.query.limit ?? 100), 1);
+    const sagas = await getSagaAdminService().findStalled(limit);
+    res.json({ success: true, count: sagas.length, sagas });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to list stalled rebalance sagas",
+    });
+  }
+});
+
+/**
+ * GET /api/admin/rebalance-saga/:queueEntryId
+ * Full saga state and retry history for a single queue entry.
+ */
+adminRouter.get("/rebalance-saga/:queueEntryId", requireAdmin, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const queueEntryId = String(req.params.queueEntryId);
+    const service = getSagaAdminService();
+    const saga = await service.getSaga(queueEntryId);
+    const retryHistory = await service.retryHistory(queueEntryId);
+    if (!saga) {
+      res.status(404).json({ success: false, error: "Rebalance saga not found" });
+      return;
+    }
+    res.json({ success: true, saga, retryHistory });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : "Failed to load rebalance saga",
+    });
+  }
+});
 
 export default adminRouter;

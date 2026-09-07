@@ -256,15 +256,19 @@ model Incident {
   title           String
   description     String
   affectedVaults  String[] // Array of vault IDs/names
+  state           String   @default("DETECTED") // DETECTED, FROZEN, MONITORING, RECOVERY_CANDIDATE, RECOVERED, MANUALLY_RESOLVED
   resolved        Boolean  @default(false)
   startedAt       DateTime
   resolvedAt      DateTime?
   postmortemUrl   String?  // Link to postmortem document
+  frozenAt        DateTime? // When the incident triggered a freeze
+  lastHealthyAt   DateTime? // Last time protocol reported healthy (for stability tracking)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@index([protocol, severity])
   @@index([startedAt])
+  @@index([state])
 }
 
 // ── Drift Detection Models ──────────────────────────────────────────────────
@@ -366,12 +370,99 @@ model RebalanceHistory {
   filledPercentage    Float    // Percentage of expected amount
   transactionHash     String?  // Blockchain tx hash if applicable
   ledger              Int?     // Ledger sequence when transaction was included
-  errorClass          String?  // transient | terminal | simulation
+  errorClass          String?  // transient | terminal | simulation | manual
   completedAt         DateTime
   createdAt           DateTime @default(now())
 
   @@index([vaultId, completedAt])
   @@index([completedAt])
+}
+
+// ── Rebalance Execution Saga Models (Issue #184) ──────────────────────────────
+// Durable, exactly-once execution state for each rebalance attempt. The saga
+// records an idempotency key per risky phase (quote, approval, submission,
+// confirmation, snapshot) plus enough checkpoint data for a worker to resume
+// safely after a process restart or relayer timeout.
+
+model RebalanceSaga {
+  id                 String   @id @default(uuid())
+  queueEntryId       String   @unique // 1:1 with a RebalanceQueueEntry
+  vaultId            String
+  intentHash         String   // Replay-prevention intent identity
+  jobId              String?  // Last worker that held the lease
+
+  // Current progress phase:
+  // pending, simulated, quoted, approved, submitted, confirmed,
+  // snapshotted, completed, failed, cancelled, requires_manual_review
+  phase              String   @default("pending")
+
+  // Idempotency keys for each risky phase (quote/approval/transaction/confirm/snapshot).
+  quoteKey           String?
+  approvalKey        String?
+  simulationKey      String?
+  submissionKey      String?
+  confirmationKey    String?
+  snapshotKey        String?
+
+  // Persisted checkpoint results so a restart can resume, never resubmit.
+  quoteResult        Json?
+  approvalResult     Json?
+  simulationResult   Json?
+  submissionResult   Json?
+  confirmationResult Json?
+  snapshotResult     Json?
+
+  submissionInFlight Boolean  @default(false) // durable marker before on-chain submit
+  transactionHash    String?
+  ledger             BigInt?
+
+  // Failure / recovery
+  lastError          String?
+  lastErrorClass     String?  // transient | terminal | simulation | manual
+  requiresRecovery   Boolean  @default(false)
+  requiresRecoveryReason String?
+
+  // Retry bookkeeping
+  attemptCount       Int      @default(0)
+  maxAttempts        Int      @default(3)
+  retryAt            DateTime?
+
+  // Fencing token protects against a stale worker writing after the lease moved.
+  leasingWorker      String?
+  leaseExpiresAt     DateTime?
+  fencingToken       String?
+
+  // Retry history (JSON array of RebalanceSagaAttempt DTOs; newest first).
+  retryHistory       Json     @default("[]")
+
+  // Audit
+  completedAt        DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  attempts           RebalanceSagaAttempt[]
+
+  @@index([vaultId, phase])
+  @@index([phase, retryAt])
+  @@index([submissionKey])
+  @@index([leaseExpiresAt])
+}
+
+/// Immutable retry/attempt record derived externally (used by the saga service).
+model RebalanceSagaAttempt {
+  id            String   @id @default(uuid())
+  sagaId        String
+  queueEntryId  String
+  phase         String
+  action        String   // ok | failed | recovered | manual_review
+  error         String?
+  errorClass    String?
+  metadata      Json?
+  occurredAt    DateTime @default(now())
+
+  saga          RebalanceSaga @relation(fields: [sagaId], references: [id], onDelete: Cascade)
+
+  @@index([sagaId, occurredAt])
 }
 
 // ── Strategy Snapshot Models (Issue #282) ────────────────────────────────────

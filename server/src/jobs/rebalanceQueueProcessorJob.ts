@@ -31,6 +31,11 @@ import { rebalanceQueueService, PartialFillConfig } from '../services/rebalanceQ
 import { rebalanceAuctionService, CreateIntentRequest } from '../services/rebalanceAuctionService';
 import { REBALANCE_STATUS } from '../queues/types';
 import { ExecutionCoordinatorService } from '../services/executionCoordinatorService';
+import {
+  RebalanceSagaService,
+  REBALANCE_SAGA_PHASES,
+  type RebalanceSaga,
+} from '../services/rebalanceSagaService';
 
 export interface QueueEntryForProcessing {
   id: string;
@@ -56,6 +61,7 @@ export interface JobConfig {
   useAuctionMode?: boolean; // Enable real auction mode
   auctionTimeoutMs?: number; // Timeout for auction phases
   executionCoordinator?: ExecutionCoordinatorService;
+  sagaService?: RebalanceSagaService;
   workerId?: string;
   executionLeaseMs?: number;
 }
@@ -148,7 +154,11 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
 
       for (const entry of toProcess) {
         try {
-          if (config.useAuctionMode) {
+          if (config.sagaService) {
+            const outcome = await processQueueEntryWithSaga(entry, config);
+            if (outcome === 'submitted' || outcome === 'confirmed') processedAuction++;
+            else processedRetries++;
+          } else if (config.useAuctionMode) {
             await processQueueEntryWithCoordinator(entry, config, processQueueEntryWithAuction);
             processedAuction++;
           } else {
@@ -179,7 +189,11 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
 
       for (const entry of toProcess) {
         try {
-          if (config.useAuctionMode) {
+          if (config.sagaService) {
+            const outcome = await processQueueEntryWithSaga(entry, config);
+            if (outcome === 'submitted' || outcome === 'confirmed') processedAuction++;
+            else processedDeferred++;
+          } else if (config.useAuctionMode) {
             await processQueueEntryWithCoordinator(entry, config, processQueueEntryWithAuction);
             processedAuction++;
           } else {
@@ -227,6 +241,213 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
       timestamp: new Date().toISOString(),
     };
   }
+}
+
+async function processQueueEntryWithSaga(
+  entry: QueueEntryForProcessing,
+  config: JobConfig,
+): Promise<
+  | 'completed'
+  | 'confirmed'
+  | 'submitted'
+  | 'review'
+  | 'failed'
+  | 'skipped'
+  | 'simulated'
+> {
+  const queueEntryId = entry.id;
+  const workerId = config.workerId ?? `rebalance-processor-${process.pid}`;
+  const sagaService = config.sagaService!;
+  const adapter = config.executionAdapter;
+
+  if (entry.status === REBALANCE_STATUS.COMPLETED && entry.lastTransactionHash) {
+    return 'completed';
+  }
+
+  await rebalanceQueueService.markAsProcessing(queueEntryId);
+
+  // Concurrency guard: if another worker holds a live lease, skip silently.
+  await sagaService.startOrCreate({
+    queueEntryId,
+    vaultId: entry.vaultId,
+    intentHash: entry.intentHash,
+    jobId: workerId,
+  });
+
+  let lease: { saga: RebalanceSaga; workerId: string; fencingToken: string };
+  try {
+    lease = await sagaService.acquireLease(
+      queueEntryId,
+      workerId,
+      config.executionLeaseMs ?? 120_000,
+    );
+  } catch (error) {
+    console.warn(`Skipping ${queueEntryId}: ${error instanceof Error ? error.message : error}`);
+    return 'skipped';
+  }
+
+  // Idempotent replay: saga already produced an on-chain action? Never resubmit.
+  if (await sagaService.hasOnChainAction(queueEntryId)) {
+    const status = await sagaService.submissionStatus(queueEntryId);
+    if (status && status.confirmation) {
+      await sagaService.markCompleted(queueEntryId, workerId, lease.fencingToken);
+      await rebalanceQueueService.markAsCompleted(queueEntryId, status.transactionHash ?? undefined);
+      return 'confirmed';
+    }
+    await rebalanceQueueService.recordFailedAttempt(
+      queueEntryId,
+      'Submission already in flight; exact-once guard prevents duplicate resubmission',
+      { errorClass: 'manual' },
+    );
+    await sagaService.requireManualReview(
+      queueEntryId,
+      workerId,
+      lease.fencingToken,
+      'Submission recorded but outcome unconfirmed; requires reconciliation',
+    );
+    return 'review';
+  }
+
+  const request: RebalanceExecutionRequest = {
+    queueEntryId,
+    vaultId: entry.vaultId,
+    vaultContractId: entry.vaultId,
+    targetAllocations: entry.targetAllocations,
+    currentAllocations: entry.currentAllocations,
+    executionStrategy: entry.executionStrategy,
+    intentHash: entry.intentHash,
+    adminAddress: entry.triggeredBy ?? undefined,
+  };
+
+  // ── Simulation phase ─────────────────────────────────────────────────────
+  const simulationResult = await adapter.simulate(request);
+  if (!simulationResult.success) {
+    const errorClass = simulationResult.errorClass ?? 'terminal';
+    await sagaService.recordFailure(
+      queueEntryId,
+      workerId,
+      lease.fencingToken,
+      REBALANCE_SAGA_PHASES.PENDING,
+      simulationResult.error ?? 'Simulation failed',
+      errorClass,
+      simulationResult.metadata,
+    );
+    await rebalanceQueueService.recordFailedAttempt(
+      queueEntryId,
+      simulationResult.error ?? 'Simulation failed',
+      { errorClass, executionMetadata: simulationResult.metadata },
+    );
+    return errorClass === 'terminal' ? 'failed' : 'simulated';
+  }
+
+  const simulationKey = `simulate:${queueEntryId}:${entry.intentHash}`;
+  await sagaService.recordSimulation(
+    queueEntryId,
+    workerId,
+    lease.fencingToken,
+    simulationKey,
+    { simulated: true, ...simulationResult.metadata },
+  );
+
+  // ── Submission phase (exactly-once via durable reservation) ─────────────
+  const submissionKey = `submit:${queueEntryId}:${entry.intentHash}`;
+  const begun = await sagaService.beginSubmission(
+    queueEntryId,
+    workerId,
+    lease.fencingToken,
+    submissionKey,
+  );
+  if (!begun.recorded) {
+    await rebalanceQueueService.recordFailedAttempt(
+      queueEntryId,
+      'A submission reservation already exists; refusing to submit again',
+      { errorClass: 'manual' },
+    );
+    await sagaService.requireManualReview(
+      queueEntryId,
+      workerId,
+      lease.fencingToken,
+      'Duplicate submission prevented: reservation already present for this intent',
+    );
+    return 'review';
+  }
+
+  const submitResult = await adapter.submit(request);
+
+  if (!submitResult.success) {
+    // The reservation is persisted, but the submit outcome is unknown (it may
+    // have reached the chain before the relayer timed out). Never resubmit.
+    await sagaService.recordFailure(
+      queueEntryId,
+      workerId,
+      lease.fencingToken,
+      REBALANCE_SAGA_PHASES.SUBMITTED,
+      submitResult.error ?? 'Submission failed',
+      submitResult.errorClass ?? 'transient',
+      submitResult.metadata,
+    );
+    await sagaService.requireManualReview(
+      queueEntryId,
+      workerId,
+      lease.fencingToken,
+      `Submission outcome unknown after relayer failure: ${submitResult.error ?? 'unknown error'}`,
+      submitResult.metadata,
+    );
+    return 'review';
+  }
+
+  const txHash = submitResult.transactionHash ?? `0x${entry.intentHash}`;
+  await sagaService.recordSubmission(
+    queueEntryId,
+    workerId,
+    lease.fencingToken,
+    submissionKey,
+    txHash,
+    { submitted: true, ...submitResult.metadata },
+    submitResult.ledger !== undefined ? BigInt(submitResult.ledger) : undefined,
+  );
+
+  // ── Confirmation / snapshot / completion ─────────────────────────────────
+  if (submitResult.status !== 'confirmed') {
+    await sagaService.requireManualReview(
+      queueEntryId,
+      workerId,
+      lease.fencingToken,
+      `Transaction submitted (${txHash}) but not confirmed on-chain; awaiting reconciliation`,
+      submitResult.metadata,
+    );
+    await rebalanceQueueService.recordFailedAttempt(
+      queueEntryId,
+      `Transaction submitted (${txHash}) but confirmation pending`,
+      { errorClass: 'manual', transactionHash: txHash, executionMetadata: submitResult.metadata },
+    );
+    return 'submitted';
+  }
+
+  await sagaService.recordConfirmation(
+    queueEntryId,
+    workerId,
+    lease.fencingToken,
+    `confirm:${queueEntryId}:${entry.intentHash}`,
+    { confirmed: true, ...submitResult.metadata },
+    txHash,
+  );
+  await sagaService.recordSnapshot(
+    queueEntryId,
+    workerId,
+    lease.fencingToken,
+    `snapshot:${queueEntryId}:${entry.intentHash}`,
+    { snapshotTaken: true },
+  );
+  await sagaService.markCompleted(queueEntryId, workerId, lease.fencingToken);
+  await rebalanceQueueService.markAsCompleted(
+    queueEntryId,
+    txHash,
+    submitResult.ledger,
+    submitResult.errorClass,
+    submitResult.metadata,
+  );
+  return 'confirmed';
 }
 
 async function processQueueEntryWithCoordinator(

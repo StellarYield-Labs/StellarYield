@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fetchSwapQuote } from "./fetchSwapQuote";
+import { fetchSwapQuote, verifyZapQuote, isQuoteExpired, isQuoteStale } from "./fetchSwapQuote";
 
 describe("fetchSwapQuote", () => {
   const origFetch = globalThis.fetch;
@@ -106,5 +106,72 @@ describe("fetchSwapQuote", () => {
         vaultDecimals: 7,
       }),
     ).rejects.toThrow("Quote failed (502)");
+  });
+
+  describe("verifyZapQuote", () => {
+    it("calls /api/zap/verify and returns parsed body on success", async () => {
+      const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+        ok: true,
+        json: async () => ({ valid: true, code: "OK", reason: "ok" }),
+      } as Response);
+      const res = await verifyZapQuote({
+        quoteId: "id123",
+        inputTokenContract: "A",
+        vaultTokenContract: "B",
+        allowFallback: true,
+      });
+      expect(spy).toHaveBeenCalledWith(expect.stringContaining("/api/zap/verify"), expect.any(Object));
+      expect(res.valid).toBe(true);
+      spy.mockRestore();
+    });
+
+    it("returns error body even when response is not ok", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () =>
+          Promise.resolve({
+            ok: false,
+            status: 409,
+            json: async () => ({ valid: false, code: "QUOTE_EXPIRED", reason: "expired" }),
+          } as unknown as Response),
+        ),
+      );
+      const res = await verifyZapQuote({
+        quoteId: "id123",
+        inputTokenContract: "A",
+        vaultTokenContract: "B",
+      });
+      expect(res.valid).toBe(false);
+      expect(res.code).toBe("QUOTE_EXPIRED");
+    });
+  });
+
+  describe("isQuoteExpired / isQuoteStale", () => {
+    it("detects expired quote via expiresAt", () => {
+      const now = Date.now();
+      const quote = {
+        expiresAt: new Date(now - 1000).toISOString(),
+        quotedAt: new Date(now - 5000).toISOString(),
+        expiresInMs: 30000,
+      } as unknown as import("./types").ZapQuoteResponse;
+      expect(isQuoteExpired(quote, now)).toBe(true);
+      expect(isQuoteExpired({ ...quote, expiresAt: new Date(now + 10000).toISOString() } as unknown as import("./types").ZapQuoteResponse, now)).toBe(false);
+    });
+
+    it("detects stale quote via TTL", () => {
+      const now = Date.now();
+      const fresh = {
+        quotedAt: new Date(now - 5000).toISOString(),
+        expiresAt: new Date(now + 25000).toISOString(),
+        expiresInMs: 30000,
+      } as unknown as import("./types").ZapQuoteResponse;
+      expect(isQuoteStale(fresh, now)).toBe(false);
+      const stale = {
+        quotedAt: new Date(now - 40000).toISOString(),
+        expiresAt: new Date(now - 5000).toISOString(),
+        expiresInMs: 30000,
+      } as unknown as import("./types").ZapQuoteResponse;
+      expect(isQuoteStale(stale, now)).toBe(true);
+    });
   });
 });

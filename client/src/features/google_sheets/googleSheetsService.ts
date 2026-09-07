@@ -68,13 +68,48 @@ export class GoogleSheetsService {
     }
 
     /**
+     * Extracts a spreadsheet ID from a raw ID string or a full Google Sheets URL.
+     * Valid Google Sheet IDs are base64-like alphanumeric strings with hyphens and underscores (>= 20 characters).
+     */
+    extractSpreadsheetId(input: string): string | null {
+        if (!input || typeof input !== "string") {
+            return null;
+        }
+        const trimmed = input.trim();
+        if (!trimmed) {
+            return null;
+        }
+        const urlMatch = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+        if (urlMatch) {
+            return urlMatch[1];
+        }
+        if (/^[a-zA-Z0-9-_]{20,100}$/.test(trimmed)) {
+            return trimmed;
+        }
+        return null;
+    }
+
+    /**
+     * Checks if the given spreadsheet ID or URL is valid.
+     */
+    isValidSpreadsheetId(spreadsheetId: string): boolean {
+        return this.extractSpreadsheetId(spreadsheetId) !== null;
+    }
+
+    /**
      * Link Google account to spreadsheet
      */
     async linkSpreadsheet(spreadsheetId: string, sheetName: string): Promise<GoogleSheetsConfig> {
+        if (!this.isValidSpreadsheetId(spreadsheetId)) {
+            throw new Error("Invalid spreadsheet ID");
+        }
+
         const session = this.getSession();
         if (!session) {
             throw new Error("Not authenticated with Google");
         }
+
+        const normalizedId = this.extractSpreadsheetId(spreadsheetId) || spreadsheetId.trim();
 
         // Verify spreadsheet access
         const response = await fetch(`/api/google-sheets/verify`, {
@@ -83,7 +118,7 @@ export class GoogleSheetsService {
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${session.accessToken}`,
             },
-            body: JSON.stringify({ spreadsheetId, sheetName }),
+            body: JSON.stringify({ spreadsheetId: normalizedId, sheetName }),
         });
 
         if (!response.ok) {
@@ -91,7 +126,7 @@ export class GoogleSheetsService {
         }
 
         const config: GoogleSheetsConfig = {
-            spreadsheetId,
+            spreadsheetId: normalizedId,
             sheetName,
             isLinked: true,
             linkedAt: Date.now(),

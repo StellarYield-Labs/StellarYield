@@ -5,7 +5,6 @@
  * object-storage credentials are required.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   EventArchiveService,
   InMemoryArchiveStorage,
@@ -74,7 +73,7 @@ function makePrisma(events: ReturnType<typeof makeEvent>[] = []) {
 
   return {
     event: {
-      findMany: vi.fn().mockImplementation(({ where, orderBy, take }: {
+      findMany: jest.fn().mockImplementation(({ where, orderBy, take }: {
         where?: { contractId?: string; ledger?: { gte?: number; lte?: number }; id?: { gt?: string } };
         orderBy?: unknown;
         take?: number;
@@ -87,47 +86,56 @@ function makePrisma(events: ReturnType<typeof makeEvent>[] = []) {
         result.sort((a, b) => a.ledger - b.ledger || (a.id < b.id ? -1 : 1));
         return Promise.resolve(take ? result.slice(0, take) : result);
       }),
-      findUnique: vi.fn().mockImplementation(({ where }: { where: { id: string } }) =>
+      findUnique: jest.fn().mockImplementation(({ where }: { where: { id: string } }) =>
         Promise.resolve(events.find((e) => e.id === where.id) ?? null),
       ),
-      deleteMany: vi.fn().mockResolvedValue({ count: events.length }),
-      upsert: vi.fn().mockImplementation(({ create }: { create: ReturnType<typeof makeEvent> }) => {
+      deleteMany: jest.fn().mockResolvedValue({ count: events.length }),
+      upsert: jest.fn().mockImplementation(({ create }: { create: ReturnType<typeof makeEvent> }) => {
         const existing = events.find((e) => e.id === create.id);
         if (!existing) events.push(create);
         return Promise.resolve(create);
       }),
     },
     eventArchiveManifest: {
-      findFirst: vi.fn().mockResolvedValue(null),
-      findMany: vi.fn().mockResolvedValue([]),
-      findUnique: vi.fn().mockResolvedValue(null),
-      upsert: vi.fn().mockImplementation(({ create }: { create: ReturnType<typeof makeManifest> }) => {
+      findFirst: jest.fn().mockResolvedValue(null),
+      findMany: jest.fn().mockResolvedValue([]),
+      findUnique: jest.fn().mockResolvedValue(null),
+      upsert: jest.fn().mockImplementation(({ create }: { create: ReturnType<typeof makeManifest> }) => {
         const manifest = makeManifest(create);
         manifests.push(manifest);
         return Promise.resolve(manifest);
       }),
-      update: vi.fn().mockImplementation(({ where, data }: { where: { id: string }; data: Partial<ReturnType<typeof makeManifest>> }) => {
+      update: jest.fn().mockImplementation(({ where, data }: { where: { id: string }; data: Partial<ReturnType<typeof makeManifest>> }) => {
         const idx = manifests.findIndex((m) => m.id === where.id);
         if (idx >= 0) Object.assign(manifests[idx], data);
         return Promise.resolve(manifests[idx] ?? makeManifest(data));
       }),
     },
     archiveWorkerLock: {
-      upsert: vi.fn().mockResolvedValue({}),
-      findUnique: vi.fn().mockResolvedValue({ workerId: "any" }),
-      deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+      upsert: jest.fn().mockImplementation(({ create, update }: { create?: { id: string; workerId: string }; update?: { id: string; workerId: string } }) => {
+        const item = create || update;
+        if (item) locks[item.id] = item;
+        return Promise.resolve(item ?? {});
+      }),
+      findUnique: jest.fn().mockImplementation(({ where }: { where: { id: string } }) => {
+        return Promise.resolve(locks[where.id] ?? null);
+      }),
+      deleteMany: jest.fn().mockImplementation(({ where }: { where?: { id?: string } } = {}) => {
+        if (where?.id) delete locks[where.id];
+        return Promise.resolve({ count: 1 });
+      }),
     },
     archiveRetentionPolicy: {
-      findMany: vi.fn().mockResolvedValue(retentionPolicies),
+      findMany: jest.fn().mockResolvedValue(retentionPolicies),
     },
     legalHold: {
-      create: vi.fn().mockImplementation(({ data }: { data: { manifestId: string; reason: string; createdBy: string } }) => {
+      create: jest.fn().mockImplementation(({ data }: { data: { manifestId: string; reason: string; createdBy: string } }) => {
         const hold = { id: `hold_${Date.now()}`, ...data, releasedAt: null, releasedBy: null };
         legalHolds.push(hold);
         return Promise.resolve(hold);
       }),
-      update: vi.fn().mockResolvedValue({ id: "hold_1", manifestId: "manifest_1", releasedAt: new Date(), releasedBy: "admin" }),
-      count: vi.fn().mockResolvedValue(0),
+      update: jest.fn().mockResolvedValue({ id: "hold_1", manifestId: "manifest_1", releasedAt: new Date(), releasedBy: "admin" }),
+      count: jest.fn().mockResolvedValue(0),
     },
   };
 }
@@ -180,12 +188,6 @@ describe("EventArchiveService.archivePartition (happy path)", () => {
     const storage = new InMemoryArchiveStorage();
     const prisma = makePrisma(events) as unknown as import("@prisma/client").PrismaClient;
 
-    // After archivePartition the update() chain should have been called with state=VERIFIED then HOT_ROWS_DELETED
-    const updateMock = (prisma as unknown as ReturnType<typeof makePrisma>).eventArchiveManifest.update;
-    updateMock.mockImplementation(({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
-      return Promise.resolve(makeManifest({ id: where.id, ...data }));
-    });
-
     const svc = new EventArchiveService(prisma, storage, { sampleVerificationCount: 2 });
     const manifest = await svc.archivePartition({ network: "testnet", contractId: "CONTRACT_A", ledgerStart: 1000, ledgerEnd: 1999 });
 
@@ -193,7 +195,7 @@ describe("EventArchiveService.archivePartition (happy path)", () => {
     expect(await storage.exists(manifest.objectKey)).toBe(true);
 
     // The upsert was called to create the manifest
-    expect((prisma as unknown as ReturnType<typeof makePrisma>).eventArchiveManifest.upsert).toHaveBeenCalledOnce();
+    expect((prisma as unknown as ReturnType<typeof makePrisma>).eventArchiveManifest.upsert).toHaveBeenCalledTimes(1);
   });
 
   it("produces a content address that changes when the event data changes", async () => {
@@ -204,13 +206,6 @@ describe("EventArchiveService.archivePartition (happy path)", () => {
     const storage2 = new InMemoryArchiveStorage();
     const prisma1 = makePrisma(events1) as unknown as import("@prisma/client").PrismaClient;
     const prisma2 = makePrisma(events2) as unknown as import("@prisma/client").PrismaClient;
-
-    for (const p of [prisma1, prisma2]) {
-      (p as unknown as ReturnType<typeof makePrisma>).eventArchiveManifest.update.mockImplementation(
-        ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) =>
-          Promise.resolve(makeManifest({ id: where.id, ...data })),
-      );
-    }
 
     const svc1 = new EventArchiveService(prisma1, storage1);
     const svc2 = new EventArchiveService(prisma2, storage2);
@@ -320,17 +315,12 @@ describe("EventArchiveService.streamArchive", () => {
     const storage = new InMemoryArchiveStorage();
     const prisma = makePrisma(events) as unknown as import("@prisma/client").PrismaClient;
 
-    (prisma as unknown as ReturnType<typeof makePrisma>).eventArchiveManifest.update.mockImplementation(
-      ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) =>
-        Promise.resolve(makeManifest({ id: where.id, ...data })),
-    );
-
     const svc = new EventArchiveService(prisma, storage);
     const manifest = await svc.archivePartition({ network: "testnet", contractId: "CONTRACT_A", ledgerStart: 500, ledgerEnd: 699 });
 
     // findUnique should return the stored manifest so streamArchive can find the objectKey
     (prisma as unknown as ReturnType<typeof makePrisma>).eventArchiveManifest.findUnique.mockResolvedValue(
-      makeManifest({ id: manifest.id, objectKey: manifest.objectKey }),
+      manifest,
     );
 
     const yielded: string[] = [];
@@ -363,15 +353,12 @@ describe("EventArchiveService.getStats", () => {
 
 describe("EventArchiveService — idempotency", () => {
   it("does not duplicate storage writes when archivePartition is called twice", async () => {
-    const events = [makeEvent({ id: "e1", ledger: 100 })];
+    const events = [makeEvent({ id: "e1", ledger: 100, contractId: "C" })];
     const storage = new InMemoryArchiveStorage();
-    const putSpy = vi.spyOn(storage, "put");
+    const putSpy = jest.spyOn(storage, "put");
 
     const prisma = makePrisma(events) as unknown as import("@prisma/client").PrismaClient;
-    (prisma as unknown as ReturnType<typeof makePrisma>).eventArchiveManifest.update.mockImplementation(
-      ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) =>
-        Promise.resolve(makeManifest({ id: where.id, ...data })),
-    );
+
     // Second call: findFirst returns a VERIFIED manifest (already advanced past STAGED)
     (prisma as unknown as ReturnType<typeof makePrisma>).eventArchiveManifest.findFirst
       .mockResolvedValueOnce(null) // first call: no existing manifest
@@ -382,6 +369,6 @@ describe("EventArchiveService — idempotency", () => {
     await svc.archivePartition({ network: "testnet", contractId: "C", ledgerStart: 100, ledgerEnd: 199 });
 
     // Storage.put should only have been called once (second invocation short-circuits)
-    expect(putSpy).toHaveBeenCalledOnce();
+    expect(putSpy).toHaveBeenCalledTimes(1);
   });
 });

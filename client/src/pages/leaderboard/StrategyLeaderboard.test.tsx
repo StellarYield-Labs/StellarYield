@@ -9,7 +9,7 @@ vi.mock("../../lib/api", () => ({
 
 // Mock ConfidenceBadge component
 vi.mock("../../components/AIAdvisor/ConfidenceBadge", () => ({
-  ConfidenceBadge: ({ confidence }: { confidence: any }) => (
+  ConfidenceBadge: ({ confidence }: { confidence: unknown }) => (
     <div data-testid="confidence-badge">Confidence: {JSON.stringify(confidence)}</div>
   ),
 }));
@@ -419,6 +419,73 @@ describe("StrategyLeaderboard", () => {
         expect(screen.getByText("10.20%")).toBeInTheDocument();
         expect(screen.getByText("8.50%")).toBeInTheDocument();
       });
+    });
+
+    it("renders readable fallback when APY is missing without displaying undefined or NaN (#169)", async () => {
+      const dataWithMissingApy = {
+        ...mockStrategyData,
+        items: [
+          {
+            rank: 1,
+            id: "strategy-missing-apy",
+            name: "Missing APY Strategy",
+            strategyType: "blend",
+            tvlUsd: 1000000,
+            riskScore: 8.5,
+            riskAdjustedYield: 1.471,
+            drawdownProxy: 0.05,
+          },
+          {
+            rank: 2,
+            id: "strategy-null-apy",
+            name: "Null APY Strategy",
+            strategyType: "soroswap",
+            apy: null,
+            tvlUsd: 750000,
+            riskScore: 7.2,
+            riskAdjustedYield: 1.417,
+            drawdownProxy: 0.08,
+          },
+          {
+            rank: 3,
+            id: "strategy-valid-apy",
+            name: "Valid APY Strategy",
+            strategyType: "defindex",
+            apy: 9.85,
+            tvlUsd: 500000,
+            riskScore: 9.0,
+            riskAdjustedYield: 0.944,
+            drawdownProxy: 0.02,
+          },
+        ],
+      };
+
+      (global.fetch as ReturnType<typeof vi.fn>).mockImplementation((url) => {
+        if (url.includes("/api/strategies/leaderboard")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => dataWithMissingApy,
+          } as Response);
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => mockRotationData,
+        } as Response);
+      });
+
+      render(<StrategyLeaderboard />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Missing APY Strategy")).toBeInTheDocument();
+      });
+
+      const fallbackBadges = screen.getAllByText("N/A");
+      expect(fallbackBadges).toHaveLength(2);
+      expect(screen.getByText("9.85%")).toBeInTheDocument();
+
+      // Ensure neither undefined nor NaN is displayed
+      expect(screen.queryByText(/undefined/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/NaN/i)).not.toBeInTheDocument();
     });
 
     it("displays risk scores with color coding", async () => {

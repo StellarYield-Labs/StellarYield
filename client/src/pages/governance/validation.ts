@@ -1,5 +1,9 @@
 import * as StellarSdk from "@stellar/stellar-sdk";
 import type { AdminAction, AdminActionOption } from "./types";
+import {
+  parseSignerInput,
+  validateThresholdUpdate,
+} from "./thresholdPreviewHash";
 
 export interface ValidationError {
   field: string;
@@ -28,6 +32,8 @@ export function getRiskLevel(action: AdminAction): "low" | "medium" | "high" | "
     case "register_keeper":
     case "set_keeper_fee":
       return "medium";
+    case "update_threshold":
+      return "high";
     default:
       return "low";
   }
@@ -109,6 +115,11 @@ export function validateTransactionBuilder(
             field: field.name,
             message: `${field.label} must be greater than 0`,
           });
+        } else if (field.name === "new_threshold" && !validateNumber(value, 1)) {
+          errors.push({
+            field: field.name,
+            message: `${field.label} must be at least 1`,
+          });
         } else if (!validateNumber(value)) {
           errors.push({
             field: field.name,
@@ -135,6 +146,14 @@ export function validateTransactionBuilder(
     }
   }
 
+  if (action.method === "update_threshold") {
+    const signers = parseSignerInput(fieldValues.signers ?? "");
+    const threshold = Number(fieldValues.new_threshold);
+    for (const thresholdError of validateThresholdUpdate({ signers, threshold })) {
+      errors.push(thresholdError);
+    }
+  }
+
   // Build target description
   let target = "N/A";
   if (action.method === "register_keeper" || action.method === "remove_keeper") {
@@ -148,6 +167,11 @@ export function validateTransactionBuilder(
   } else if (action.method === "set_fee_bounds") {
     target = fieldValues.min_bps && fieldValues.max_bps
       ? `${fieldValues.min_bps}-${fieldValues.max_bps} bps`
+      : "Not specified";
+  } else if (action.method === "update_threshold") {
+    const signers = parseSignerInput(fieldValues.signers ?? "");
+    target = signers.length > 0
+      ? `${fieldValues.new_threshold ?? "?"} of ${signers.length} signers`
       : "Not specified";
   }
 

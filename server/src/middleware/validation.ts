@@ -30,5 +30,28 @@ export function validateZapQuote(req: Request, res: Response, next: NextFunction
     sendError(res, 400, "INVALID_AMOUNT", "amountInStroops must be an integer string.");
     return;
   }
+  // slippageTolerance is clamped in getZapQuote for backward compatibility; invalid values are handled at verify time
+  next();
+}
+
+export function validateZapVerify(req: Request, res: Response, next: NextFunction): void {
+  const { quoteId, inputTokenContract, vaultTokenContract } = req.body;
+  if (!quoteId || !inputTokenContract || !vaultTokenContract) {
+    sendError(res, 400, "MISSING_FIELDS", "quoteId, inputTokenContract, and vaultTokenContract are required for verification.");
+    return;
+  }
+  if (typeof quoteId !== "string" || quoteId.trim().length === 0) {
+    sendError(res, 400, "INVALID_QUOTE_ID", "quoteId must be a non-empty string.");
+    return;
+  }
+  if (req.body.slippageTolerance !== undefined) {
+    const s = Number(req.body.slippageTolerance);
+    if (!Number.isFinite(s) || s < 0.001 || s > 0.15) {
+      // Allow out-of-bounds to be handled as validation error but block obviously invalid
+      // For strict API, reject here
+      sendError(res, 400, "INVALID_SLIPPAGE", "slippageTolerance must be a number between 0.001 and 0.15.");
+      return;
+    }
+  }
   next();
 }

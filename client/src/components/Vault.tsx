@@ -5,6 +5,7 @@ import { ZapDepositPanel } from "../features/zap";
 import { useWallet } from "../context/useWallet";
 import { useVaultOgMeta } from "../hooks/useVaultOgMeta";
 import { RecoveryAdvisor } from "./AIAdvisor/RecoveryAdvisor";
+import { VaultAccessPanel } from "../features/vaultAccess/VaultAccessPanel";
 import { fetchVaultStats, type VaultStats, formatTvl, validateVaultSlug } from "../lib/vaultData";
 
 /**
@@ -165,6 +166,10 @@ export default function Vault() {
 
       <div className="glass-panel p-8 mt-8 max-w-3xl w-full text-left">
         <ZapDepositPanel walletAddress={walletAddress} />
+      </div>
+
+      <div className="max-w-3xl w-full text-left mt-6">
+        <VaultAccessPanel vaultId={activeSlug} />
       </div>
     </div>
   );
