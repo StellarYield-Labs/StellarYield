@@ -22,6 +22,7 @@ export interface ReplayProtectionStatus {
 
 export interface RelayerStatus {
   isOnline: boolean;
+  serviceState: "online" | "degraded" | "offline";
   network: string;
   queueDepth: number;
   totalRelayed: number;
@@ -30,16 +31,27 @@ export interface RelayerStatus {
   successRate: number; // 0-100
   avgDurationMs: number;
   lastRelayAt: string | null;
+  lastRelayAgeMs: number | null;
   recentEvents: RelayEvent[];
   replayProtection: ReplayProtectionStatus;
   uptime: string;
   checkedAt: string;
+  alerts: string[];
 }
 
 // ── In-memory state ───────────────────────────────────────────────────────
 
 const MAX_EVENTS = 100;
 const DEDUP_WINDOW_HOURS = 24;
+const DEGRADED_AFTER_MS = Number(
+  process.env.RELAYER_STATUS_DEGRADED_AFTER_MS ?? 5 * 60 * 1000,
+);
+const OFFLINE_AFTER_MS = Number(
+  process.env.RELAYER_STATUS_OFFLINE_AFTER_MS ?? 15 * 60 * 1000,
+);
+const DEGRADED_QUEUE_DEPTH = Number(
+  process.env.RELAYER_STATUS_DEGRADED_QUEUE_DEPTH ?? 10,
+);
 
 const events: RelayEvent[] = [];
 const seenHashes = new Map<string, number>(); // hash -> timestamp ms
@@ -60,19 +72,25 @@ export function recordRelaySuccess(
   durationMs: number,
   innerTxHash?: string,
   feeBumpHash?: string,
+  timestamp = new Date().toISOString(),
 ): void {
   pendingCount = Math.max(0, pendingCount - 1);
 
+  const eventTimestampMs = new Date(timestamp).getTime();
+  const hashTimestamp = Number.isFinite(eventTimestampMs)
+    ? eventTimestampMs
+    : Date.now();
+
   if (innerTxHash) {
-    seenHashes.set(innerTxHash, Date.now());
+    seenHashes.set(innerTxHash, hashTimestamp);
   }
   if (feeBumpHash) {
-    seenHashes.set(feeBumpHash, Date.now());
+    seenHashes.set(feeBumpHash, hashTimestamp);
   }
 
   events.unshift({
     id,
-    timestamp: new Date().toISOString(),
+    timestamp,
     status: "success",
     innerTxHash,
     feeBumpHash,
@@ -80,15 +98,20 @@ export function recordRelaySuccess(
   });
 
   if (events.length > MAX_EVENTS) events.length = MAX_EVENTS;
-  pruneSeenHashes();
+  pruneSeenHashes(hashTimestamp);
 }
 
-export function recordRelayFailure(id: string, durationMs: number, error: string): void {
+export function recordRelayFailure(
+  id: string,
+  durationMs: number,
+  error: string,
+  timestamp = new Date().toISOString(),
+): void {
   pendingCount = Math.max(0, pendingCount - 1);
 
   events.unshift({
     id,
-    timestamp: new Date().toISOString(),
+    timestamp,
     status: "failed",
     error,
     durationMs,
@@ -101,8 +124,8 @@ export function isHashSeen(hash: string): boolean {
   return seenHashes.has(hash);
 }
 
-export function getRelayerStatus(): RelayerStatus {
-  pruneSeenHashes();
+export function getRelayerStatus(now = Date.now()): RelayerStatus {
+  pruneSeenHashes(now);
 
   const successCount = events.filter((e) => e.status === "success").length;
   const failureCount = events.filter((e) => e.status === "failed").length;
@@ -117,15 +140,19 @@ export function getRelayerStatus(): RelayerStatus {
       ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length)
       : 0;
 
-  const lastRelayAt = events.length > 0 ? events[0].timestamp : null;
+  const lastSuccessfulRelay = events.find((event) => event.status === "success");
+  const lastRelayAt = lastSuccessfulRelay?.timestamp ?? null;
+  const lastRelayAgeMs =
+    lastRelayAt !== null
+      ? Math.max(0, now - new Date(lastRelayAt).getTime())
+      : null;
 
   // Uptime since service started
-  const uptimeMs = Date.now() - startedAt;
+  const uptimeMs = now - startedAt;
   const uptimeHours = Math.floor(uptimeMs / (1000 * 60 * 60));
   const uptimeMinutes = Math.floor((uptimeMs % (1000 * 60 * 60)) / (1000 * 60));
 
   // Replay protection
-  const now = Date.now();
   const cutoff = now - DEDUP_WINDOW_HOURS * 60 * 60 * 1000;
   let oldestHashAge: string | null = null;
   let oldestTs = now;
@@ -140,8 +167,34 @@ export function getRelayerStatus(): RelayerStatus {
     oldestHashAge = ageMinutes < 60 ? `${ageMinutes}m` : `${Math.floor(ageMinutes / 60)}h ${ageMinutes % 60}m`;
   }
 
+  const alerts: string[] = [];
+  let serviceState: RelayerStatus["serviceState"] = "online";
+
+  if (pendingCount >= DEGRADED_QUEUE_DEPTH) {
+    alerts.push(`Relay queue depth is elevated (${pendingCount}).`);
+  }
+
+  if (lastRelayAgeMs !== null && lastRelayAgeMs > DEGRADED_AFTER_MS) {
+    alerts.push(
+      `Last successful relay is stale (${Math.round(lastRelayAgeMs / 1000)}s ago).`,
+    );
+  }
+
+  if (failureCount > 0 && totalRelayed >= 3 && successRate < 80) {
+    alerts.push(
+      `Recent relay failures are elevated (${failureCount}/${totalRelayed} failed).`,
+    );
+  }
+
+  if (lastRelayAgeMs !== null && lastRelayAgeMs > OFFLINE_AFTER_MS) {
+    serviceState = "offline";
+  } else if (alerts.length > 0) {
+    serviceState = "degraded";
+  }
+
   return {
-    isOnline: true,
+    isOnline: serviceState !== "offline",
+    serviceState,
     network: process.env.NETWORK_PASSPHRASE?.includes("TESTNET") ? "testnet" : "mainnet",
     queueDepth: pendingCount,
     totalRelayed,
@@ -150,6 +203,7 @@ export function getRelayerStatus(): RelayerStatus {
     successRate,
     avgDurationMs,
     lastRelayAt,
+    lastRelayAgeMs,
     recentEvents: events.slice(0, 20),
     replayProtection: {
       enabled: true,
@@ -158,15 +212,22 @@ export function getRelayerStatus(): RelayerStatus {
       deduplicationWindow: `${DEDUP_WINDOW_HOURS}h`,
     },
     uptime: `${uptimeHours}h ${uptimeMinutes}m`,
-    checkedAt: new Date().toISOString(),
+    checkedAt: new Date(now).toISOString(),
+    alerts,
   };
 }
 
 // ── Internal ──────────────────────────────────────────────────────────────
 
-function pruneSeenHashes(): void {
-  const cutoff = Date.now() - DEDUP_WINDOW_HOURS * 60 * 60 * 1000;
+function pruneSeenHashes(now = Date.now()): void {
+  const cutoff = now - DEDUP_WINDOW_HOURS * 60 * 60 * 1000;
   for (const [hash, ts] of seenHashes) {
     if (ts < cutoff) seenHashes.delete(hash);
   }
+}
+
+export function resetRelayerStatusForTests(): void {
+  events.length = 0;
+  seenHashes.clear();
+  pendingCount = 0;
 }

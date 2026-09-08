@@ -12,6 +12,26 @@ issue.md
 pr.md
 backend/matching_engine/target
 
+# ── Local generated issue helper artifacts ───────────────────────────────────
+# Keep one-off issue publishing drafts/scripts local unless intentionally
+# promoted to reviewed repository tooling.
+.generated-issues/
+generated-issues/
+issue-drafts/
+scripts/generated-issues/
+scripts/generated-issue-*.js
+scripts/generated-issue-*.mjs
+scripts/generated-issue-*.ts
+scripts/create-github-issues.js
+scripts/create-github-issues.mjs
+scripts/create-github-issues.ts
+scripts/publish-github-issues.js
+scripts/publish-github-issues.mjs
+scripts/publish-github-issues.ts
+scripts/sync-github-issues.js
+scripts/sync-github-issues.mjs
+scripts/sync-github-issues.ts
+
 # ── Build outputs ────────────────────────────────────────────────────────────
 .next/
 *.tsbuildinfo

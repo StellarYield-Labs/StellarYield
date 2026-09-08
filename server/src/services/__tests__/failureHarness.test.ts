@@ -43,6 +43,7 @@ import {
   recordRelayStart,
   recordRelayFailure,
   recordRelaySuccess,
+  resetRelayerStatusForTests,
 } from "../relayerStatusService";
 
 import {
@@ -50,6 +51,13 @@ import {
   type OrchestrationConfig,
   type StrategyModule,
 } from "../vaultOrchestratorService";
+
+import { runRebalanceQueueProcessorJob } from "../../jobs/rebalanceQueueProcessorJob";
+import { REBALANCE_STATUS, EXECUTION_TYPE } from "../../queues/types";
+import type {
+  RebalanceExecutionResult,
+  RebalanceQueueEntryDTO,
+} from "../rebalanceQueueService";
 
 import {
   traverseFallbackTree,
@@ -79,6 +87,7 @@ function makeFreshReading(price: number): OracleReading {
 beforeEach(() => {
   clearDeviationLog();
   resetFeeBaseline();
+  resetRelayerStatusForTests();
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -148,6 +157,43 @@ describe("Failure class: TIMEOUT", () => {
     expect(result.selectedNode?.id).toBe("backup");
     expect(result.terminalFailure).toBe(false);
   });
+
+  it("rebalance execution schedules a failed attempt when the executor times out", async () => {
+    const queueEntry = createQueueEntry();
+    const service = createQueueServiceHarness(queueEntry);
+
+    const result = await runRebalanceQueueProcessorJob(
+      {
+        enabled: true,
+        batchSize: 10,
+        enableRetries: true,
+        enableDeferredProcessing: false,
+        logResults: false,
+      },
+      {
+        queueService: service,
+        executeRebalance: async () => {
+          const harness = buildHarnessFor(
+            async () =>
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error("Timeout after 100ms")), 100),
+              ),
+          );
+          const timedOut = await harness.inject(FailureMode.TIMEOUT, { delayMs: 25 });
+          if (timedOut.error) throw timedOut.error;
+          throw new Error("Expected timeout result.");
+        },
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.failedProcessing).toBe(1);
+    const failedCall = service.recordFailedAttempt.mock.calls[0] as unknown as
+      | [string, string, unknown]
+      | undefined;
+    expect(failedCall?.[0]).toBe(queueEntry.id);
+    expect(String(failedCall?.[1])).toMatch(/timeout/i);
+  });
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -192,6 +238,16 @@ describe("Failure class: STALE_DATA", () => {
     expect(status.checkedAt).toBeTruthy();
   });
 
+  it("relayer degrades when the last successful relay is stale", () => {
+    const staleTimestamp = new Date(Date.now() - 6 * 60_000).toISOString();
+    const id = recordRelayStart();
+    recordRelaySuccess(id, 120, "inner-stale", undefined, staleTimestamp);
+
+    const status = getRelayerStatus();
+    expect(status.serviceState).toBe("degraded");
+    expect(status.alerts.some((reason) => /stale/i.test(reason))).toBe(true);
+  });
+
   it("fee oracle deviation detects stale baseline (no recent samples)", () => {
     // First call sets baseline to 100
     checkFeeDeviation(100);
@@ -213,6 +269,42 @@ describe("Failure class: STALE_DATA", () => {
         },
       ),
     );
+  });
+
+  it("rebalance execution rejects stale execution results", async () => {
+    const queueEntry = createQueueEntry();
+    const service = createQueueServiceHarness(queueEntry);
+
+    const result = await runRebalanceQueueProcessorJob(
+      {
+        enabled: true,
+        batchSize: 10,
+        enableRetries: true,
+        enableDeferredProcessing: false,
+        logResults: false,
+      },
+      {
+        queueService: service,
+        executeRebalance: async () => ({
+          queueEntryId: queueEntry.id,
+          totalExecuted: 100,
+          expectedAmount: 100,
+          filledPercentage: 100,
+          executionDetails: {
+            status: "completed",
+            timestamp: new Date(Date.now() - 10 * 60_000).toISOString(),
+          },
+        }),
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.failedProcessing).toBe(1);
+    const failedCall = service.recordFailedAttempt.mock.calls[0] as unknown as
+      | [string, string, unknown]
+      | undefined;
+    expect(failedCall?.[0]).toBe(queueEntry.id);
+    expect(String(failedCall?.[1])).toMatch(/stale/i);
   });
 });
 
@@ -294,6 +386,40 @@ describe("Failure class: MALFORMED_RESPONSE", () => {
     // Should detect cycle and report terminal failure without hanging
     expect(result.terminalFailure).toBe(true);
   });
+
+  it("rebalance execution rejects malformed executor output", async () => {
+    const queueEntry = createQueueEntry();
+    const service = createQueueServiceHarness(queueEntry);
+
+    const result = await runRebalanceQueueProcessorJob(
+      {
+        enabled: true,
+        batchSize: 10,
+        enableRetries: true,
+        enableDeferredProcessing: false,
+        logResults: false,
+      },
+      {
+        queueService: service,
+        executeRebalance: async () =>
+          ({
+            queueEntryId: "",
+            totalExecuted: Number.NaN,
+            expectedAmount: 100,
+            filledPercentage: 150,
+            executionDetails: null,
+          } as unknown as RebalanceExecutionResult),
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.failedProcessing).toBe(1);
+    const failedCall = service.recordFailedAttempt.mock.calls[0] as unknown as
+      | [string, string, unknown]
+      | undefined;
+    expect(failedCall?.[0]).toBe(queueEntry.id);
+    expect(String(failedCall?.[1])).toMatch(/malformed/i);
+  });
 });
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -319,6 +445,39 @@ describe("Failure class: RATE_LIMIT", () => {
     expect(status.failureCount).toBeGreaterThan(0);
     expect(status.queueDepth).toBe(0);
     expect(status.successRate).toBeLessThan(100);
+  });
+
+  it("rebalance execution records a retryable failure when the executor is rate-limited", async () => {
+    const queueEntry = createQueueEntry();
+    const service = createQueueServiceHarness(queueEntry);
+    const rateLimitError = Object.assign(new Error("HTTP 429 Too Many Requests"), {
+      status: 429,
+      retryAfter: 30,
+    });
+
+    const result = await runRebalanceQueueProcessorJob(
+      {
+        enabled: true,
+        batchSize: 10,
+        enableRetries: true,
+        enableDeferredProcessing: false,
+        logResults: false,
+      },
+      {
+        queueService: service,
+        executeRebalance: async () => {
+          throw rateLimitError;
+        },
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.failedProcessing).toBe(1);
+    const failedCall = service.recordFailedAttempt.mock.calls[0] as unknown as
+      | [string, string, unknown]
+      | undefined;
+    expect(failedCall?.[0]).toBe(queueEntry.id);
+    expect(String(failedCall?.[1])).toMatch(/429/i);
   });
 
   it("oracle always blocks when rate-limit causes missing reading", () => {
@@ -426,6 +585,33 @@ describe("Failure class: HARD_FAILURE", () => {
     expect(result.terminalFailure).toBe(true);
     expect(result.selectedNode).toBeNull();
     expect(result.nodesEvaluated).toBe(3);
+  });
+
+  it("rebalance execution fails closed on hard upstream failures", async () => {
+    const queueEntry = createQueueEntry();
+    const service = createQueueServiceHarness(queueEntry);
+
+    const result = await runRebalanceQueueProcessorJob(
+      {
+        enabled: true,
+        batchSize: 10,
+        enableRetries: true,
+        enableDeferredProcessing: false,
+        logResults: false,
+      },
+      {
+        queueService: service,
+        executeRebalance: async () => {
+          throw Object.assign(new Error("upstream service unavailable"), {
+            code: "ECONNREFUSED",
+          });
+        },
+      },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.failedProcessing).toBe(1);
+    expect(service.recordFailedAttempt).toHaveBeenCalled();
   });
 
   it("VaultOrchestrator reports composition invalid when all strategies are inactive", () => {
@@ -563,6 +749,57 @@ describe("Fail-closed properties (PBT)", () => {
     );
   });
 });
+
+function createQueueEntry(overrides: Partial<RebalanceQueueEntryDTO> = {}): RebalanceQueueEntryDTO {
+  const now = new Date();
+  return {
+    id: "queue-1",
+    vaultId: "vault-1",
+    status: REBALANCE_STATUS.PENDING,
+    executionType: EXECUTION_TYPE.FULL,
+    targetAllocations: { Blend: 0.6, Soroswap: 0.4 },
+    currentAllocations: { Blend: 0.5, Soroswap: 0.5 },
+    executionStrategy: {},
+    partiallyExecuted: false,
+    partialFillAmount: 0,
+    intentHash: "intent-1",
+    attemptCount: 0,
+    maxRetries: 3,
+    nextRetryAt: null,
+    deferredUntil: null,
+    followUpEntryId: null,
+    lastError: null,
+    completedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  };
+}
+
+function createQueueServiceHarness(entry: RebalanceQueueEntryDTO) {
+  return {
+    getPendingRetries: jest.fn(async () => [entry]),
+    getDeferredEntries: jest.fn(async () => []),
+    markAsProcessing: jest.fn(async () => ({
+      ...entry,
+      status: REBALANCE_STATUS.PROCESSING,
+    })),
+    recordPartialExecution: jest.fn(async () => ({
+      ...entry,
+      status: REBALANCE_STATUS.COMPLETED,
+      partiallyExecuted: false,
+      partialFillAmount: 100,
+      completedAt: new Date(),
+    })),
+    recordFailedAttempt: jest.fn(async () => ({
+      ...entry,
+      status: REBALANCE_STATUS.FAILED,
+      attemptCount: entry.attemptCount + 1,
+      lastError: "Job processing failed",
+      completedAt: new Date(),
+    })),
+  };
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // RETRY & FALLBACK ASSERTIONS

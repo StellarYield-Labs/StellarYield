@@ -5,14 +5,25 @@ const http = require('http');
 const fs = require('fs');
 const { URL } = require('url');
 
-// Configuration from environment variables
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3001';
+const API_BASE_URL =
+  process.env.API_BASE_URL ||
+  process.env.PREVIEW_API_BASE_URL ||
+  process.env.VITE_API_BASE_URL ||
+  process.env.VITE_API_URL ||
+  process.env.BACKEND_URL ||
+  'http://localhost:3001';
+const BACKEND_URL = process.env.BACKEND_URL || API_BASE_URL;
 const BACKEND_HEALTH_PATH = process.env.BACKEND_HEALTH_PATH || '/api/health';
 const BACKEND_YIELDS_PATH = process.env.BACKEND_YIELDS_PATH || '/api/yields';
 const BACKEND_SAFE_PATH = process.env.BACKEND_SAFE_PATH || '/api/openapi';
 const FRONTEND_ASSET_PATH = process.env.FRONTEND_ASSET_PATH || '/favicon.svg';
-const FRONTEND_API_BASE_URL = process.env.VITE_API_BASE_URL || process.env.VITE_API_URL || '';
+const FRONTEND_API_BASE_URL =
+  process.env.VITE_API_BASE_URL ||
+  process.env.VITE_API_URL ||
+  process.env.PREVIEW_API_BASE_URL ||
+  process.env.API_BASE_URL ||
+  '';
 
 function parseArgs(argv) {
   const flags = new Set();
@@ -29,32 +40,77 @@ function parseArgs(argv) {
   return { flags, opts };
 }
 
-/**
- * Make HTTP request and return status code
- * @param {string} url - URL to test
- * @returns {Promise<number>} HTTP status code (000 if unreachable)
- */
-function getStatusCode(url) {
+function diagnosticForRequestError(error) {
+  if (error.code === 'ENOTFOUND' || error.code === 'EAI_AGAIN') {
+    return `DNS lookup failed (${error.code}). Check the hostname and deployment DNS.`;
+  }
+  if (error.code === 'ECONNREFUSED') {
+    return 'Connection refused. The service may be down or listening on a different port.';
+  }
+  if (error.code === 'ECONNRESET') {
+    return 'Connection reset before a response was received. Check TLS or proxy configuration.';
+  }
+  return error.message || 'Request failed before receiving an HTTP response.';
+}
+
+function requestUrl(url, options = {}) {
   return new Promise((resolve) => {
     try {
       const parsedUrl = new URL(url);
       const client = parsedUrl.protocol === 'https:' ? https : http;
 
-      const req = client.request(url, { method: 'GET', timeout: 10000 }, (res) => {
-        resolve(res.statusCode || 0);
-      });
+      const req = client.request(
+        url,
+        { method: options.method || 'GET', timeout: 10000, headers: options.headers || {} },
+        (res) => {
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', (chunk) => {
+            body += chunk;
+            if (body.length > 64_000) {
+              body = body.slice(0, 64_000);
+              req.destroy();
+            }
+          });
+          res.on('end', () => {
+            resolve({ httpCode: res.statusCode || 0, headers: res.headers, body });
+          });
+        },
+      );
 
-      req.on('error', () => resolve(0));
+      req.on('error', (error) => {
+        resolve({ httpCode: 0, headers: {}, body: '', message: diagnosticForRequestError(error) });
+      });
       req.on('timeout', () => {
         req.destroy();
-        resolve(0);
+        resolve({
+          httpCode: 0,
+          headers: {},
+          body: '',
+          message: 'Request timed out after 10s. Check the target URL and network path.',
+        });
       });
 
       req.end();
-    } catch (_error) {
-      resolve(0);
+    } catch (error) {
+      resolve({
+        httpCode: 0,
+        headers: {},
+        body: '',
+        message: `Invalid URL: ${error instanceof Error ? error.message : String(error)}`,
+      });
     }
   });
+}
+
+/**
+ * Make HTTP request and return status code
+ * @param {string} url - URL to test
+ * @returns {Promise<number>} HTTP status code (000 if unreachable)
+ */
+async function getStatusCode(url) {
+  const result = await requestUrl(url);
+  return result.httpCode;
 }
 
 /**
@@ -64,7 +120,8 @@ function getStatusCode(url) {
  * @returns {Promise<boolean>} True if test passes
  */
 async function expect200(label, url) {
-  const status = await getStatusCode(url);
+  const result = await requestUrl(url);
+  const status = result.httpCode;
 
   if (status === 200) {
     console.log(`[PASS] ${label} (200)`);
@@ -73,7 +130,7 @@ async function expect200(label, url) {
   if (status === 0) {
     console.log(`[FAIL] ${label} (unreachable)`);
     console.log(`   URL: ${url}`);
-    console.log(`   Hint: set FRONTEND_URL/BACKEND_URL to deployed URLs or start local services.`);
+    console.log(`   Hint: ${result.message || 'set FRONTEND_URL/API_BASE_URL to deployed URLs or start local services.'}`);
   } else {
     console.log(`[FAIL] ${label} (${status})`);
     console.log(`   URL: ${url}`);
@@ -98,7 +155,7 @@ function validateFrontendApiConfig() {
   if (!FRONTEND_API_BASE_URL.trim()) {
     return {
       ok: false,
-      message: 'Set VITE_API_BASE_URL or VITE_API_URL for deployed frontend smoke tests.',
+      message: 'Set API_BASE_URL, PREVIEW_API_BASE_URL, VITE_API_BASE_URL, or VITE_API_URL for deployed frontend smoke tests.',
     };
   }
 
@@ -112,6 +169,45 @@ function validateFrontendApiConfig() {
   return { ok: true, message: `Frontend API base: ${FRONTEND_API_BASE_URL}` };
 }
 
+function jsonShapeDiagnostic(body) {
+  try {
+    const parsed = JSON.parse(body);
+    if (parsed === null || (typeof parsed !== 'object' && !Array.isArray(parsed))) {
+      return 'JSON shape failure: expected an object or array response.';
+    }
+    return '';
+  } catch (error) {
+    return `JSON parse failure: ${error instanceof Error ? error.message : String(error)}`;
+  }
+}
+
+async function corsDiagnostic(url) {
+  const result = await requestUrl(url, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: FRONTEND_URL,
+      'Access-Control-Request-Method': 'GET',
+    },
+  });
+  const allowOrigin = result.headers['access-control-allow-origin'];
+  const allowed =
+    allowOrigin === '*' ||
+    allowOrigin === FRONTEND_URL ||
+    (Array.isArray(allowOrigin) && (allowOrigin.includes('*') || allowOrigin.includes(FRONTEND_URL)));
+
+  if ((result.httpCode === 200 || result.httpCode === 204) && allowed) {
+    return { ok: true, message: 'CORS preflight allows the configured frontend origin.' };
+  }
+
+  return {
+    ok: false,
+    message:
+      result.httpCode === 0
+        ? result.message || 'CORS preflight was unreachable.'
+        : `CORS preflight returned ${result.httpCode}; access-control-allow-origin=${String(allowOrigin || 'missing')}.`,
+  };
+}
+
 /**
  * Run all four smoke checks and return structured results (always runs every check).
  * @returns {Promise<{ ok: boolean, rows: { label: string, url: string, httpCode: number }[] }>}
@@ -121,9 +217,18 @@ async function collectSmokeResults() {
   const tests = [
     {
       label: 'Frontend API env',
-      url: 'VITE_API_BASE_URL || VITE_API_URL',
+      url: 'API_BASE_URL || PREVIEW_API_BASE_URL || VITE_API_BASE_URL || VITE_API_URL',
       config: validateFrontendApiConfig(),
     },
+    ...(!isLocalUrl(FRONTEND_URL)
+      ? [
+          {
+            label: 'Backend CORS preflight',
+            url: `${BACKEND_URL}${BACKEND_HEALTH_PATH}`,
+            cors: true,
+          },
+        ]
+      : []),
     {
       label: `Backend ${BACKEND_HEALTH_PATH}`,
       url: `${BACKEND_URL}${BACKEND_HEALTH_PATH}`,
@@ -131,6 +236,7 @@ async function collectSmokeResults() {
     {
       label: `Backend ${BACKEND_YIELDS_PATH}`,
       url: `${BACKEND_URL}${BACKEND_YIELDS_PATH}`,
+      json: true,
     },
     {
       label: `Backend ${BACKEND_SAFE_PATH}`,
@@ -158,8 +264,19 @@ async function collectSmokeResults() {
       });
       continue;
     }
-    const code = await getStatusCode(t.url);
-    rows.push({ label: t.label, url: t.url, httpCode: code });
+    if (t.cors) {
+      const diagnostic = await corsDiagnostic(t.url);
+      rows.push({
+        label: t.label,
+        url: t.url,
+        httpCode: diagnostic.ok ? 200 : 0,
+        message: diagnostic.message,
+      });
+      continue;
+    }
+    const result = await requestUrl(t.url);
+    const message = t.json && result.httpCode === 200 ? jsonShapeDiagnostic(result.body) : result.message;
+    rows.push({ label: t.label, url: t.url, httpCode: message ? 0 : result.httpCode, message });
   }
   const ok = rows.every((r) => r.httpCode === 200);
   return { ok, rows };
@@ -177,7 +294,7 @@ function buildMarkdownReport(rows, ok) {
     '',
     `- **Time (UTC):** ${ts}`,
     `- **Frontend base:** \`${FRONTEND_URL}\``,
-    `- **Backend base:** \`${BACKEND_URL}\``,
+    `- **API base:** \`${BACKEND_URL}\``,
     `- **Frontend API env:** \`${FRONTEND_API_BASE_URL || '(not set)'}\``,
     `- ${statusLine}`,
     '',
@@ -199,7 +316,7 @@ function buildMarkdownReport(rows, ok) {
   lines.push('');
   lines.push('```bash');
   lines.push(
-      `FRONTEND_URL="${FRONTEND_URL}" BACKEND_URL="${BACKEND_URL}" \\\n` +
+      `FRONTEND_URL="${FRONTEND_URL}" API_BASE_URL="${BACKEND_URL}" \\\n` +
       `  VITE_API_BASE_URL="${FRONTEND_API_BASE_URL || BACKEND_URL}" \\\n` +
       `  BACKEND_HEALTH_PATH="${BACKEND_HEALTH_PATH}" BACKEND_YIELDS_PATH="${BACKEND_YIELDS_PATH}" \\\n` +
       `  BACKEND_SAFE_PATH="${BACKEND_SAFE_PATH}" \\\n` +
@@ -220,7 +337,7 @@ async function runSmokeReport(opts) {
   console.log('StellarYield Smoke Test (report mode — all checks)');
   console.log('----------------------------------------');
   console.log(`Target Frontend: ${FRONTEND_URL}`);
-  console.log(`Target Backend:  ${BACKEND_URL}`);
+  console.log(`Target API:      ${BACKEND_URL}`);
   console.log(`Frontend API:    ${FRONTEND_API_BASE_URL || '(not set)'}`);
   console.log('----------------------------------------');
 
@@ -270,7 +387,7 @@ async function runSmokeTest() {
   console.log('StellarYield Smoke Test');
   console.log('----------------------------------------');
   console.log(`Target Frontend: ${FRONTEND_URL}`);
-  console.log(`Target Backend:  ${BACKEND_URL}`);
+  console.log(`Target API:      ${BACKEND_URL}`);
   console.log(`Frontend API:    ${FRONTEND_API_BASE_URL || '(not set)'}`);
   console.log('----------------------------------------');
 

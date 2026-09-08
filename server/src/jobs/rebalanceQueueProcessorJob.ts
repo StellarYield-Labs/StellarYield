@@ -30,6 +30,7 @@ import {
 import { rebalanceQueueService, PartialFillConfig } from '../services/rebalanceQueueService';
 import { rebalanceAuctionService, CreateIntentRequest } from '../services/rebalanceAuctionService';
 import { REBALANCE_STATUS } from '../queues/types';
+import { ExecutionCoordinatorService } from '../services/executionCoordinatorService';
 
 export interface QueueEntryForProcessing {
   id: string;
@@ -54,7 +55,38 @@ export interface JobConfig {
   executionAdapter: ExecutionAdapter;
   useAuctionMode?: boolean; // Enable real auction mode
   auctionTimeoutMs?: number; // Timeout for auction phases
+  executionCoordinator?: ExecutionCoordinatorService;
+  workerId?: string;
+  executionLeaseMs?: number;
 }
+
+export interface RebalanceQueueProcessorService {
+  getPendingRetries(): Promise<RebalanceQueueEntryDTO[]>;
+  getDeferredEntries(): Promise<RebalanceQueueEntryDTO[]>;
+  markAsProcessing(queueEntryId: string): Promise<RebalanceQueueEntryDTO>;
+  recordPartialExecution(
+    queueEntryId: string,
+    result: RebalanceExecutionResult,
+    config?: Partial<PartialFillConfig>,
+  ): Promise<RebalanceQueueEntryDTO>;
+  recordFailedAttempt(
+    queueEntryId: string,
+    error: string,
+    config?: Partial<PartialFillConfig>,
+  ): Promise<RebalanceQueueEntryDTO>;
+}
+
+export interface RebalanceQueueProcessorDependencies {
+  queueService?: RebalanceQueueProcessorService;
+  executeRebalance?: (
+    entry: RebalanceQueueEntryDTO,
+  ) => Promise<RebalanceExecutionResult>;
+  now?: () => number;
+}
+
+const REBALANCE_RESULT_MAX_AGE_MS = Number(
+  process.env.REBALANCE_RESULT_MAX_AGE_MS ?? 2 * 60 * 1000,
+);
 
 let jobHandle: ReturnType<typeof setInterval> | null = null;
 
@@ -74,6 +106,9 @@ export function startRebalanceQueueProcessorJob(
     executionAdapter: config.executionAdapter!,
     useAuctionMode: config.useAuctionMode ?? true, // Default to auction mode
     auctionTimeoutMs: config.auctionTimeoutMs ?? 300_000, // 5 minutes
+    executionCoordinator: config.executionCoordinator,
+    workerId: config.workerId ?? `rebalance-processor-${process.pid}`,
+    executionLeaseMs: config.executionLeaseMs ?? 120_000,
   };
 
   if (!finalConfig.enabled) {
@@ -128,11 +163,12 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
   let processedDeferred = 0;
   let processedAuction = 0;
   let failedProcessing = 0;
+  const queueService = deps.queueService ?? rebalanceQueueService;
 
   try {
     // Process retries
     if (config.enableRetries) {
-      const pendingRetries = await rebalanceQueueService.getPendingRetries();
+      const pendingRetries = await queueService.getPendingRetries();
       const toProcess = pendingRetries.slice(0, config.batchSize);
 
       if (config.logResults && toProcess.length > 0) {
@@ -142,10 +178,10 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
       for (const entry of toProcess) {
         try {
           if (config.useAuctionMode) {
-            await processQueueEntryWithAuction(entry, config);
+            await processQueueEntryWithCoordinator(entry, config, processQueueEntryWithAuction);
             processedAuction++;
           } else {
-            await processQueueEntryLegacy(entry, config);
+            await processQueueEntryWithCoordinator(entry, config, processQueueEntryLegacy);
             processedRetries++;
           }
         } catch (error) {
@@ -163,7 +199,7 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
 
     // Process deferred entries
     if (config.enableDeferredProcessing) {
-      const deferredEntries = await rebalanceQueueService.getDeferredEntries();
+      const deferredEntries = await queueService.getDeferredEntries();
       const toProcess = deferredEntries.slice(0, config.batchSize);
 
       if (config.logResults && toProcess.length > 0) {
@@ -173,10 +209,10 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
       for (const entry of toProcess) {
         try {
           if (config.useAuctionMode) {
-            await processQueueEntryWithAuction(entry, config);
+            await processQueueEntryWithCoordinator(entry, config, processQueueEntryWithAuction);
             processedAuction++;
           } else {
-            await processQueueEntryLegacy(entry, config);
+            await processQueueEntryWithCoordinator(entry, config, processQueueEntryLegacy);
             processedDeferred++;
           }
         } catch (error) {
@@ -220,6 +256,38 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
       timestamp: new Date().toISOString(),
     };
   }
+}
+
+async function processQueueEntryWithCoordinator(
+  entry: QueueEntryForProcessing,
+  config: JobConfig,
+  processor: (entry: QueueEntryForProcessing, config: JobConfig) => Promise<void>,
+): Promise<void> {
+  if (!config.executionCoordinator) {
+    await processor(entry, config);
+    return;
+  }
+
+  const intentId = `rebalance:${entry.id}`;
+  await config.executionCoordinator.createExecution({
+    intentId,
+    vaultId: entry.vaultId,
+    operation: 'rebalance',
+    payload: {
+      queueEntryId: entry.id,
+      intentHash: entry.intentHash,
+      targetAllocations: entry.targetAllocations,
+      currentAllocations: entry.currentAllocations,
+    },
+  });
+
+  await config.executionCoordinator.acquireLease(
+    intentId,
+    config.workerId ?? `rebalance-processor-${process.pid}`,
+    config.executionLeaseMs ?? 120_000,
+  );
+
+  await processor(entry, config);
 }
 
 /**

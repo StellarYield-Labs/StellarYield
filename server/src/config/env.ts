@@ -50,6 +50,16 @@ export function validateServerEnv(env: Env = process.env): EnvValidationResult {
     errors.push("DEX_ROUTER_CONTRACT_ID and ZAP_QUOTE_SIM_SOURCE_ACCOUNT must be configured together.");
   }
 
+  if (hasValue(env.SMTP_USER) !== hasValue(env.SMTP_PASSWORD)) {
+    errors.push("SMTP_USER and SMTP_PASSWORD must be configured together. Set both to enable email notifications, or leave both unset to skip email.");
+  }
+
+  if (hasValue(env.SMTP_USER) && !hasValue(env.SMTP_HOST)) {
+    const message = "SMTP_HOST is missing; provide the SMTP server hostname to enable email delivery.";
+    if (isProduction(env)) errors.push(message);
+    else warnings.push(message);
+  }
+
   if (!hasValue(env.AUDIT_SIGNING_KEY) || env.AUDIT_SIGNING_KEY === "default-key") {
     const message = "AUDIT_SIGNING_KEY must be set to a real signing secret; the default key is forbidden in production.";
     if (isProduction(env)) errors.push(message);

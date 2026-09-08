@@ -24,6 +24,109 @@ model IndexerState {
   lastLedger      Int
 }
 
+model IndexerContractStream {
+  id                  String   @id @default(uuid())
+  network             String
+  contractId          String
+  rpcUrl              String
+  networkPassphrase   String
+  contractType        String   @default("unknown")
+  deploymentLedger    Int      @default(0)
+  specVersion         Int      @default(1)
+  decoderVersion      Int      @default(1)
+  enabled             Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([network, contractId])
+  @@index([enabled, network])
+}
+
+model IndexerCheckpoint {
+  id                    String    @id @default(uuid())
+  network               String
+  contractId            String
+  networkPassphrase     String
+  lastLedger            Int       @default(0)
+  cursor                String?
+  lastSuccessfulBatchAt DateTime?
+  eventsProcessed       Int       @default(0)
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([network, contractId])
+  @@index([network, lastLedger])
+}
+
+model RawSorobanEvent {
+  id            String   @id
+  identity      String   @unique
+  network       String
+  contractId    String
+  ledger        Int
+  txHash        String
+  eventIndex    Int
+  pagingToken   String?
+  topic         String
+  data          String
+  envelopeJson  Json
+  createdAt     DateTime @default(now())
+
+  decodedEvents DecodedSorobanEvent[]
+  deadLetters   IndexerDeadLetter[]
+
+  @@unique([network, contractId, ledger, txHash, eventIndex])
+  @@index([network, contractId, ledger])
+  @@index([pagingToken])
+}
+
+model DecodedSorobanEvent {
+  id                String   @id @default(uuid())
+  rawEventId        String
+  network           String
+  contractId        String
+  ledger            Int
+  eventType         String
+  projectorVersion  Int      @default(1)
+  payloadJson       Json
+  projectedAt       DateTime @default(now())
+
+  rawEvent          RawSorobanEvent @relation(fields: [rawEventId], references: [id], onDelete: Cascade)
+
+  @@unique([rawEventId, projectorVersion])
+  @@index([network, contractId, eventType, ledger])
+}
+
+model IndexerDeadLetter {
+  id            String   @id @default(uuid())
+  rawEventId    String?
+  network       String
+  contractId    String
+  ledger        Int?
+  reason        String
+  errorMessage  String
+  payloadJson   Json?
+  resolvedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  rawEvent      RawSorobanEvent? @relation(fields: [rawEventId], references: [id], onDelete: SetNull)
+
+  @@index([network, contractId, createdAt])
+  @@index([resolvedAt])
+}
+
+model ProjectionVersion {
+  id                String   @id @default(uuid())
+  projectorName     String
+  projectorVersion  Int
+  startedAt         DateTime @default(now())
+  completedAt       DateTime?
+  status            String   @default("RUNNING")
+  lastLedger        Int?
+  errorMessage      String?
+
+  @@unique([projectorName, projectorVersion])
+}
+
 model VaultBalance {
   id              String   @id @default(uuid())
   walletAddress   String   @unique
@@ -166,6 +269,31 @@ model Incident {
 
 // ── Drift Detection Models ──────────────────────────────────────────────────
 
+model ProtocolCompatibilityObservation {
+  id                  String   @id @default(uuid())
+  protocolName        String
+  version             String
+  network             String
+  contractId          String
+  observedSpecHash    String
+  observedWasmHash    String
+  state               String
+  ledger              Int
+  source              String
+  capabilities        Json
+  safeUnwindAvailable Boolean
+  manifestVersion     String
+  expectedSpecHash    String
+  expectedWasmHash    String
+  errors              Json
+  checkedAt           DateTime
+  createdAt           DateTime @default(now())
+
+  @@index([protocolName, checkedAt])
+  @@index([protocolName, state])
+  @@index([contractId, observedSpecHash])
+}
+
 model DriftEvent {
   id              String   @id @default(uuid())
   vaultId         String
@@ -248,6 +376,76 @@ model RebalanceHistory {
 
 // ── Strategy Snapshot Models (Issue #282) ────────────────────────────────────
 
+// Durable exactly-once execution coordinator records (Issue #79)
+model ExecutionRecord {
+  intentId            String   @id
+  intentHash          String   @unique
+  vaultId             String
+  operation           String
+  state               String   @default("READY")
+  // READY, LEASED, BUILT, SIMULATED, SIGNED, SUBMITTED, CONFIRMED, FAILED, EXPIRED, RECONCILING
+
+  fencingToken        BigInt   @default(0)
+  leaseOwner          String?
+  leaseExpiresAt      DateTime?
+
+  sourceAccount       String?
+  reservedSequence    BigInt?
+  unsignedXdr         String?
+  simulatedXdr        String?
+  signedEnvelopeHash  String?
+  submissionHash      String?
+  latestRpcStatus     String?
+  validUntilLedger    BigInt?
+  resultXdr           String?
+  retryClass          String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([vaultId, state])
+  @@index([state, leaseExpiresAt])
+  @@index([sourceAccount, reservedSequence])
+  @@index([submissionHash])
+}
+
+model ExecutionSequenceReservation {
+  id              String   @id @default(uuid())
+  sourceAccount   String
+  sequence        BigInt
+  intentId        String
+  fencingToken    BigInt
+  reservedUntil   DateTime
+  createdAt       DateTime @default(now())
+
+  @@unique([sourceAccount, sequence])
+  @@index([intentId])
+  @@index([reservedUntil])
+}
+
+model ExecutionOutbox {
+  id            String   @id @default(uuid())
+  aggregateId   String
+  topic         String
+  payload       Json
+  publishedAt   DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([aggregateId, createdAt])
+  @@index([topic, publishedAt])
+}
+
+model ExecutionInbox {
+  id          String   @id @default(uuid())
+  messageId   String
+  consumer    String
+  intentId    String
+  processedAt DateTime @default(now())
+
+  @@unique([messageId, consumer])
+  @@index([intentId])
+}
+
 model StrategySnapshot {
   id                  String   @id @default(uuid())
   strategyId          String
@@ -325,6 +523,113 @@ model PortfolioRegimeShiftAlert {
 
   @@index([walletAddress, createdAt])
   @@index([walletAddress, currentRegime, createdAt])
+}
+
+// ── Durable Event Archive Models (Issue #75) ─────────────────────────────────
+
+//
+// Immutable manifest for a single archive partition.
+//
+// Lifecycle: STAGED → VERIFIED → HOT_ROWS_DELETED
+//   STAGED           — object written to storage, hot rows not yet deleted
+//   VERIFIED         — count, ordering, digest, and sample equivalence confirmed
+//   HOT_ROWS_DELETED — hot Event rows covered by this archive have been purged
+//   QUARANTINED      — integrity failure detected; hot rows preserved for recovery
+//   LEGAL_HOLD       — deletion blocked by a LegalHold record
+//   TOMBSTONE        — permanently deleted (retention expired)
+//   RESTORING        — cold object being copied back to hot Event table
+model EventArchiveManifest {
+  id                  String   @id @default(uuid())
+  // Partition identity
+  network             String
+  contractId          String
+  ledgerStart         Int
+  ledgerEnd           Int
+  schemaVersion       Int      @default(1)
+  // Object storage
+  objectKey           String   @unique
+  contentAddress      String   // SHA-256 of canonical uncompressed bytes
+  compressedDigest    String   // SHA-256 of gzip-compressed object
+  compressionAlgo     String   @default("gzip")
+  compressedBytes     BigInt
+  uncompressedBytes   BigInt
+  // Partition stats
+  eventCount          Int
+  firstEventId        String
+  lastEventId         String
+  firstLedger         Int
+  lastLedger          Int
+  // Lifecycle
+  state               String   @default("STAGED")
+  // STAGED | VERIFIED | HOT_ROWS_DELETED | QUARANTINED | LEGAL_HOLD | TOMBSTONE | RESTORING
+  stagedAt            DateTime @default(now())
+  verifiedAt          DateTime?
+  hotRowsDeletedAt    DateTime?
+  quarantinedAt       DateTime?
+  restoredAt          DateTime?
+  tombstonedAt        DateTime?
+  // Verification metadata
+  verificationPass    Boolean?
+  verificationError   String?
+  sampleCheckPassed   Boolean?
+  // Retry / recovery
+  retryCount          Int      @default(0)
+  lastError           String?
+  // Audit
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  legalHolds          LegalHold[]
+
+  @@index([network, contractId, ledgerStart, ledgerEnd])
+  @@index([state, stagedAt])
+  @@index([contentAddress])
+}
+
+//
+// Active distributed lock used to prevent two workers from archiving
+// the same partition concurrently.
+model ArchiveWorkerLock {
+  id          String   @id // partition key: "<network>:<contractId>:<ledgerStart>:<ledgerEnd>"
+  workerId    String
+  acquiredAt  DateTime @default(now())
+  expiresAt   DateTime
+
+  @@index([expiresAt])
+}
+
+//
+// Retention policy per (network, contractId) pair.
+// Overrides the global default when present.
+model ArchiveRetentionPolicy {
+  id                  String   @id @default(uuid())
+  network             String
+  contractId          String
+  retentionDays       Int
+  partitionStrategy   String   @default("monthly")
+  // daily | weekly | monthly
+  compressionEnabled  Boolean  @default(true)
+  batchSize           Int      @default(10000)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([network, contractId])
+}
+
+//
+// Legal hold: blocks deletion of a manifest until the hold is released.
+model LegalHold {
+  id          String   @id @default(uuid())
+  manifestId  String
+  reason      String
+  createdBy   String
+  createdAt   DateTime @default(now())
+  releasedAt  DateTime?
+  releasedBy  String?
+
+  manifest    EventArchiveManifest @relation(fields: [manifestId], references: [id])
+
+  @@index([manifestId])
 }
 
 // ── Unified Governance Control Plane Models (Issue #81) ─────────────────────

@@ -154,6 +154,7 @@ See [README — Vercel Deployment Settings](../README.md#vercel-deployment-setti
 
 | File | Role |
 |------|------|
+| `repository-hygiene.yml` | Blocks accidental commits of generated issue publishing helpers and other local-only issue artifacts. |
 | `ipfs-deploy.yml` | Builds `client/` and may publish IPFS previews when Pinata secrets exist. |
 | `stale.yml` | Repository housekeeping; not a contributor gate. |
 | `ci.yml` → *Formal Verification (Kani)* | Manual **workflow_dispatch** only; not part of default PR CI. |
@@ -162,13 +163,29 @@ See [README — Vercel Deployment Settings](../README.md#vercel-deployment-setti
 
 ## README command verification
 
-CI runs:
+The CI job named "README Command Verification" in [.github/workflows/ci.yml](../.github/workflows/ci.yml) runs:
 
 ```bash
 node scripts/verify-readme-commands.js
 ```
 
-from the repository root. It checks that documented commands and doc links in `README.md` stay consistent with the repo (including this file).
+from the repository root. It verifies that the commands and documentation links in [README.md](../README.md) still match the repo layout, including the client/server/contracts commands and the contributor guide / release checklist links. If it fails locally, update the README entry or the referenced command/script before pushing.
+
+---
+
+## Local generated issue helper artifacts
+
+One-off scripts or drafts used to create, publish, or sync GitHub issues should stay local unless maintainers explicitly promote them to reviewed repository tooling.
+
+- Keep local generated artifacts in `.generated-issues/`, `generated-issues/`, or `issue-drafts/`; these paths are ignored.
+- Do not commit generated helpers such as `scripts/generated-issue-*.js`, `scripts/create-github-issues.js`, `scripts/publish-github-issues.js`, or `scripts/sync-github-issues.js`.
+- If a helper should become permanent tooling, give it a durable name, document it, and update `scripts/check-generated-issue-scripts.js` if the new name intentionally overlaps a guarded pattern.
+
+Run the same guard locally with:
+
+```bash
+npm run guard:generated-issue-scripts
+```
 
 ---
 
