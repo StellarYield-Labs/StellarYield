@@ -20,6 +20,18 @@ export interface UserRewardInput {
 }
 
 /**
+ * Distribution-wide claim context that must match the on-chain verifier.
+ */
+export interface RewardDistributionContext {
+  /** Stellar token contract/address being distributed. */
+  token: string;
+  /** Campaign or epoch identifier for this distribution. */
+  campaignId: number;
+  /** Optional metadata hash bound into each leaf. */
+  metadataHash?: string;
+}
+
+/**
  * Calculate weekly rewards for a set of users based on their
  * proportional share of the vault.
  *
@@ -30,6 +42,7 @@ export interface UserRewardInput {
 export function calculateRewards(
   users: UserRewardInput[],
   totalWeeklyReward: string,
+  context: RewardDistributionContext,
 ): RewardEntry[] {
   const totalReward = BigInt(totalWeeklyReward);
   const entries: RewardEntry[] = [];
@@ -47,9 +60,11 @@ export function calculateRewards(
 
     if (reward > BigInt(0)) {
       entries.push({
-        index: entries.length,
         address: user.address,
+        token: context.token,
         amount: reward.toString(),
+        campaignId: context.campaignId,
+        metadataHash: context.metadataHash,
       });
     }
   }
@@ -68,8 +83,9 @@ export function calculateRewards(
 export function generateWeeklyDistribution(
   users: UserRewardInput[],
   totalWeeklyReward: string,
+  context: RewardDistributionContext,
 ): MerkleTreeResult {
-  const entries = calculateRewards(users, totalWeeklyReward);
+  const entries = calculateRewards(users, totalWeeklyReward, context);
   return generateMerkleTree(entries);
 }
 
@@ -83,7 +99,7 @@ export function generateWeeklyDistribution(
 export function getUserProof(
   address: string,
   distribution: MerkleTreeResult,
-): { index: number; amount: string; proof: string[] } | null {
+): MerkleTreeResult["claims"][string] | null {
   return distribution.claims[address] ?? null;
 }
 

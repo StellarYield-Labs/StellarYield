@@ -84,6 +84,30 @@ export interface RebalanceQueueProcessorDependencies {
   now?: () => number;
 }
 
+export interface RebalanceQueueProcessorService {
+  getPendingRetries(): Promise<RebalanceQueueEntryDTO[]>;
+  getDeferredEntries(): Promise<RebalanceQueueEntryDTO[]>;
+  markAsProcessing(queueEntryId: string): Promise<RebalanceQueueEntryDTO>;
+  recordPartialExecution(
+    queueEntryId: string,
+    result: RebalanceExecutionResult,
+    config?: Partial<PartialFillConfig>,
+  ): Promise<RebalanceQueueEntryDTO>;
+  recordFailedAttempt(
+    queueEntryId: string,
+    error: string,
+    config?: Partial<PartialFillConfig>,
+  ): Promise<RebalanceQueueEntryDTO>;
+}
+
+export interface RebalanceQueueProcessorDependencies {
+  queueService?: RebalanceQueueProcessorService;
+  executeRebalance?: (
+    entry: RebalanceQueueEntryDTO,
+  ) => Promise<RebalanceExecutionResult>;
+  now?: () => number;
+}
+
 const REBALANCE_RESULT_MAX_AGE_MS = Number(
   process.env.REBALANCE_RESULT_MAX_AGE_MS ?? 2 * 60 * 1000,
 );
@@ -177,6 +201,8 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
 
       for (const entry of toProcess) {
         try {
+          await processQueueEntry(entry, config, deps);
+          processedRetries++;
           if (config.useAuctionMode) {
             await processQueueEntryWithCoordinator(entry, config, processQueueEntryWithAuction);
             processedAuction++;
@@ -208,6 +234,8 @@ export async function runRebalanceQueueProcessorJob(config: JobConfig): Promise<
 
       for (const entry of toProcess) {
         try {
+          await processQueueEntry(entry, config, deps);
+          processedDeferred++;
           if (config.useAuctionMode) {
             await processQueueEntryWithCoordinator(entry, config, processQueueEntryWithAuction);
             processedAuction++;

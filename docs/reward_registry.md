@@ -33,6 +33,7 @@ Tracks specific lifecycle events of a schedule:
 ## Integration points
 - `YieldService`: Automatically fetches active schedules and includes them in protocol yield snapshots.
 - `GovernanceForecastService`: Allows forecasting the impact of reward changes on future APYs.
+- Merkle reward claims: canonical leaf encoding, shared fixtures, and proof compatibility requirements are documented in `docs/reward-merkle-encoding.md`.
 
 ## Testing
 Comprehensive tests for parsing logic, cliff handling, and tapering calculations can be found in `server/src/services/__tests__/rewardScheduleRegistry.test.ts`.

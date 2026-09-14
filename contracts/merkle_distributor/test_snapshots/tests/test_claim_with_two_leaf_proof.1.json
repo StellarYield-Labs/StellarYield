@@ -38,7 +38,10 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
                 },
                 {
-                  "bytes": "d399aa0f0e0f5a183ff0e028ac19b0b4877fe27b0178e6ba11f8b243e35f32cf"
+                  "u32": 9
+                },
+                {
+                  "bytes": "4faf9be406a82268484caa72f4f31164addd0f8ee931d55bef93ed60af77d178"
                 }
               ]
             }
@@ -85,7 +88,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 },
                 {
-                  "u32": 0
+                  "address": "CCABDO7UZXYE4W6GVSEGSNNZTKSLFQGKXXQTH6OX7M7GKZ4Z6CUJNGZN"
                 },
                 {
                   "i128": {
@@ -94,9 +97,15 @@
                   }
                 },
                 {
+                  "u32": 9
+                },
+                {
+                  "bytes": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
                   "vec": [
                     {
-                      "bytes": "50071fd4ec3b9b3548ae6c84dacb668cd936af91540c2daf00321dae4517f124"
+                      "bytes": "edba0dc353986fdc08a7cacac4ed30dce7973b53189a05e97d86a1ea11da07ec"
                     }
                   ]
                 }
@@ -120,7 +129,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
                 },
                 {
-                  "u32": 1
+                  "address": "CCABDO7UZXYE4W6GVSEGSNNZTKSLFQGKXXQTH6OX7M7GKZ4Z6CUJNGZN"
                 },
                 {
                   "i128": {
@@ -129,9 +138,15 @@
                   }
                 },
                 {
+                  "u32": 9
+                },
+                {
+                  "bytes": "0000000000000000000000000000000000000000000000000000000000000000"
+                },
+                {
                   "vec": [
                     {
-                      "bytes": "798c8634c1bab5c4647729e4f2c3a29745cf79dfa5ee228621d68c01454fee18"
+                      "bytes": "924431b27aa0bcb45f6385be2497e7386522a3dc6a3f0b02f7d7ab57ba36f832"
                     }
                   ]
                 }
@@ -221,10 +236,13 @@
             "key": {
               "vec": [
                 {
-                  "symbol": "ClaimedBitmap"
+                  "symbol": "Claimed"
                 },
                 {
-                  "u32": 0
+                  "u32": 9
+                },
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                 }
               ]
             },
@@ -241,19 +259,70 @@
                 "key": {
                   "vec": [
                     {
-                      "symbol": "ClaimedBitmap"
+                      "symbol": "Claimed"
                     },
                     {
-                      "u32": 0
+                      "u32": 9
+                    },
+                    {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK3IM"
                     }
                   ]
                 },
                 "durability": "persistent",
                 "val": {
-                  "u128": {
-                    "hi": 0,
-                    "lo": 3
-                  }
+                  "bool": true
+                }
+              }
+            },
+            "ext": "v0"
+          },
+          4095
+        ]
+      ],
+      [
+        {
+          "contract_data": {
+            "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+            "key": {
+              "vec": [
+                {
+                  "symbol": "Claimed"
+                },
+                {
+                  "u32": 9
+                },
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                }
+              ]
+            },
+            "durability": "persistent"
+          }
+        },
+        [
+          {
+            "last_modified_ledger_seq": 0,
+            "data": {
+              "contract_data": {
+                "ext": "v0",
+                "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+                "key": {
+                  "vec": [
+                    {
+                      "symbol": "Claimed"
+                    },
+                    {
+                      "u32": 9
+                    },
+                    {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                    }
+                  ]
+                },
+                "durability": "persistent",
+                "val": {
+                  "bool": true
                 }
               }
             },
@@ -301,12 +370,12 @@
                         "key": {
                           "vec": [
                             {
-                              "symbol": "Epoch"
+                              "symbol": "CampaignId"
                             }
                           ]
                         },
                         "val": {
-                          "u32": 1
+                          "u32": 9
                         }
                       },
                       {
@@ -330,7 +399,7 @@
                           ]
                         },
                         "val": {
-                          "bytes": "d399aa0f0e0f5a183ff0e028ac19b0b4877fe27b0178e6ba11f8b243e35f32cf"
+                          "bytes": "4faf9be406a82268484caa72f4f31164addd0f8ee931d55bef93ed60af77d178"
                         }
                       },
                       {
@@ -907,7 +976,7 @@
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
                 },
                 {
-                  "u32": 1
+                  "u32": 9
                 },
                 {
                   "i128": {
