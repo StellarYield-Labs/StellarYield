@@ -56,7 +56,12 @@ const AUDIT_ALLOWLIST = [
   "/api/auth/verify", // External identity provider — not registered in app.ts yet
   "/api/graphql", // GraphQL endpoint — managed separately via yoga
   "/api/events", // Internal diagnostics — may be disabled in some environments
+  "/api/backtest", // Frontend-only simulator endpoint — no backend route yet
+  "/api/google-sheets", // Google Sheets integration — not yet implemented server-side
+  "/api/rewards/claim", // Reward claiming — not yet implemented server-side
+  "/api/rewards/proof", // Reward proof generation — not yet implemented server-side
 ];
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Utility: Recursive file finder
@@ -131,11 +136,19 @@ function scanFrontendApis(clientDir: string): EndpointPattern[] {
       for (const pattern of patterns) {
         let match;
         while ((match = pattern.exec(content)) !== null) {
-          const pathStr = match[1];
+          let pathStr = match[1];
           if (!pathStr.startsWith("/api/")) continue;
 
-          // Normalize path (remove query params and fragments)
-          const normalizedPath = pathStr.split("?")[0].split("#")[0];
+          // Strip template literal expressions like ${endpoint} → use base path only
+          pathStr = pathStr.replace(/\$\{[^}]+\}/g, "");
+
+          // Normalize path: collapse double slashes, remove query params/fragments, strip trailing slashes
+          let normalizedPath = pathStr.split("?")[0].split("#")[0];
+          normalizedPath = normalizedPath.replace(/\/{2,}/g, "/");
+          normalizedPath = normalizedPath.replace(/\/+$/, "") || normalizedPath;
+
+          // Skip empty or root-only paths after stripping
+          if (normalizedPath.length <= 5) continue; // "/api/" is length 5
 
           // Try to determine HTTP method from context
           const method = inferHttpMethod(content, match.index);
@@ -168,23 +181,40 @@ function inferHttpMethod(
   content: string,
   matchIndex: number,
 ): "GET" | "POST" | "PUT" | "DELETE" | "PATCH" {
-  // Look backwards from match for HTTP method hints
-  const beforeMatch = content.substring(
-    Math.max(0, matchIndex - 200),
-    matchIndex,
+  // Look around match (before and after) for HTTP method hints
+  const contextWindow = content.substring(
+    Math.max(0, matchIndex - 100),
+    Math.min(content.length, matchIndex + 250),
   );
 
-  if (/method\s*:\s*["'`]?(POST|PUT|DELETE|PATCH)["'`]?/i.test(beforeMatch)) {
-    const methodMatch = beforeMatch.match(
+  if (/method\s*:\s*["'`]?(POST|PUT|DELETE|PATCH)["'`]?/i.test(contextWindow)) {
+    const methodMatch = contextWindow.match(
       /method\s*:\s*["'`]?(POST|PUT|DELETE|PATCH)["'`]?/i,
     );
     return (methodMatch?.[1]?.toUpperCase() as any) || "GET";
   }
 
   if (
-    /["']method["']\s*,\s*["'](POST|PUT|DELETE|PATCH)["']/i.test(beforeMatch)
+    /["']method["']\s*,\s*["'](POST|PUT|DELETE|PATCH)["']/i.test(contextWindow)
   ) {
-    const methodMatch = beforeMatch.match(/["'](POST|PUT|DELETE|PATCH)["']/i);
+    const methodMatch = contextWindow.match(/["'](POST|PUT|DELETE|PATCH)["']/i);
+    return (methodMatch?.[1]?.toUpperCase() as any) || "GET";
+  }
+
+  // Also look ahead for fetch options like: fetch(url, { method: "POST" })
+  const afterMatch = content.substring(matchIndex, matchIndex + 300);
+
+  if (/method\s*:\s*["'`]?(POST|PUT|DELETE|PATCH)["'`]?/i.test(afterMatch)) {
+    const methodMatch = afterMatch.match(
+      /method\s*:\s*["'`]?(POST|PUT|DELETE|PATCH)["'`]?/i,
+    );
+    return (methodMatch?.[1]?.toUpperCase() as any) || "GET";
+  }
+
+  if (
+    /["']method["']\s*,\s*["'](POST|PUT|DELETE|PATCH)["']/i.test(afterMatch)
+  ) {
+    const methodMatch = afterMatch.match(/["'](POST|PUT|DELETE|PATCH)["']/i);
     return (methodMatch?.[1]?.toUpperCase() as any) || "GET";
   }
 
@@ -413,6 +443,29 @@ function auditCoverage(
         issue: "ok",
         severity: "info",
         explanation: `Route found under base path ${prefixMatch.path} (${prefixMatch.method})`,
+      });
+      continue;
+    }
+
+    // Parameterized route match: backend path like /api/presets/:id matches frontend /api/presets
+    const paramMatch = backendEndpoints.find((e) => {
+      if (e.method !== frontend.method) return false;
+      // Strip :param segments from backend path and compare
+      const backendBase = e.path.replace(/\/:[^/]+/g, "");
+      return (
+        frontend.path === backendBase ||
+        frontend.path === e.path ||
+        (backendBase && frontend.path.startsWith(backendBase + "/"))
+      );
+    });
+
+    if (paramMatch) {
+      findings.push({
+        frontendEndpoint: frontend,
+        backendMatch: paramMatch,
+        issue: "ok",
+        severity: "info",
+        explanation: `Route matched via parameterized path ${paramMatch.path}`,
       });
       continue;
     }

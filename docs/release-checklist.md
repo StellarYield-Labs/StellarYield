@@ -52,11 +52,13 @@ After deploying frontend and backend, maintainers can run **Release smoke report
 - Rerun: in GitHub Actions, use **Re-run failed jobs** or **Re-run all jobs** on the workflow run. Locally, run:
 
 ```bash
-FRONTEND_URL="https://your-frontend.example" BACKEND_URL="https://your-backend.example" \
+FRONTEND_URL="https://your-frontend.example" API_BASE_URL="https://your-backend.example" \
+  VITE_API_BASE_URL="https://your-backend.example" \
   node scripts/smoke-test.js --report --markdown-out=smoke-report.md
 ```
 
 - Portable report only: `node scripts/smoke-test.js --report --markdown`.
+- For preview deployments, use `PREVIEW_API_BASE_URL` or `API_BASE_URL` for the backend under test. `BACKEND_URL` remains supported as a legacy alias.
 
 Default checks expect HTTP 200 on `BACKEND_HEALTH_PATH` (default `/api/health`), `BACKEND_YIELDS_PATH` (default `/api/yields`), frontend `/`, and `FRONTEND_ASSET_PATH` (default `/favicon.svg`). Override via workflow dispatch inputs or the same-named environment variables.
 

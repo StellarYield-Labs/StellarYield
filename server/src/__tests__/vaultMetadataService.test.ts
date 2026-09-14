@@ -2,6 +2,7 @@ import {
   sanitizeSvg,
   uploadVaultMetadata,
 } from "../services/ipfs/vaultMetadataService";
+import { validateIconUrl } from "../utils/iconValidator";
 
 describe("vaultMetadataService", () => {
   it("sanitizes dangerous SVG content", () => {
@@ -64,6 +65,14 @@ describe("vaultMetadataService", () => {
     if (previousPinata) {
       process.env.PINATA_JWT = previousPinata;
     }
+  });
+
+  it("rejects invalid icon URLs but accepts valid HTTPS ones (#65)", () => {
+    expect(validateIconUrl("https://cdn.example.com/vault.svg").valid).toBe(true);
+    expect(validateIconUrl("").valid).toBe(false);
+    expect(validateIconUrl("http://cdn.example.com/vault.svg").valid).toBe(false);
+    expect(validateIconUrl("javascript:alert(1)").valid).toBe(false);
+    expect(validateIconUrl("not a url").valid).toBe(false);
   });
 
   it("sanitizes icon before uploading to Pinata", async () => {

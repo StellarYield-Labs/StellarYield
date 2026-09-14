@@ -115,6 +115,47 @@ const result = await uploadVaultMetadata({
 
 If validation fails, an error is thrown with details about what went wrong.
 
+## Icon URL Validation
+
+In addition to validating inline icon *content*, vault metadata may reference an
+icon by URL. Because icons are rendered on user-facing surfaces, icon URLs are
+validated with strict rules before use.
+
+### Rules
+
+- ❌ Empty or whitespace-only strings are rejected.
+- ❌ Non-string values are rejected.
+- ❌ Malformed URLs (unparseable, missing host) are rejected.
+- ❌ Unsupported schemes are rejected — `http:`, `ftp:`, `file:`,
+  `javascript:`, `data:`, `vbscript:`, etc.
+- ✅ Only `https:` URLs with a host are accepted.
+
+HTTPS is required so icon URLs cannot introduce mixed-content warnings or be used
+to smuggle script/data payloads onto user-facing surfaces.
+
+### Usage
+
+```typescript
+import { validateIconUrl, validateIconUrlOrThrow } from '../utils/iconValidator';
+
+const result = validateIconUrl('https://cdn.example.com/icons/vault.svg');
+if (!result.valid) {
+  console.error('Invalid icon URL:', result.errors);
+}
+
+// Or throw on failure, returning the normalized URL:
+const url = validateIconUrlOrThrow('https://cdn.example.com/icons/vault.svg');
+```
+
+### Error Messages
+
+| Input | Error |
+|-------|-------|
+| `""` | "Icon URL must not be empty" |
+| `42` | "Icon URL must be a string" |
+| `"not a url"` | "Icon URL is malformed: ..." |
+| `"http://example.com/i.svg"` | "Icon URL scheme \"http:\" is not allowed (allowed: https:)" |
+
 ## Custom Configuration
 
 You can customize validation rules by providing a custom configuration:

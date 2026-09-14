@@ -351,3 +351,65 @@ export function validateIconAssetOrThrow(
     throw new Error(`Icon validation failed: ${result.errors.join("; ")}`);
   }
 }
+
+export interface IconUrlValidationResult {
+  valid: boolean;
+  errors: string[];
+  url?: string;
+}
+
+// Only secure, web-fetchable schemes are permitted for icon URLs.
+const ALLOWED_ICON_URL_SCHEMES = ["https:"];
+
+/**
+ * Validates a vault icon URL.
+ *
+ * Rejects empty strings, non-string values, malformed URLs and unsupported
+ * schemes (e.g. http:, javascript:, data:, ftp:). Only HTTPS URLs are accepted
+ * so that icons cannot be used to smuggle mixed-content or script payloads onto
+ * user-facing surfaces.
+ */
+export function validateIconUrl(url: unknown): IconUrlValidationResult {
+  const errors: string[] = [];
+
+  if (typeof url !== "string") {
+    errors.push("Icon URL must be a string");
+    return { valid: false, errors };
+  }
+
+  const trimmed = url.trim();
+  if (trimmed === "") {
+    errors.push("Icon URL must not be empty");
+    return { valid: false, errors };
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    errors.push(`Icon URL is malformed: "${trimmed}"`);
+    return { valid: false, errors };
+  }
+
+  if (!ALLOWED_ICON_URL_SCHEMES.includes(parsed.protocol)) {
+    errors.push(
+      `Icon URL scheme "${parsed.protocol}" is not allowed (allowed: ${ALLOWED_ICON_URL_SCHEMES.join(", ")})`,
+    );
+    return { valid: false, errors };
+  }
+
+  if (!parsed.hostname) {
+    errors.push("Icon URL must include a host");
+    return { valid: false, errors };
+  }
+
+  return { valid: true, errors: [], url: parsed.toString() };
+}
+
+export function validateIconUrlOrThrow(url: unknown): string {
+  const result = validateIconUrl(url);
+  if (!result.valid || !result.url) {
+    throw new Error(`Icon URL validation failed: ${result.errors.join("; ")}`);
+  }
+  return result.url;
+}

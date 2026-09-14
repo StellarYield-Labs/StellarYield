@@ -9,11 +9,21 @@ pub enum DataKey {
     Proposal(u64),
     ProposalCount,
     IsInitialized,
-    // Allowlist of (contract, function) pairs that governance is permitted
-    // to invoke. Arbitrary contract calls outside this set are rejected at
-    // propose-time so a compromised or malicious proposer cannot bypass
-    // protocol controls via generic invocation.
     AllowedAction(Address, Symbol),
+}
+
+#[contracttype]
+#[derive(Clone)]
+pub enum UpgradeDataKey {
+    StorageVersion,
+    UpgradeCount,
+    PendingUpgrade(u64),
+    UpgradeStatus(u64),
+    TargetWasmHash,
+    CurrentWasmHash,
+    MigrationPlanDigest,
+    MigrationState,
+    MigrationCursor(u64),
 }
 
 #[contracttype]
@@ -36,10 +46,6 @@ pub struct Proposal {
     pub contract_id: Address,
     pub function: Symbol,
     pub args: Vec<Val>,
-    /// sha256 of the canonical GovernanceAction payload reviewed off-chain.
-    /// Must match the hash produced by server/src/governance/actionSchema.ts
-    /// for the same logical action, so what was reviewed is byte-for-byte
-    /// what executes.
     pub action_hash: BytesN<32>,
     pub execution_time: u64,
     pub expiry_time: u64,

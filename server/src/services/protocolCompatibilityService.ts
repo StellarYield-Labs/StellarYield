@@ -1,5 +1,11 @@
 import NodeCache from "node-cache";
 import { freezeService } from "./freezeService";
+import {
+  AdapterObservation,
+  createDefaultProtocolAdapterRegistry,
+  ProtocolAdapter,
+  ProtocolCapability,
+} from "./protocolAdapters";
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -39,6 +45,8 @@ export interface CompatibilityStatus {
   lastChecked: string;
   recommendations: string[];
   autoUpdateAvailable: boolean;
+  safeUnwindAvailable?: boolean;
+  adapterObservation?: AdapterObservation;
 }
 
 export interface CompatibilityReport {
@@ -78,10 +86,12 @@ const cache = new NodeCache({
 export class ProtocolCompatibilityEngine {
   private config: CompatibilityConfig;
   private requirements: Map<string, CompatibilityRequirement[]>;
+  private adapters: Map<string, ProtocolAdapter>;
 
   constructor(config: Partial<CompatibilityConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.requirements = new Map();
+    this.adapters = createDefaultProtocolAdapterRegistry();
     this.initializeRequirements();
   }
 
@@ -187,7 +197,7 @@ export class ProtocolCompatibilityEngine {
    * Check compatibility for all known protocols
    */
   private async checkAllProtocols(): Promise<CompatibilityStatus[]> {
-    const protocolNames = Array.from(this.requirements.keys());
+    const protocolNames = Array.from(this.adapters.keys());
     const checks = protocolNames.map(name => this.checkProtocol(name));
     
     return Promise.all(checks);
@@ -197,40 +207,35 @@ export class ProtocolCompatibilityEngine {
    * Check compatibility for a specific protocol
    */
   async checkProtocol(protocolName: string): Promise<CompatibilityStatus> {
-    const requirements = this.requirements.get(protocolName);
-    if (!requirements) {
-      throw new Error(`No compatibility requirements defined for ${protocolName}`);
+    const adapter = this.adapters.get(protocolName);
+    if (!adapter) {
+      throw new Error(`No production protocol adapter registered for ${protocolName}`);
     }
 
     try {
-      // Get current and latest versions
-      const currentVersion = await this.getCurrentVersion(protocolName);
-      const latestVersion = await this.getLatestVersion(protocolName);
-
-      // Check each component
-      const issues: CompatibilityIssue[] = [];
-      for (const requirement of requirements) {
-        const componentIssues = await this.checkComponentCompatibility(protocolName, requirement.component, requirement, currentVersion);
-        issues.push(...componentIssues);
-      }
-
-      // Determine status
-      const status = this.determineProtocolStatus(issues);
+      const observation = await adapter.attest();
+      const issues = this.issuesFromAdapterObservation(observation);
+      const status = observation.state === 'healthy'
+        ? this.determineProtocolStatus(issues)
+        : observation.state === 'degraded'
+          ? 'degraded'
+          : 'incompatible';
       const recommendations = this.generateRecommendations(issues, status);
-      const autoUpdateAvailable = await this.checkAutoUpdateAvailable(protocolName, currentVersion, latestVersion);
 
       return {
         protocolName,
-        currentVersion: currentVersion.version,
-        latestVersion: latestVersion.version,
+        currentVersion: observation.version,
+        latestVersion: adapter.manifest.version,
         status,
         issues,
-        lastChecked: new Date().toISOString(),
+        lastChecked: observation.checkedAt,
         recommendations,
-        autoUpdateAvailable,
+        autoUpdateAvailable: false,
+        safeUnwindAvailable: observation.safeUnwindAvailable,
+        adapterObservation: observation,
       };
     } catch (error) {
-      console.error('Failed to fetch protocol version:', { protocolName });
+      console.error('Failed to attest protocol adapter:', { protocolName });
       return {
         protocolName,
         currentVersion: 'unknown',
@@ -239,177 +244,67 @@ export class ProtocolCompatibilityEngine {
         issues: [{
           severity: 'critical' as const,
           component: 'unknown',
-          issue: 'Failed to fetch protocol version',
+          issue: 'Failed to attest protocol adapter',
           impact: 'Cannot determine compatibility',
-          recommendation: 'Check protocol connectivity',
+          recommendation: 'Check protocol adapter manifest, RPC connectivity, and contract deployment',
           affectedStrategies: [],
         }],
         lastChecked: new Date().toISOString(),
-        recommendations: ['Check protocol connectivity'],
+        recommendations: ['Check protocol adapter manifest, RPC connectivity, and contract deployment'],
         autoUpdateAvailable: false,
+        safeUnwindAvailable: false,
       };
     }
   }
 
-  /**
-   * Check a specific compatibility requirement
-   */
-  private async checkComponentCompatibility(
-    protocolName: string,
-    componentName: string,
-    requirements: CompatibilityRequirement,
-    currentVersion: ProtocolVersion,
-  ): Promise<CompatibilityIssue[]> {
+  private issuesFromAdapterObservation(observation: AdapterObservation): CompatibilityIssue[] {
     const issues: CompatibilityIssue[] = [];
+    const requiredCapabilities = new Set(
+      this.adapters.get(observation.protocolName)?.manifest.requiredCapabilities ?? [],
+    );
 
-    try {
-      // Version compatibility check
-      const versionCheck = this.checkVersionCompatibility(requirements, currentVersion);
-      if (!versionCheck.compatible) {
-        issues.push({
-          severity: versionCheck.isBreaking ? 'critical' : 'high',
-          component: requirements.component,
-          issue: versionCheck.reason,
-          impact: `Component ${requirements.component} may not function correctly`,
-          recommendation: `Update ${requirements.component} to compatible version`,
-          affectedStrategies: await this.getAffectedStrategies(protocolName, requirements.component),
-        });
-      }
-
-      // Critical features check
-      const featuresCheck = await this.checkCriticalFeatures(protocolName, requirements, currentVersion);
-      if (!featuresCheck.available) {
-        issues.push({
-          severity: 'critical',
-          component: requirements.component,
-          issue: 'Critical features unavailable',
-          impact: featuresCheck.missingFeatures.join(', ') + ' are not available',
-          recommendation: 'Upgrade protocol or use alternative implementation',
-          affectedStrategies: await this.getAffectedStrategies(protocolName, requirements.component),
-        });
-      }
-
-      // Breaking changes check
-      const breakingChangesCheck = await this.checkBreakingChanges(protocolName, currentVersion.version, requirements);
-      if (breakingChangesCheck.hasBreakingChanges) {
-        issues.push({
-          severity: breakingChangesCheck.affectsCriticalPath ? 'critical' : 'high',
-          component: requirements.component,
-          issue: 'Breaking changes detected',
-          impact: breakingChangesCheck.changes.join(', '),
-          recommendation: 'Review and update integration code',
-          affectedStrategies: await this.getAffectedStrategies(protocolName, requirements.component),
-        });
-      }
-
-    } catch (error) {
+    for (const error of observation.errors) {
       issues.push({
-        severity: 'medium',
-        component: requirements.component,
-        issue: 'Compatibility check failed',
-        impact: `Unable to verify component compatibility: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        recommendation: 'Manual verification required',
-        affectedStrategies: [],
+        severity: error.retryable ? 'high' : 'critical',
+        component: observation.contractId,
+        issue: error.code,
+        impact: error.retryable
+          ? error.message
+          : `${error.message}; new allocations are blocked until the manifest is approved`,
+        recommendation: error.retryable
+          ? 'Retry the adapter probe after RPC recovers'
+          : 'Review the deployed contract and approve a new manifest before enabling deposits',
+        affectedStrategies: [`${observation.protocolName}_yield_strategy`],
+      });
+    }
+
+    for (const [capability, state] of Object.entries(observation.capabilities) as Array<[ProtocolCapability, AdapterObservation['state']]>) {
+      if (state === 'healthy') continue;
+      if (!requiredCapabilities.has(capability) && capability !== 'unwind') continue;
+      issues.push({
+        severity: capability === 'unwind' ? 'high' : 'critical',
+        component: capability,
+        issue: `Capability ${capability} is ${state}`,
+        impact: capability === 'unwind'
+          ? 'Safe unwind may require operator review'
+          : 'State-changing automation and deposit routing must fail closed',
+        recommendation: 'Probe the deployed contract and compare supported methods with the approved manifest',
+        affectedStrategies: [`${observation.protocolName}_yield_strategy`],
+      });
+    }
+
+    if (!observation.safeUnwindAvailable) {
+      issues.push({
+        severity: 'high',
+        component: 'safe_unwind',
+        issue: 'Safe unwind capability unavailable',
+        impact: 'Deposits remain blocked and exits may require manual runbook execution',
+        recommendation: 'Verify unwind method support before re-enabling automation',
+        affectedStrategies: [`${observation.protocolName}_yield_strategy`],
       });
     }
 
     return issues;
-  }
-
-  /**
-   * Check if versions are compatible
-   */
-  private checkVersionCompatibility(
-    requirement: CompatibilityRequirement,
-    currentVersion: ProtocolVersion,
-  ): { compatible: boolean; isBreaking: boolean; reason: string } {
-    const current = currentVersion.version;
-    const required = requirement.requiredVersion;
-    const min = requirement.minVersion;
-    const max = requirement.maxVersion;
-
-    // Simple version comparison (in production, use semver library)
-    const isCompatible = this.compareVersions(current, min) >= 0 && 
-                        (!max || this.compareVersions(current, max) <= 0);
-
-    const isBreaking = this.compareVersions(current, required) < 0;
-
-    return {
-      compatible: isCompatible,
-      isBreaking,
-      reason: isCompatible ? 'Versions compatible' : 
-               isBreaking ? `Version ${current} is below required ${required}` :
-               `Version ${current} exceeds maximum ${max}`,
-    };
-  }
-
-  /**
-   * Simple version comparison (replace with semver in production)
-   */
-  private compareVersions(v1: string, v2: string): number {
-    const parts1 = v1.split('.').map(Number);
-    const parts2 = v2.split('.').map(Number);
-    
-    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-      const part1 = parts1[i] || 0;
-      const part2 = parts2[i] || 0;
-      
-      if (part1 > part2) return 1;
-      if (part1 < part2) return -1;
-    }
-    
-    return 0;
-  }
-
-  /**
-   * Check if critical features are available
-   */
-  private async checkCriticalFeatures(
-    protocolName: string,
-    requirement: CompatibilityRequirement,
-    _currentVersion: ProtocolVersion,
-  ): Promise<{ available: boolean; missingFeatures: string[] }> {
-    // Mock implementation - in reality, this would test the actual protocol
-    const mockAvailableFeatures = ['deposit', 'withdraw', 'get_apy', 'swap_exact_tokens'];
-    const missingFeatures = requirement.criticalFeatures.filter(
-      feature => !mockAvailableFeatures.includes(feature)
-    );
-
-    return {
-      available: missingFeatures.length === 0,
-      missingFeatures,
-    };
-  }
-
-  /**
-   * Check for breaking changes
-   */
-  private async checkBreakingChanges(
-    protocolName: string,
-    _currentVersion: string,
-    requirement: CompatibilityRequirement,
-  ): Promise<{ hasBreakingChanges: boolean; affectsCriticalPath: boolean; changes: string[] }> {
-    // Mock implementation - in reality, this would analyze changelogs or contract diffs
-    const mockBreakingChanges = ['fee_structure_change'];
-    const changes = requirement.breakingChanges.filter(change => mockBreakingChanges.includes(change));
-    
-    return {
-      hasBreakingChanges: changes.length > 0,
-      affectsCriticalPath: changes.includes('fee_structure_change'),
-      changes,
-    };
-  }
-
-  /**
-   * Get strategies affected by a component
-   */
-  private async getAffectedStrategies(protocolName: string, _component: string): Promise<string[]> {
-    // Mock implementation - would query strategy registry
-    return [
-      `${protocolName}_yield_strategy`,
-      `${protocolName}_arbitrage_strategy`,
-      `${protocolName}_liquidity_strategy`,
-    ];
   }
 
   /**
@@ -466,42 +361,6 @@ export class ProtocolCompatibilityEngine {
   }
 
   /**
-   * Get current version of a protocol
-   */
-  private async getCurrentVersion(protocolName: string): Promise<ProtocolVersion> {
-    // Mock implementation - would query actual protocol
-    return {
-      protocolName,
-      version: '2.1.0',
-      lastUpdated: new Date().toISOString(),
-    };
-  }
-
-  /**
-   * Get latest version of a protocol
-   */
-  private async getLatestVersion(protocolName: string): Promise<ProtocolVersion> {
-    // Mock implementation - would query version registry
-    return {
-      protocolName,
-      version: '2.2.0',
-      lastUpdated: new Date().toISOString(),
-    };
-  }
-
-  /**
-   * Check if auto-update is available
-   */
-  private async checkAutoUpdateAvailable(
-    protocolName: string,
-    currentVersion: ProtocolVersion,
-    latestVersion: ProtocolVersion,
-  ): Promise<boolean> {
-    // Mock implementation - would check update mechanisms
-    return this.compareVersions(currentVersion.version, latestVersion.version) < 0;
-  }
-
-  /**
    * Handle incompatible protocols
    */
   private async handleIncompatibleProtocols(protocols: CompatibilityStatus[]): Promise<void> {
@@ -532,6 +391,15 @@ export class ProtocolCompatibilityEngine {
    */
   addProtocolRequirements(protocolName: string, requirements: CompatibilityRequirement[]): void {
     this.requirements.set(protocolName, requirements);
+  }
+
+  /**
+   * Register or replace a production protocol adapter.
+   * The compatibility orchestrator discovers protocols through this registry,
+   * so adding a third adapter does not require protocol-name conditionals.
+   */
+  registerAdapter(adapter: ProtocolAdapter): void {
+    this.adapters.set(adapter.manifest.protocolName, adapter);
   }
 
   /**

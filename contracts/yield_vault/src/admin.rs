@@ -5,6 +5,7 @@ impl YieldVault {
     /// Immediately pause all vault operations (deposit, withdraw, rebalance).
     /// Callable only by admin.
     pub fn emergency_pause(env: Env, admin: Address) -> Result<(), VaultError> {
+        Self::require_operational(&env)?;
         Self::require_admin(&env, &admin)?;
         env.storage().instance().set(&DataKey::Paused, &true);
         env.events().publish((symbol_short!("pause"),), (admin,));
@@ -14,6 +15,7 @@ impl YieldVault {
     /// Resume vault operations after an emergency pause.
     /// Callable only by admin.
     pub fn emergency_unpause(env: Env, admin: Address) -> Result<(), VaultError> {
+        Self::require_operational(&env)?;
         Self::require_admin(&env, &admin)?;
         env.storage().instance().remove(&DataKey::Paused);
         env.events().publish((symbol_short!("unpause"),), (admin,));
@@ -35,6 +37,7 @@ impl YieldVault {
         target: Address,
         amount: i128,
     ) -> Result<(), VaultError> {
+        Self::require_operational(&env)?;
         Self::require_admin(&env, &admin)?;
         if amount <= 0 {
             return Err(VaultError::ZeroAmount);
@@ -79,6 +82,7 @@ impl YieldVault {
     /// 1. Call `set_admin` with the `new_admin` address. This starts the 24h timelock.
     /// 2. After 24h, call `set_admin` again with the same `new_admin` address to finalize.
     pub fn set_admin(env: Env, admin: Address, new_admin: Address) -> Result<(), VaultError> {
+        Self::require_operational(&env)?;
         Self::require_admin(&env, &admin)?;
 
         let now = env.ledger().timestamp();

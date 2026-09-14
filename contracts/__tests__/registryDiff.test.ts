@@ -39,4 +39,43 @@ describe('diffRegistries', () => {
     const vaultLocal = ln.find(c => c.name === 'vault');
     expect(vaultLocal?.type).toBe('added');
   });
+
+  it('treats whitespace-only values as missing in new registry', () => {
+    const oldReg: Registry = {
+      testnet: { vault: 'A', zap: '', token: '', governance: '', strategy: '', emissionController: '', liquidStaking: '', stableswap: '' },
+      mainnet: { vault: '', zap: '', token: '', governance: '', strategy: '', emissionController: '', liquidStaking: '', stableswap: '' },
+      local: { vault: '', zap: '', token: '', governance: '', strategy: '', emissionController: '', liquidStaking: '', stableswap: '' },
+    };
+
+    const newReg: Registry = {
+      testnet: { vault: 'A', zap: '   ', token: '\t', governance: '', strategy: '', emissionController: '', liquidStaking: '', stableswap: '' },
+      mainnet: { vault: '', zap: '', token: '', governance: '', strategy: '', emissionController: '', liquidStaking: '', stableswap: '' },
+      local: { vault: '', zap: '', token: '', governance: '', strategy: '', emissionController: '', liquidStaking: '', stableswap: '' },
+    };
+
+    const diff = diffRegistries(oldReg, newReg);
+
+    expect(diff.testnet.missing).toContain('governance');
+    expect(diff.testnet.missing).toContain('strategy');
+    expect(diff.testnet.missing).toContain('emissionController');
+    expect(diff.testnet.missing).toContain('liquidStaking');
+    expect(diff.testnet.missing).toContain('stableswap');
+    // Whitespace-only values are treated as empty by the diff logic
+    expect(diff.testnet.missing).toContain('zap');
+    expect(diff.testnet.missing).toContain('token');
+  });
+
+  it('maintains deterministic missing contract order', () => {
+    const reg: Registry = {
+      testnet: { vault: '', zap: '', token: '', governance: '', strategy: '', emissionController: '', liquidStaking: '', stableswap: '' },
+      mainnet: { vault: '', zap: '', token: '', governance: '', strategy: '', emissionController: '', liquidStaking: '', stableswap: '' },
+      local: { vault: '', zap: '', token: '', governance: '', strategy: '', emissionController: '', liquidStaking: '', stableswap: '' },
+    };
+
+    const results = Array.from({ length: 10 }, () => diffRegistries(reg, reg));
+    const firstMissing = results[0].testnet.missing;
+    for (const result of results) {
+      expect(result.testnet.missing).toEqual(firstMissing);
+    }
+  });
 });

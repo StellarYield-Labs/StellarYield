@@ -1,0 +1,17 @@
+[package]
+name = "rebalance-auction"
+version = "0.1.0"
+edition = "2021"
+description = "MEV-resistant solver auction for atomic vault rebalances"
+
+[lib]
+crate-type = ["cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+serde_json = { workspace = true }

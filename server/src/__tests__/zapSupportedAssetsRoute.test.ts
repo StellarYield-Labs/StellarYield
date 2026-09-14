@@ -85,4 +85,40 @@ describe("GET /api/zap/supported-assets", () => {
     expect(res.status).toBe(503);
     expect(typeof res.body.error).toBe("string");
   });
+
+  it("returns stable response with empty assets array when no SAC contracts configured", async () => {
+    // Clear all SAC contract IDs to simulate incomplete configuration
+    delete process.env.ZAP_ASSETS_JSON;
+    delete process.env.XLM_SAC_CONTRACT_ID;
+    delete process.env.USDC_SAC_CONTRACT_ID;
+    delete process.env.AQUA_SAC_CONTRACT_ID;
+    
+    // Set only vault-related config
+    process.env.VAULT_TOKEN_CONTRACT_ID = "CDVAULTAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+    process.env.VAULT_TOKEN_DECIMALS = "6";
+    process.env.VAULT_TOKEN_SYMBOL = "USDC";
+    process.env.VAULT_CONTRACT_ID = "CDYIELDAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+
+    initializeZapSupportedAssetsCache();
+
+    const res = await request(zapRoutesOnlyApp()).get("/api/zap/supported-assets");
+
+    // Should not throw and return 200
+    expect(res.status).toBe(200);
+    
+    // Verify stable response shape
+    expect(res.body).toMatchObject({
+      vaultContractId: "CDYIELDAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      vaultToken: {
+        symbol: "USDC",
+        contractId: "CDVAULTAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        decimals: 6,
+      },
+      assets: [],
+    });
+    
+    // Confirm assets is an array (even if empty)
+    expect(Array.isArray(res.body.assets)).toBe(true);
+    expect(res.body.assets).toHaveLength(0);
+  });
 });
