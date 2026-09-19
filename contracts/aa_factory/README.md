@@ -43,8 +43,8 @@ Deploys and manages proxy wallet contracts for users.
 - Track all deployed wallets
 - Manage trusted relayers for gas sponsorship
 
-### ProxyWallet
-Individual user smart contract wallet with Account Abstraction.
+### aa_proxy
+The deployable proxy wallet contract instantiated by the factory.
 
 **Key Features:**
 - WebAuthn/Passkey signature verification
@@ -57,6 +57,7 @@ Individual user smart contract wallet with Account Abstraction.
 
 - **Stack**: Rust, Soroban SDK
 - **Location**: `/contracts/aa_factory/`
+- **Proxy Contract**: `/contracts/aa_proxy/`
 - **Security**: Strict nonce management and signature validation
 
 ## 📋 Quick Start
@@ -68,7 +69,7 @@ let factory_id = env.register(WalletFactory, ());
 let factory = WalletFactoryClient::new(&env, &factory_id);
 
 let admin = Address::generate(&env);
-let proxy_code_hash = Bytes::from_array(&env, &[0u8; 32]);
+let proxy_code_hash = BytesN::from_array(&env, &[1u8; 32]);
 
 factory.initialize(&admin, &proxy_code_hash);
 ```
@@ -88,11 +89,11 @@ let proxy = factory.deploy_proxy(&config);
 ### Register WebAuthn Key
 
 ```rust
-// User registers their passkey public key
-let public_key_x = Bytes::from_array(&env, &x_coords);
-let public_key_y = Bytes::from_array(&env, &y_coords);
-
-proxy.register_webauthn_key(&owner, &public_key_x, &public_key_y);
+let public_key = P256PublicKey {
+    x: BytesN::from_array(&env, &x_coords),
+    y: BytesN::from_array(&env, &y_coords),
+};
+proxy.register_webauthn_key(&owner, &public_key);
 ```
 
 ### Execute Gasless Transaction
@@ -170,8 +171,10 @@ cargo test -p aa_factory
 
 ### Test Coverage
 
-The module includes 24 comprehensive tests covering:
-- Factory initialization and proxy deployment
+The module includes coverage for:
+- Factory initialization and deterministic proxy deployment
+- Duplicate deployment protection and address prediction
+- End-to-end proxy wallet execution after factory deployment
 - Proxy wallet initialization
 - WebAuthn key registration
 - Nonce management and replay protection
@@ -223,21 +226,21 @@ Get current nonce.
 
 ## ⚠️ Production Considerations
 
-1. **Contract Deployment**: The current implementation uses a placeholder for contract deployment. In production, use `env.deploy_contract()` with the actual proxy Wasm hash.
+1. **Proxy Wasm Installation**: Upload the `aa_proxy` Wasm first and pass its hash to `aa_factory.initialize`.
 
-2. **WebAuthn Verification**: Full WebAuthn signature verification requires P-256 curve operations. The current implementation provides the framework but needs complete cryptographic verification.
+2. **Gas Sponsorship Limits**: Implement rate limiting and sybil resistance for the relayer to prevent abuse.
 
-3. **Gas Sponsorship Limits**: Implement rate limiting and sybil resistance for the relayer to prevent abuse.
-
-4. **Recovery Integration**: Integrate with the `aa_recovery` module for account recovery through guardians.
+3. **Recovery Integration**: Integrate with the `aa_recovery` module for account recovery through guardians.
 
 ## 🚀 Deployment
 
 ```bash
 # Build the contracts
+cargo build --release -p aa_proxy
 cargo build --release -p aa_factory
 
 # The compiled contracts will be at:
+# target/wasm32-unknown-unknown/release/aa_proxy.wasm
 # target/wasm32-unknown-unknown/release/aa_factory.wasm
 ```
 

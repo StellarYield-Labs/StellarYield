@@ -1,0 +1,2435 @@
+{
+  "timestamp": "2026-07-22T21:27:26.953Z",
+  "frontendEndpoints": [
+    {
+      "path": "/api/alerts",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\alerts\\alertsApi.ts"
+    },
+    {
+      "path": "/api/analytics/attribution/:param",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\analytics\\PortfolioAttributionPanel.tsx"
+    },
+    {
+      "path": "/api/analytics/compatibility",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\analytics\\CompatibilityPanel.tsx"
+    },
+    {
+      "path": "/api/analytics/health/batch",
+      "method": "POST",
+      "source": ".\\client\\src\\features\\analytics\\StrategyHealthPanel.tsx"
+    },
+    {
+      "path": "/api/analytics/providers/uptime",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\analytics\\ProviderUptimeReport.tsx"
+    },
+    {
+      "path": "/api/analytics/sources/health",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\analytics\\SourceHealthPanel.tsx"
+    },
+    {
+      "path": "/api/audit-replay/summary",
+      "method": "GET",
+      "source": ".\\client\\src\\pages\\transparency\\AuditReplayReportPanel.tsx"
+    },
+    {
+      "path": "/api/backtest",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\simulator\\backtestService.ts"
+    },
+    {
+      "path": "/api/contacts",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\contacts\\utils\\api.ts"
+    },
+    {
+      "path": "/api/correlation",
+      "method": "GET",
+      "source": ".\\client\\src\\components\\charts\\CorrelationHeatmap.tsx"
+    },
+    {
+      "path": "/api/donations/config/:param",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\donations\\YieldForGood.tsx"
+    },
+    {
+      "path": "/api/donations/set",
+      "method": "POST",
+      "source": ".\\client\\src\\features\\donations\\YieldForGood.tsx"
+    },
+    {
+      "path": "/api/donations/summary",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\donations\\YieldForGood.tsx"
+    },
+    {
+      "path": "/api/fees",
+      "method": "GET",
+      "source": ".\\client\\src\\pages\\governance\\TransactionBuilder.tsx"
+    },
+    {
+      "path": "/api/fees/alert",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\alerts\\FeeDeviationAlertBanner.tsx"
+    },
+    {
+      "path": "/api/google-sheets/append",
+      "method": "POST",
+      "source": ".\\client\\src\\features\\google_sheets\\googleSheetsService.ts"
+    },
+    {
+      "path": "/api/google-sheets/token",
+      "method": "POST",
+      "source": ".\\client\\src\\features\\google_sheets\\googleSheetsService.ts"
+    },
+    {
+      "path": "/api/google-sheets/verify",
+      "method": "POST",
+      "source": ".\\client\\src\\features\\google_sheets\\googleSheetsService.ts"
+    },
+    {
+      "path": "/api/governance/forecast",
+      "method": "POST",
+      "source": ".\\client\\src\\pages\\governance\\GovernanceForecast.tsx"
+    },
+    {
+      "path": "/api/governance/proposals",
+      "method": "GET",
+      "source": ".\\client\\src\\pages\\governance\\useGovernanceProposals.ts"
+    },
+    {
+      "path": "/api/governance/proposals/:param/cancel",
+      "method": "POST",
+      "source": ".\\client\\src\\pages\\governance\\useGovernanceProposals.ts"
+    },
+    {
+      "path": "/api/health",
+      "method": "GET",
+      "source": ".\\client\\src\\pages\\governance\\EmergencyRunbookPanel.tsx"
+    },
+    {
+      "path": "/api/incidents",
+      "method": "GET",
+      "source": ".\\client\\src\\components\\AIAdvisor\\RecoveryAdvisor.tsx"
+    },
+    {
+      "path": "/api/incidents/:param/recommendations",
+      "method": "GET",
+      "source": ".\\client\\src\\components\\AIAdvisor\\RecoveryAdvisor.tsx"
+    },
+    {
+      "path": "/api/indexer/status",
+      "method": "GET",
+      "source": ".\\client\\src\\pages\\transparency\\IndexerCheckpointPanel.tsx"
+    },
+    {
+      "path": "/api/leaderboard",
+      "method": "GET",
+      "source": ".\\client\\src\\pages\\leaderboard\\Leaderboard.tsx"
+    },
+    {
+      "path": "/api/liquidity/fragmentation",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\fragmentation\\FragmentationDashboard.tsx"
+    },
+    {
+      "path": "/api/liquidity/fragmentation/history",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\fragmentation\\FragmentationTrendChart.tsx"
+    },
+    {
+      "path": "/api/notifications",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\alerts\\alertsApi.ts"
+    },
+    {
+      "path": "/api/notifications/:param",
+      "method": "DELETE",
+      "source": ".\\client\\src\\components\\Navigation\\NotificationBell.tsx"
+    },
+    {
+      "path": "/api/notifications/:param",
+      "method": "GET",
+      "source": ".\\client\\src\\components\\Navigation\\NotificationBell.tsx"
+    },
+    {
+      "path": "/api/notifications/:param/read",
+      "method": "PATCH",
+      "source": ".\\client\\src\\components\\Navigation\\NotificationBell.tsx"
+    },
+    {
+      "path": "/api/onramp/webhook",
+      "method": "POST",
+      "source": ".\\client\\src\\features\\onramp\\OnRampModal.tsx"
+    },
+    {
+      "path": "/api/portfolio/activity/:param",
+      "method": "GET",
+      "source": ".\\client\\src\\components\\portfolio\\UnifiedActivityTimeline.tsx"
+    },
+    {
+      "path": "/api/presets",
+      "method": "POST",
+      "source": ".\\client\\src\\features\\presets\\presetsApi.ts"
+    },
+    {
+      "path": "/api/presets/:param",
+      "method": "DELETE",
+      "source": ".\\client\\src\\features\\presets\\presetsApi.ts"
+    },
+    {
+      "path": "/api/presets/:param",
+      "method": "PUT",
+      "source": ".\\client\\src\\features\\presets\\presetsApi.ts"
+    },
+    {
+      "path": "/api/recommend/timeline",
+      "method": "GET",
+      "source": ".\\client\\src\\components\\AIAdvisor.tsx"
+    },
+    {
+      "path": "/api/referrals/:param",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\referrals\\ReferralDashboard.tsx"
+    },
+    {
+      "path": "/api/referrals/claim",
+      "method": "POST",
+      "source": ".\\client\\src\\features\\referrals\\ReferralDashboard.tsx"
+    },
+    {
+      "path": "/api/referrals/submit",
+      "method": "POST",
+      "source": ".\\client\\src\\features\\referrals\\ReferralDashboard.tsx"
+    },
+    {
+      "path": "/api/relayer/fee-bump",
+      "method": "POST",
+      "source": ".\\client\\src\\services\\soroban.ts"
+    },
+    {
+      "path": "/api/relayer/status",
+      "method": "GET",
+      "source": ".\\client\\src\\pages\\transparency\\RelayerStatusPage.tsx"
+    },
+    {
+      "path": "/api/reliability",
+      "method": "GET",
+      "source": ".\\client\\src\\pages\\transparency\\VaultReliabilityPanel.tsx"
+    },
+    {
+      "path": "/api/rewards/claim",
+      "method": "POST",
+      "source": ".\\client\\src\\features\\rewards\\ClaimRewards.tsx"
+    },
+    {
+      "path": "/api/rewards/proof/:param",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\rewards\\BatchClaimPreview.tsx"
+    },
+    {
+      "path": "/api/risk/dispersion/compute",
+      "method": "POST",
+      "source": ".\\client\\src\\components\\dashboard\\ApyDispersionPanel.tsx"
+    },
+    {
+      "path": "/api/risk/drift/detect",
+      "method": "POST",
+      "source": ".\\client\\src\\components\\dashboard\\RiskPreferenceDriftIndicator.tsx"
+    },
+    {
+      "path": "/api/simulator/deposit",
+      "method": "POST",
+      "source": ".\\client\\src\\features\\simulator\\simulationService.ts"
+    },
+    {
+      "path": "/api/simulator/rebalance",
+      "method": "POST",
+      "source": ".\\client\\src\\features\\portfolio_builder\\RebalancePreviewPanel.tsx"
+    },
+    {
+      "path": "/api/simulator/rebalance-backtest",
+      "method": "POST",
+      "source": ".\\client\\src\\features\\simulator\\rebalanceBacktestService.ts"
+    },
+    {
+      "path": "/api/strategies/export",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\analytics\\ExportBundle.tsx"
+    },
+    {
+      "path": "/api/strategies/export/preview",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\analytics\\ExportBundle.tsx"
+    },
+    {
+      "path": "/api/strategies/leaderboard",
+      "method": "GET",
+      "source": ".\\client\\src\\pages\\leaderboard\\StrategyLeaderboard.tsx"
+    },
+    {
+      "path": "/api/strategies/rotation",
+      "method": "GET",
+      "source": ".\\client\\src\\pages\\leaderboard\\StrategyLeaderboard.tsx"
+    },
+    {
+      "path": "/api/stress-scenarios/run",
+      "method": "POST",
+      "source": ".\\client\\src\\pages\\StressTestDashboard.tsx"
+    },
+    {
+      "path": "/api/transparency/failover-history",
+      "method": "GET",
+      "source": ".\\client\\src\\pages\\transparency\\TransparencyDashboard.tsx"
+    },
+    {
+      "path": "/api/transparency/summary",
+      "method": "GET",
+      "source": ".\\client\\src\\pages\\transparency\\TransparencyDashboard.tsx"
+    },
+    {
+      "path": "/api/treasury/simulate",
+      "method": "POST",
+      "source": ".\\client\\src\\pages\\treasury\\TreasurySimulation.tsx"
+    },
+    {
+      "path": "/api/users/:param/export",
+      "method": "GET",
+      "source": ".\\client\\src\\components\\portfolio\\PortfolioExport.tsx"
+    },
+    {
+      "path": "/api/users/:param/export/preview",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\taxes\\TaxExport.tsx"
+    },
+    {
+      "path": "/api/users/:param/pnl",
+      "method": "GET",
+      "source": ".\\client\\src\\features\\pnl\\PnLChart.tsx"
+    },
+    {
+      "path": "/api/vaults/:param/share-price-history",
+      "method": "GET",
+      "source": ".\\client\\src\\components\\charts\\SharePriceChart.tsx"
+    },
+    {
+      "path": "/api/yields",
+      "method": "GET",
+      "source": ".\\client\\src\\components\\dashboard\\ApyDashboard.tsx"
+    },
+    {
+      "path": "/api/yields/history",
+      "method": "GET",
+      "source": ".\\client\\src\\components\\charts\\ApyHistoryChart.tsx"
+    },
+    {
+      "path": "/api/zap/quote",
+      "method": "POST",
+      "source": ".\\client\\src\\features\\zap\\fetchSwapQuote.ts"
+    }
+  ],
+  "backendEndpoints": [
+    {
+      "path": "/api/admin",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/admin/audit-logs",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\admin.ts"
+    },
+    {
+      "path": "/api/admin/audit-logs/export",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\admin.ts"
+    },
+    {
+      "path": "/api/admin/audit-stats",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\admin.ts"
+    },
+    {
+      "path": "/api/admin/audit-verify",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\admin.ts"
+    },
+    {
+      "path": "/api/admin/fees/config",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\admin.ts"
+    },
+    {
+      "path": "/api/admin/recommendations/freeze",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\admin.ts"
+    },
+    {
+      "path": "/api/admin/recommendations/resume",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\admin.ts"
+    },
+    {
+      "path": "/api/admin/risk/parameters",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\admin.ts"
+    },
+    {
+      "path": "/api/admin/users/:userId/grant-access",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\admin.ts"
+    },
+    {
+      "path": "/api/admin/users/:userId/revoke-access",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\admin.ts"
+    },
+    {
+      "path": "/api/admin/vaults/:vaultId/metadata",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\admin.ts"
+    },
+    {
+      "path": "/api/admin/vaults/:vaultId/parameters",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\admin.ts"
+    },
+    {
+      "path": "/api/admin/vaults/:vaultId/pause",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\admin.ts"
+    },
+    {
+      "path": "/api/admin/vaults/:vaultId/resume",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\admin.ts"
+    },
+    {
+      "path": "/api/alerts",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/alerts",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\alerts.ts"
+    },
+    {
+      "path": "/api/alerts/:id",
+      "method": "DELETE",
+      "source": ".\\server\\src\\routes\\alerts.ts"
+    },
+    {
+      "path": "/api/alerts/:wallet",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\alerts.ts"
+    },
+    {
+      "path": "/api/analytics",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/analytics/attribution/:walletAddress",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/attribution/cache/:walletAddress",
+      "method": "DELETE",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/attribution/config",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/compatibility",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/compatibility/:protocolName",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/compatibility/config",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/compatibility/safe/:protocolName",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/dashboard",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/health/:strategyId",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/health/alerts",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/health/batch",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/health/config",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/providers/uptime",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/recommendation-stability/compare",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/reliability/:providerId",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/reliability/batch",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/reliability/compare",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/reliability/config",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/reliability/recommendations",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/sources/health",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/analytics/strategy-state-transitions/:strategyId",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\analytics.ts"
+    },
+    {
+      "path": "/api/audit-monitoring",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/audit-monitoring/alerts",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\auditMonitoring.ts"
+    },
+    {
+      "path": "/api/audit-monitoring/alerts/:severity",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\auditMonitoring.ts"
+    },
+    {
+      "path": "/api/audit-monitoring/export",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\auditMonitoring.ts"
+    },
+    {
+      "path": "/api/audit-monitoring/report",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\auditMonitoring.ts"
+    },
+    {
+      "path": "/api/audit-monitoring/start",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\auditMonitoring.ts"
+    },
+    {
+      "path": "/api/audit-monitoring/status",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\auditMonitoring.ts"
+    },
+    {
+      "path": "/api/audit-monitoring/stop",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\auditMonitoring.ts"
+    },
+    {
+      "path": "/api/audit-replay",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/audit-replay/record",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\auditReplay.ts"
+    },
+    {
+      "path": "/api/audit-replay/summary",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\auditReplay.ts"
+    },
+    {
+      "path": "/api/auth/challenge",
+      "method": "POST",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/auth/verify",
+      "method": "POST",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/backtest",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/backtest",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\backtest.ts"
+    },
+    {
+      "path": "/api/contacts",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/contacts",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\contacts.ts"
+    },
+    {
+      "path": "/api/contacts",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\contacts.ts"
+    },
+    {
+      "path": "/api/contacts/:id",
+      "method": "DELETE",
+      "source": ".\\server\\src\\routes\\contacts.ts"
+    },
+    {
+      "path": "/api/contacts/:id",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\contacts.ts"
+    },
+    {
+      "path": "/api/contacts/:id",
+      "method": "PUT",
+      "source": ".\\server\\src\\routes\\contacts.ts"
+    },
+    {
+      "path": "/api/contacts/export",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\contacts.ts"
+    },
+    {
+      "path": "/api/contacts/import",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\contacts.ts"
+    },
+    {
+      "path": "/api/contacts/search",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\contacts.ts"
+    },
+    {
+      "path": "/api/correlation",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/correlation",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\correlation.ts"
+    },
+    {
+      "path": "/api/deposits",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/deposits/recommend",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\deposits.ts"
+    },
+    {
+      "path": "/api/deposits/supported-assets",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\deposits.ts"
+    },
+    {
+      "path": "/api/donations",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/donations/config/:address",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\donations.ts"
+    },
+    {
+      "path": "/api/donations/set",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\donations.ts"
+    },
+    {
+      "path": "/api/donations/summary",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\donations.ts"
+    },
+    {
+      "path": "/api/donations/total",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\donations.ts"
+    },
+    {
+      "path": "/api/events",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/fees",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/fees",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\fees.ts"
+    },
+    {
+      "path": "/api/fees/alert",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\fees.ts"
+    },
+    {
+      "path": "/api/google-sheets",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/google-sheets/append",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\googleSheets.ts"
+    },
+    {
+      "path": "/api/google-sheets/token",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\googleSheets.ts"
+    },
+    {
+      "path": "/api/google-sheets/verify",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\googleSheets.ts"
+    },
+    {
+      "path": "/api/governance",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/governance/forecast",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\governance.ts"
+    },
+    {
+      "path": "/api/governance/proposals",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\governance.ts"
+    },
+    {
+      "path": "/api/governance/proposals",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\governance.ts"
+    },
+    {
+      "path": "/api/governance/proposals/:id",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\governance.ts"
+    },
+    {
+      "path": "/api/governance/proposals/:id/cancel",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\governance.ts"
+    },
+    {
+      "path": "/api/governance/proposals/:id/simulate",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\governance.ts"
+    },
+    {
+      "path": "/api/health",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/health",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\health.ts"
+    },
+    {
+      "path": "/api/health/dependencies",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\health.ts"
+    },
+    {
+      "path": "/api/health/queues",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\health.ts"
+    },
+    {
+      "path": "/api/incidents",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/incidents",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\incidents.ts"
+    },
+    {
+      "path": "/api/incidents",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\incidents.ts"
+    },
+    {
+      "path": "/api/incidents/:id",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\incidents.ts"
+    },
+    {
+      "path": "/api/incidents/:id/recommendations",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\incidents.ts"
+    },
+    {
+      "path": "/api/incidents/:id/resolve",
+      "method": "PATCH",
+      "source": ".\\server\\src\\routes\\incidents.ts"
+    },
+    {
+      "path": "/api/indexer",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/indexer/status",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\indexer.ts"
+    },
+    {
+      "path": "/api/leaderboard",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/leaderboard",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\leaderboard.ts"
+    },
+    {
+      "path": "/api/liquidity",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/liquidity/fragmentation",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\fragmentation.ts"
+    },
+    {
+      "path": "/api/liquidity/fragmentation/history",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\fragmentation.ts"
+    },
+    {
+      "path": "/api/metrics",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/momentum/analysis",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\momentum.ts"
+    },
+    {
+      "path": "/api/momentum/config",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\momentum.ts"
+    },
+    {
+      "path": "/api/momentum/config",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\momentum.ts"
+    },
+    {
+      "path": "/api/momentum/health",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\momentum.ts"
+    },
+    {
+      "path": "/api/momentum/history",
+      "method": "DELETE",
+      "source": ".\\server\\src\\routes\\momentum.ts"
+    },
+    {
+      "path": "/api/momentum/protocols",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\momentum.ts"
+    },
+    {
+      "path": "/api/momentum/protocols/:protocolName",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\momentum.ts"
+    },
+    {
+      "path": "/api/momentum/protocols/batch",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\momentum.ts"
+    },
+    {
+      "path": "/api/momentum/ranking",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\momentum.ts"
+    },
+    {
+      "path": "/api/momentum/snapshots",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\momentum.ts"
+    },
+    {
+      "path": "/api/notifications",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/notifications/:id/read",
+      "method": "PATCH",
+      "source": ".\\server\\src\\routes\\notifications.ts"
+    },
+    {
+      "path": "/api/notifications/:walletAddress",
+      "method": "DELETE",
+      "source": ".\\server\\src\\routes\\notifications.ts"
+    },
+    {
+      "path": "/api/notifications/:walletAddress",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\notifications.ts"
+    },
+    {
+      "path": "/api/notifications/digest/preferences/:walletAddress",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\notifications.ts"
+    },
+    {
+      "path": "/api/notifications/digest/preferences/:walletAddress",
+      "method": "PUT",
+      "source": ".\\server\\src\\routes\\notifications.ts"
+    },
+    {
+      "path": "/api/onramp",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/onramp/webhook",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\onramp.ts"
+    },
+    {
+      "path": "/api/openapi",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/openapi",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\openapi.ts"
+    },
+    {
+      "path": "/api/openapi/docs",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\openapi.ts"
+    },
+    {
+      "path": "/api/portfolio/activity",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/portfolio/activity/:walletAddress",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\activityTimeline.ts"
+    },
+    {
+      "path": "/api/presets",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/presets",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\presets.ts"
+    },
+    {
+      "path": "/api/presets",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\presets.ts"
+    },
+    {
+      "path": "/api/presets/:id",
+      "method": "DELETE",
+      "source": ".\\server\\src\\routes\\presets.ts"
+    },
+    {
+      "path": "/api/presets/:id",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\presets.ts"
+    },
+    {
+      "path": "/api/presets/:id",
+      "method": "PUT",
+      "source": ".\\server\\src\\routes\\presets.ts"
+    },
+    {
+      "path": "/api/queue/candidate/:candidateId/approve",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\queue.ts"
+    },
+    {
+      "path": "/api/queue/candidate/:candidateId/reject",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\queue.ts"
+    },
+    {
+      "path": "/api/queue/candidate/enqueue",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\queue.ts"
+    },
+    {
+      "path": "/api/queue/candidate/next",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\queue.ts"
+    },
+    {
+      "path": "/api/queue/candidate/prioritized",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\queue.ts"
+    },
+    {
+      "path": "/api/queue/clear",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\queue.ts"
+    },
+    {
+      "path": "/api/queue/config",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\queue.ts"
+    },
+    {
+      "path": "/api/queue/config",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\queue.ts"
+    },
+    {
+      "path": "/api/queue/state",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\queue.ts"
+    },
+    {
+      "path": "/api/recommend",
+      "method": "POST",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/recommend/timeline",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/referrals",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/referrals/:address",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\referrals.ts"
+    },
+    {
+      "path": "/api/referrals/claim",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\referrals.ts"
+    },
+    {
+      "path": "/api/referrals/submit",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\referrals.ts"
+    },
+    {
+      "path": "/api/relayer/fee-bump",
+      "method": "POST",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/relayer/status",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/relayer/status",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\relayerStatus.ts"
+    },
+    {
+      "path": "/api/reliability",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\reliability.ts"
+    },
+    {
+      "path": "/api/reliability/:providerId",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\reliability.ts"
+    },
+    {
+      "path": "/api/reliability/uptime/all",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\reliability.ts"
+    },
+    {
+      "path": "/api/rewards/schedule-summary",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\rewards.ts"
+    },
+    {
+      "path": "/api/risk",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/risk/dispersion/compute",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\risk.ts"
+    },
+    {
+      "path": "/api/risk/dispersion/config",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\risk.ts"
+    },
+    {
+      "path": "/api/risk/dispersion/config",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\risk.ts"
+    },
+    {
+      "path": "/api/risk/drift/detect",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\risk.ts"
+    },
+    {
+      "path": "/api/risk/drift/thresholds/:preference",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\risk.ts"
+    },
+    {
+      "path": "/api/risk/stress-matrix/run",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\risk.ts"
+    },
+    {
+      "path": "/api/risk/stress-matrix/scenarios",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\risk.ts"
+    },
+    {
+      "path": "/api/risk/stress-matrix/scenarios",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\risk.ts"
+    },
+    {
+      "path": "/api/risk/stress-matrix/scenarios/:scenarioId",
+      "method": "DELETE",
+      "source": ".\\server\\src\\routes\\risk.ts"
+    },
+    {
+      "path": "/api/simulator",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/simulator/deposit",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\simulator.ts"
+    },
+    {
+      "path": "/api/simulator/failover",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\simulator.ts"
+    },
+    {
+      "path": "/api/simulator/rebalance",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\simulator.ts"
+    },
+    {
+      "path": "/api/simulator/rebalance-backtest",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\simulator.ts"
+    },
+    {
+      "path": "/api/strategies",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/strategies/:strategyId/snapshots/:targetVersion/rollback-preview",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\strategies.ts"
+    },
+    {
+      "path": "/api/strategies/export",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\strategies.ts"
+    },
+    {
+      "path": "/api/strategies/export/preview",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\strategies.ts"
+    },
+    {
+      "path": "/api/strategies/failover",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\strategies.ts"
+    },
+    {
+      "path": "/api/strategies/leaderboard",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\strategies.ts"
+    },
+    {
+      "path": "/api/strategies/rotation",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\strategies.ts"
+    },
+    {
+      "path": "/api/stress-scenarios/run",
+      "method": "POST",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/transparency",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/transparency/failover-history",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\transparency.ts"
+    },
+    {
+      "path": "/api/transparency/failover-history",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\transparency.ts"
+    },
+    {
+      "path": "/api/transparency/failover-history/:protocolId/resolve",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\transparency.ts"
+    },
+    {
+      "path": "/api/transparency/summary",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\transparency.ts"
+    },
+    {
+      "path": "/api/treasury",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/treasury/scenarios",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\treasury.ts"
+    },
+    {
+      "path": "/api/treasury/scenarios",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\treasury.ts"
+    },
+    {
+      "path": "/api/treasury/scenarios/:id",
+      "method": "DELETE",
+      "source": ".\\server\\src\\routes\\treasury.ts"
+    },
+    {
+      "path": "/api/treasury/scenarios/:id",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\treasury.ts"
+    },
+    {
+      "path": "/api/treasury/simulate",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\treasury.ts"
+    },
+    {
+      "path": "/api/users",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/users/:address/export",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\export.ts"
+    },
+    {
+      "path": "/api/users/:address/export/preview",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\export.ts"
+    },
+    {
+      "path": "/api/users/:address/pnl",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\pnl.ts"
+    },
+    {
+      "path": "/api/vaults",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/vaults/:vaultId/share-price-history",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\sharePriceHistory.ts"
+    },
+    {
+      "path": "/api/weekly-reports",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/weekly-reports",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\weeklyReports.ts"
+    },
+    {
+      "path": "/api/weekly-reports/:userId",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\weeklyReports.ts"
+    },
+    {
+      "path": "/api/weekly-reports/export",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\weeklyReports.ts"
+    },
+    {
+      "path": "/api/weekly-reports/job/run",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\weeklyReports.ts"
+    },
+    {
+      "path": "/api/weekly-reports/job/start",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\weeklyReports.ts"
+    },
+    {
+      "path": "/api/weekly-reports/job/status",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\weeklyReports.ts"
+    },
+    {
+      "path": "/api/weekly-reports/job/stop",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\weeklyReports.ts"
+    },
+    {
+      "path": "/api/weekly-reports/preview",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\weeklyReports.ts"
+    },
+    {
+      "path": "/api/weekly-reports/stats",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\weeklyReports.ts"
+    },
+    {
+      "path": "/api/weekly-reports/subscribe",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\weeklyReports.ts"
+    },
+    {
+      "path": "/api/weekly-reports/unsubscribe",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\weeklyReports.ts"
+    },
+    {
+      "path": "/api/weekly-reports/user/:userId/history",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\weeklyReports.ts"
+    },
+    {
+      "path": "/api/yields",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/yields",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\yields.ts"
+    },
+    {
+      "path": "/api/yields/predict",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/zap",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/api/zap/quote",
+      "method": "POST",
+      "source": ".\\server\\src\\routes\\zap.ts"
+    },
+    {
+      "path": "/api/zap/supported-assets",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\zap.ts"
+    },
+    {
+      "path": "/metrics",
+      "method": "GET",
+      "source": ".\\server\\src\\app.ts"
+    },
+    {
+      "path": "/metrics",
+      "method": "GET",
+      "source": ".\\server\\src\\routes\\prometheusMetrics.ts"
+    }
+  ],
+  "findings": [
+    {
+      "frontendEndpoint": {
+        "path": "/api/alerts",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\alerts\\alertsApi.ts"
+      },
+      "backendMatch": {
+        "path": "/api/alerts",
+        "method": "GET",
+        "source": ".\\server\\src\\app.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/analytics/attribution/:param",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\analytics\\PortfolioAttributionPanel.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/analytics/attribution/:walletAddress",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\analytics.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/analytics/compatibility",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\analytics\\CompatibilityPanel.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/analytics/compatibility",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\analytics.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/analytics/health/batch",
+        "method": "POST",
+        "source": ".\\client\\src\\features\\analytics\\StrategyHealthPanel.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/analytics/health/batch",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\analytics.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/analytics/providers/uptime",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\analytics\\ProviderUptimeReport.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/analytics/providers/uptime",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\analytics.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/analytics/sources/health",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\analytics\\SourceHealthPanel.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/analytics/sources/health",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\analytics.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/audit-replay/summary",
+        "method": "GET",
+        "source": ".\\client\\src\\pages\\transparency\\AuditReplayReportPanel.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/audit-replay/summary",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\auditReplay.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/backtest",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\simulator\\backtestService.ts"
+      },
+      "backendMatch": {
+        "path": "/api/backtest",
+        "method": "GET",
+        "source": ".\\server\\src\\app.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/contacts",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\contacts\\utils\\api.ts"
+      },
+      "backendMatch": {
+        "path": "/api/contacts",
+        "method": "GET",
+        "source": ".\\server\\src\\app.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/correlation",
+        "method": "GET",
+        "source": ".\\client\\src\\components\\charts\\CorrelationHeatmap.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/correlation",
+        "method": "GET",
+        "source": ".\\server\\src\\app.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/donations/config/:param",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\donations\\YieldForGood.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/donations/config/:address",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\donations.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/donations/set",
+        "method": "POST",
+        "source": ".\\client\\src\\features\\donations\\YieldForGood.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/donations/set",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\donations.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/donations/summary",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\donations\\YieldForGood.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/donations/summary",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\donations.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/fees",
+        "method": "GET",
+        "source": ".\\client\\src\\pages\\governance\\TransactionBuilder.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/fees",
+        "method": "GET",
+        "source": ".\\server\\src\\app.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/fees/alert",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\alerts\\FeeDeviationAlertBanner.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/fees/alert",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\fees.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/google-sheets/append",
+        "method": "POST",
+        "source": ".\\client\\src\\features\\google_sheets\\googleSheetsService.ts"
+      },
+      "backendMatch": {
+        "path": "/api/google-sheets/append",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\googleSheets.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/google-sheets/token",
+        "method": "POST",
+        "source": ".\\client\\src\\features\\google_sheets\\googleSheetsService.ts"
+      },
+      "backendMatch": {
+        "path": "/api/google-sheets/token",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\googleSheets.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/google-sheets/verify",
+        "method": "POST",
+        "source": ".\\client\\src\\features\\google_sheets\\googleSheetsService.ts"
+      },
+      "backendMatch": {
+        "path": "/api/google-sheets/verify",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\googleSheets.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/governance/forecast",
+        "method": "POST",
+        "source": ".\\client\\src\\pages\\governance\\GovernanceForecast.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/governance/forecast",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\governance.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/governance/proposals",
+        "method": "GET",
+        "source": ".\\client\\src\\pages\\governance\\useGovernanceProposals.ts"
+      },
+      "backendMatch": {
+        "path": "/api/governance/proposals",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\governance.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/governance/proposals/:param/cancel",
+        "method": "POST",
+        "source": ".\\client\\src\\pages\\governance\\useGovernanceProposals.ts"
+      },
+      "backendMatch": {
+        "path": "/api/governance/proposals/:id/cancel",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\governance.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/health",
+        "method": "GET",
+        "source": ".\\client\\src\\pages\\governance\\EmergencyRunbookPanel.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/health",
+        "method": "GET",
+        "source": ".\\server\\src\\app.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/incidents",
+        "method": "GET",
+        "source": ".\\client\\src\\components\\AIAdvisor\\RecoveryAdvisor.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/incidents",
+        "method": "GET",
+        "source": ".\\server\\src\\app.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/incidents/:param/recommendations",
+        "method": "GET",
+        "source": ".\\client\\src\\components\\AIAdvisor\\RecoveryAdvisor.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/incidents/:id/recommendations",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\incidents.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/indexer/status",
+        "method": "GET",
+        "source": ".\\client\\src\\pages\\transparency\\IndexerCheckpointPanel.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/indexer/status",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\indexer.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/leaderboard",
+        "method": "GET",
+        "source": ".\\client\\src\\pages\\leaderboard\\Leaderboard.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/leaderboard",
+        "method": "GET",
+        "source": ".\\server\\src\\app.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/liquidity/fragmentation",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\fragmentation\\FragmentationDashboard.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/liquidity/fragmentation",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\fragmentation.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/liquidity/fragmentation/history",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\fragmentation\\FragmentationTrendChart.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/liquidity/fragmentation/history",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\fragmentation.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/notifications",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\alerts\\alertsApi.ts"
+      },
+      "backendMatch": {
+        "path": "/api/notifications",
+        "method": "GET",
+        "source": ".\\server\\src\\app.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/notifications/:param",
+        "method": "DELETE",
+        "source": ".\\client\\src\\components\\Navigation\\NotificationBell.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/notifications/:walletAddress",
+        "method": "DELETE",
+        "source": ".\\server\\src\\routes\\notifications.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/notifications/:param",
+        "method": "GET",
+        "source": ".\\client\\src\\components\\Navigation\\NotificationBell.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/notifications/:walletAddress",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\notifications.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/notifications/:param/read",
+        "method": "PATCH",
+        "source": ".\\client\\src\\components\\Navigation\\NotificationBell.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/notifications/:id/read",
+        "method": "PATCH",
+        "source": ".\\server\\src\\routes\\notifications.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/onramp/webhook",
+        "method": "POST",
+        "source": ".\\client\\src\\features\\onramp\\OnRampModal.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/onramp/webhook",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\onramp.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/portfolio/activity/:param",
+        "method": "GET",
+        "source": ".\\client\\src\\components\\portfolio\\UnifiedActivityTimeline.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/portfolio/activity/:walletAddress",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\activityTimeline.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/presets",
+        "method": "POST",
+        "source": ".\\client\\src\\features\\presets\\presetsApi.ts"
+      },
+      "backendMatch": {
+        "path": "/api/presets",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\presets.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/presets/:param",
+        "method": "DELETE",
+        "source": ".\\client\\src\\features\\presets\\presetsApi.ts"
+      },
+      "backendMatch": {
+        "path": "/api/presets/:id",
+        "method": "DELETE",
+        "source": ".\\server\\src\\routes\\presets.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/presets/:param",
+        "method": "PUT",
+        "source": ".\\client\\src\\features\\presets\\presetsApi.ts"
+      },
+      "backendMatch": {
+        "path": "/api/presets/:id",
+        "method": "PUT",
+        "source": ".\\server\\src\\routes\\presets.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/recommend/timeline",
+        "method": "GET",
+        "source": ".\\client\\src\\components\\AIAdvisor.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/recommend/timeline",
+        "method": "GET",
+        "source": ".\\server\\src\\app.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/referrals/:param",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\referrals\\ReferralDashboard.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/referrals/:address",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\referrals.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/referrals/claim",
+        "method": "POST",
+        "source": ".\\client\\src\\features\\referrals\\ReferralDashboard.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/referrals/claim",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\referrals.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/referrals/submit",
+        "method": "POST",
+        "source": ".\\client\\src\\features\\referrals\\ReferralDashboard.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/referrals/submit",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\referrals.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/relayer/fee-bump",
+        "method": "POST",
+        "source": ".\\client\\src\\services\\soroban.ts"
+      },
+      "backendMatch": {
+        "path": "/api/relayer/fee-bump",
+        "method": "POST",
+        "source": ".\\server\\src\\app.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/relayer/status",
+        "method": "GET",
+        "source": ".\\client\\src\\pages\\transparency\\RelayerStatusPage.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/relayer/status",
+        "method": "GET",
+        "source": ".\\server\\src\\app.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/reliability",
+        "method": "GET",
+        "source": ".\\client\\src\\pages\\transparency\\VaultReliabilityPanel.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/reliability",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\reliability.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/rewards/claim",
+        "method": "POST",
+        "source": ".\\client\\src\\features\\rewards\\ClaimRewards.tsx"
+      },
+      "backendMatch": null,
+      "issue": "documented",
+      "severity": "info",
+      "explanation": "Intentionally allowlisted in audit configuration"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/rewards/proof/:param",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\rewards\\BatchClaimPreview.tsx"
+      },
+      "backendMatch": null,
+      "issue": "documented",
+      "severity": "info",
+      "explanation": "Intentionally allowlisted in audit configuration"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/risk/dispersion/compute",
+        "method": "POST",
+        "source": ".\\client\\src\\components\\dashboard\\ApyDispersionPanel.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/risk/dispersion/compute",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\risk.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/risk/drift/detect",
+        "method": "POST",
+        "source": ".\\client\\src\\components\\dashboard\\RiskPreferenceDriftIndicator.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/risk/drift/detect",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\risk.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/simulator/deposit",
+        "method": "POST",
+        "source": ".\\client\\src\\features\\simulator\\simulationService.ts"
+      },
+      "backendMatch": {
+        "path": "/api/simulator/deposit",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\simulator.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/simulator/rebalance",
+        "method": "POST",
+        "source": ".\\client\\src\\features\\portfolio_builder\\RebalancePreviewPanel.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/simulator/rebalance",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\simulator.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/simulator/rebalance-backtest",
+        "method": "POST",
+        "source": ".\\client\\src\\features\\simulator\\rebalanceBacktestService.ts"
+      },
+      "backendMatch": {
+        "path": "/api/simulator/rebalance-backtest",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\simulator.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/strategies/export",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\analytics\\ExportBundle.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/strategies/export",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\strategies.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/strategies/export/preview",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\analytics\\ExportBundle.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/strategies/export/preview",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\strategies.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/strategies/leaderboard",
+        "method": "GET",
+        "source": ".\\client\\src\\pages\\leaderboard\\StrategyLeaderboard.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/strategies/leaderboard",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\strategies.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/strategies/rotation",
+        "method": "GET",
+        "source": ".\\client\\src\\pages\\leaderboard\\StrategyLeaderboard.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/strategies/rotation",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\strategies.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/stress-scenarios/run",
+        "method": "POST",
+        "source": ".\\client\\src\\pages\\StressTestDashboard.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/stress-scenarios/run",
+        "method": "POST",
+        "source": ".\\server\\src\\app.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/transparency/failover-history",
+        "method": "GET",
+        "source": ".\\client\\src\\pages\\transparency\\TransparencyDashboard.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/transparency/failover-history",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\transparency.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/transparency/summary",
+        "method": "GET",
+        "source": ".\\client\\src\\pages\\transparency\\TransparencyDashboard.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/transparency/summary",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\transparency.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/treasury/simulate",
+        "method": "POST",
+        "source": ".\\client\\src\\pages\\treasury\\TreasurySimulation.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/treasury/simulate",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\treasury.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/users/:param/export",
+        "method": "GET",
+        "source": ".\\client\\src\\components\\portfolio\\PortfolioExport.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/users/:address/export",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\export.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/users/:param/export/preview",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\taxes\\TaxExport.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/users/:address/export/preview",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\export.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/users/:param/pnl",
+        "method": "GET",
+        "source": ".\\client\\src\\features\\pnl\\PnLChart.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/users/:address/pnl",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\pnl.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/vaults/:param/share-price-history",
+        "method": "GET",
+        "source": ".\\client\\src\\components\\charts\\SharePriceChart.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/vaults/:vaultId/share-price-history",
+        "method": "GET",
+        "source": ".\\server\\src\\routes\\sharePriceHistory.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/yields",
+        "method": "GET",
+        "source": ".\\client\\src\\components\\dashboard\\ApyDashboard.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/yields",
+        "method": "GET",
+        "source": ".\\server\\src\\app.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/yields/history",
+        "method": "GET",
+        "source": ".\\client\\src\\components\\charts\\ApyHistoryChart.tsx"
+      },
+      "backendMatch": {
+        "path": "/api/yields",
+        "method": "GET",
+        "source": ".\\server\\src\\app.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found under base path /api/yields (GET)"
+    },
+    {
+      "frontendEndpoint": {
+        "path": "/api/zap/quote",
+        "method": "POST",
+        "source": ".\\client\\src\\features\\zap\\fetchSwapQuote.ts"
+      },
+      "backendMatch": {
+        "path": "/api/zap/quote",
+        "method": "POST",
+        "source": ".\\server\\src\\routes\\zap.ts"
+      },
+      "issue": "ok",
+      "severity": "info",
+      "explanation": "Route found and matches frontend call"
+    }
+  ],
+  "summary": {
+    "totalFrontendCalls": 66,
+    "totalBackendRoutes": 220,
+    "missingRoutes": 0,
+    "undocumentedRoutes": 140,
+    "indirectCalls": 0
+  },
+  "exceptions": [
+    "/api/auth/challenge",
+    "/api/auth/verify",
+    "/api/graphql",
+    "/api/events",
+    "/api/rewards"
+  ]
+}

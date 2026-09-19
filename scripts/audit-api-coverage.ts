@@ -56,6 +56,34 @@ const AUDIT_ALLOWLIST = [
   "/api/auth/verify", // External identity provider — not registered in app.ts yet
   "/api/graphql", // GraphQL endpoint — managed separately via yoga
   "/api/events", // Internal diagnostics — may be disabled in some environments
+  "/api/rewards", // Reward service is implemented outside the main server routes
+];
+
+function normalizeTemplatePath(pathStr: string): string {
+  let normalized = pathStr;
+  while (true) {
+    const start = normalized.indexOf("${");
+    if (start === -1) break;
+    const end = normalized.indexOf("}", start + 2);
+    if (end === -1) break;
+
+    const before = normalized.slice(0, start);
+    const after = normalized.slice(end + 1);
+
+    if (before.endsWith("/")) {
+      normalized = `${before}:param${after}`;
+    } else {
+      normalized = `${before}${after}`;
+    }
+  }
+
+  normalized = normalized.replace(/\/{2,}/g, "/");
+  return normalized;
+}
+
+function normalizeParamSegments(pathStr: string): string {
+  return pathStr.replace(/:[^/]+/g, ":param");
+}
   "/api/backtest", // Frontend-only simulator endpoint — no backend route yet
   "/api/google-sheets", // Google Sheets integration — not yet implemented server-side
   "/api/rewards/claim", // Reward claiming — not yet implemented server-side
@@ -139,6 +167,10 @@ function scanFrontendApis(clientDir: string): EndpointPattern[] {
           let pathStr = match[1];
           if (!pathStr.startsWith("/api/")) continue;
 
+          // Normalize path (remove query params and fragments)
+          const normalizedPath = normalizeTemplatePath(
+            pathStr.split("?")[0].split("#")[0],
+          );
           // Strip template literal expressions like ${endpoint} → use base path only
           pathStr = pathStr.replace(/\$\{[^}]+\}/g, "");
 
@@ -181,6 +213,23 @@ function inferHttpMethod(
   content: string,
   matchIndex: number,
 ): "GET" | "POST" | "PUT" | "DELETE" | "PATCH" {
+  const window = content.substring(
+    Math.max(0, matchIndex - 300),
+    Math.min(content.length, matchIndex + 400),
+  );
+
+  const methodMatch = window.match(
+    /method\s*:\s*["'`]?(GET|POST|PUT|DELETE|PATCH)["'`]?/i,
+  );
+  if (methodMatch?.[1]) {
+    return methodMatch[1].toUpperCase() as any;
+  }
+
+  const altMethodMatch = window.match(
+    /["']method["']\s*,\s*["'`](GET|POST|PUT|DELETE|PATCH)["'`]/i,
+  );
+  if (altMethodMatch?.[1]) {
+    return altMethodMatch[1].toUpperCase() as any;
   // Look around match (before and after) for HTTP method hints
   const contextWindow = content.substring(
     Math.max(0, matchIndex - 100),
@@ -375,13 +424,16 @@ function auditCoverage(
 
   // Build a map of path -> [endpoints] for backend (to handle multiple methods)
   for (const endpoint of backendEndpoints) {
-    if (!backendMap.has(endpoint.path)) {
-      backendMap.set(endpoint.path, []);
+    const normalizedPath = normalizeParamSegments(endpoint.path);
+    if (!backendMap.has(normalizedPath)) {
+      backendMap.set(normalizedPath, []);
     }
-    backendMap.get(endpoint.path)!.push(endpoint);
+    backendMap.get(normalizedPath)!.push(endpoint);
   }
 
   for (const frontend of frontendEndpoints) {
+    const normalizedFrontendPath = normalizeParamSegments(frontend.path);
+
     // Skip allowlisted endpoints
     if (AUDIT_ALLOWLIST.some((allow) => frontend.path.startsWith(allow))) {
       findings.push({
@@ -395,7 +447,7 @@ function auditCoverage(
     }
 
     // Exact match with same method
-    const backendAtPath = backendMap.get(frontend.path) || [];
+    const backendAtPath = backendMap.get(normalizedFrontendPath) || [];
     const exactMatch = backendAtPath.find((e) => e.method === frontend.method);
 
     if (exactMatch) {
@@ -433,7 +485,10 @@ function auditCoverage(
     const prefixMatch = backendEndpoints.find(
       (e) =>
         e.method === frontend.method &&
-        (frontend.path.startsWith(e.path + "/") || frontend.path === e.path),
+        (normalizeParamSegments(frontend.path).startsWith(
+          normalizeParamSegments(e.path) + "/",
+        ) ||
+          normalizeParamSegments(frontend.path) === normalizeParamSegments(e.path)),
     );
 
     if (prefixMatch) {

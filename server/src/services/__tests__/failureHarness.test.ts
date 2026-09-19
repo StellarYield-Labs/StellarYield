@@ -19,7 +19,6 @@
  *   evaluateOracle() must return decision === "BLOCK".
  */
 
-import { describe, it, expect, beforeEach } from "@jest/globals";
 import fc from "fast-check";
 
 // ── Services under test ────────────────────────────────────────────────────
@@ -52,6 +51,10 @@ import {
   type StrategyModule,
 } from "../vaultOrchestratorService";
 
+import { MockExecutionAdapter } from "../rebalanceExecutionAdapter";
+import { runRebalanceQueueProcessorJob } from "../../jobs/rebalanceQueueProcessorJob";
+import { REBALANCE_STATUS, EXECUTION_TYPE } from "../../queues/types";
+import type {
 import { runRebalanceQueueProcessorJob } from "../../jobs/rebalanceQueueProcessorJob";
 import { REBALANCE_STATUS, EXECUTION_TYPE } from "../../queues/types";
 import type {
@@ -70,7 +73,6 @@ import {
 import {
   buildHarnessFor,
   FailureMode,
-  mockHorizonCall,
 } from "./failureHarness";
 
 // ── Local reading factories ────────────────────────────────────────────────
@@ -161,6 +163,12 @@ describe("Failure class: TIMEOUT", () => {
   it("rebalance execution schedules a failed attempt when the executor times out", async () => {
     const queueEntry = createQueueEntry();
     const service = createQueueServiceHarness(queueEntry);
+    const executionAdapter = new MockExecutionAdapter().addSubmitResult({
+      success: false,
+      status: "failed",
+      error: "Timeout after 100ms",
+      errorClass: "transient",
+    });
 
     const result = await runRebalanceQueueProcessorJob(
       {
@@ -169,6 +177,11 @@ describe("Failure class: TIMEOUT", () => {
         enableRetries: true,
         enableDeferredProcessing: false,
         logResults: false,
+        executionAdapter,
+        useAuctionMode: false,
+      },
+      {
+        queueService: service,
       },
       {
         queueService: service,
@@ -262,7 +275,7 @@ describe("Failure class: STALE_DATA", () => {
       fc.property(
         fc.integer({ min: 1, max: 1_000_000 }),      // price
         fc.integer({ min: 1, max: 3_600_000 }),       // extra ms beyond threshold
-        (price, extraMs) => {
+        (price: number, extraMs: number) => {
           const reading = makeStaleReading(price, DEFAULT_THRESHOLDS.maxAgeMs + extraMs);
           const r = evaluateOracle(reading, price, DEFAULT_THRESHOLDS, Date.now());
           return r.decision === "BLOCK";
@@ -274,6 +287,15 @@ describe("Failure class: STALE_DATA", () => {
   it("rebalance execution rejects stale execution results", async () => {
     const queueEntry = createQueueEntry();
     const service = createQueueServiceHarness(queueEntry);
+    const executionAdapter = new MockExecutionAdapter().addSubmitResult({
+      success: true,
+      status: "confirmed",
+      transactionHash: "0xstale",
+      ledger: 12345,
+      metadata: {
+        timestamp: new Date(Date.now() - 10 * 60_000).toISOString(),
+      },
+    });
 
     const result = await runRebalanceQueueProcessorJob(
       {
@@ -282,6 +304,11 @@ describe("Failure class: STALE_DATA", () => {
         enableRetries: true,
         enableDeferredProcessing: false,
         logResults: false,
+        executionAdapter,
+        useAuctionMode: false,
+      },
+      {
+        queueService: service,
       },
       {
         queueService: service,
@@ -390,6 +417,16 @@ describe("Failure class: MALFORMED_RESPONSE", () => {
   it("rebalance execution rejects malformed executor output", async () => {
     const queueEntry = createQueueEntry();
     const service = createQueueServiceHarness(queueEntry);
+    const executionAdapter = new MockExecutionAdapter().addSubmitResult({
+      success: true,
+      status: "confirmed",
+      transactionHash: "0xmalformed",
+      ledger: 12345,
+      metadata: {
+        filledPercentage: 150,
+        totalExecuted: Number.NaN,
+      },
+    });
 
     const result = await runRebalanceQueueProcessorJob(
       {
@@ -398,6 +435,11 @@ describe("Failure class: MALFORMED_RESPONSE", () => {
         enableRetries: true,
         enableDeferredProcessing: false,
         logResults: false,
+        executionAdapter,
+        useAuctionMode: false,
+      },
+      {
+        queueService: service,
       },
       {
         queueService: service,
@@ -450,6 +492,14 @@ describe("Failure class: RATE_LIMIT", () => {
   it("rebalance execution records a retryable failure when the executor is rate-limited", async () => {
     const queueEntry = createQueueEntry();
     const service = createQueueServiceHarness(queueEntry);
+    const executionAdapter = new MockExecutionAdapter().addSubmitResult({
+      success: false,
+      status: "failed",
+      error: "HTTP 429 Too Many Requests",
+      errorClass: "transient",
+      metadata: {
+        retryAfter: 30,
+      },
     const rateLimitError = Object.assign(new Error("HTTP 429 Too Many Requests"), {
       status: 429,
       retryAfter: 30,
@@ -462,6 +512,11 @@ describe("Failure class: RATE_LIMIT", () => {
         enableRetries: true,
         enableDeferredProcessing: false,
         logResults: false,
+        executionAdapter,
+        useAuctionMode: false,
+      },
+      {
+        queueService: service,
       },
       {
         queueService: service,
@@ -590,6 +645,15 @@ describe("Failure class: HARD_FAILURE", () => {
   it("rebalance execution fails closed on hard upstream failures", async () => {
     const queueEntry = createQueueEntry();
     const service = createQueueServiceHarness(queueEntry);
+    const executionAdapter = new MockExecutionAdapter().addSubmitResult({
+      success: false,
+      status: "failed",
+      error: "upstream service unavailable",
+      errorClass: "transient",
+      metadata: {
+        code: "ECONNREFUSED",
+      },
+    });
 
     const result = await runRebalanceQueueProcessorJob(
       {
@@ -598,6 +662,11 @@ describe("Failure class: HARD_FAILURE", () => {
         enableRetries: true,
         enableDeferredProcessing: false,
         logResults: false,
+        executionAdapter,
+        useAuctionMode: false,
+      },
+      {
+        queueService: service,
       },
       {
         queueService: service,
@@ -649,7 +718,7 @@ describe("Fail-closed properties (PBT)", () => {
     fc.assert(
       fc.property(
         fc.option(fc.integer({ min: 1, max: 1_000_000 })),
-        (refPrice) => {
+        (refPrice: number | null) => {
           const r = evaluateOracle(null, refPrice ?? null, DEFAULT_THRESHOLDS, Date.now());
           return r.decision === "BLOCK";
         },
@@ -663,7 +732,7 @@ describe("Fail-closed properties (PBT)", () => {
         fc.integer({ min: 1, max: 1_000_000 }),  // current price
         fc.integer({ min: 1, max: 1_000_000 }),  // reference price
         fc.integer({ min: 1, max: 3_600_000 }),  // extra staleness ms
-        (price, ref, extra) => {
+        (price: number, ref: number, extra: number) => {
           const reading = makeStaleReading(price, DEFAULT_THRESHOLDS.maxAgeMs + extra);
           const r = evaluateOracle(reading, ref, DEFAULT_THRESHOLDS, Date.now());
           return r.decision === "BLOCK";
@@ -677,7 +746,7 @@ describe("Fail-closed properties (PBT)", () => {
       fc.property(
         fc.integer({ min: 1, max: 1_000_000 }),  // reference price
         fc.double({ min: 1.1, max: 5.0 }),        // multiplier > 5%
-        (ref, multiplier) => {
+        (ref: number, multiplier: number) => {
           const price = Math.round(ref * (1 + DEFAULT_THRESHOLDS.maxDeviationPct / 100 * multiplier));
           const reading = makeFreshReading(price);
           const r = evaluateOracle(reading, ref, DEFAULT_THRESHOLDS, Date.now());
@@ -695,7 +764,7 @@ describe("Fail-closed properties (PBT)", () => {
       fc.property(
         fc.integer({ min: 0, max: 10_000 }),  // current fee in stroops
         fc.integer({ min: 0, max: 10_000 }),  // baseline fee
-        (current, baseline) => {
+        (current: number, baseline: number) => {
           const alert = computeFeeDeviationAlert(current, baseline);
           return ["normal", "warning", "critical"].includes(alert.level);
         },
@@ -714,7 +783,13 @@ describe("Fail-closed properties (PBT)", () => {
           }),
           { minLength: 1, maxLength: 5 },
         ),
-        (strategyParams) => {
+        (
+          strategyParams: Array<{
+            weight: number;
+            performanceScore: number;
+            isActive: boolean;
+          }>,
+        ) => {
           const strategies: StrategyModule[] = strategyParams.map((p, i) => ({
             id: `s${i}`,
             name: `Strategy ${i}`,
@@ -769,6 +844,10 @@ function createQueueEntry(overrides: Partial<RebalanceQueueEntryDTO> = {}): Reba
     deferredUntil: null,
     followUpEntryId: null,
     lastError: null,
+    lastTransactionHash: null,
+    lastLedger: null,
+    lastErrorClass: null,
+    executionMetadata: null,
     completedAt: null,
     createdAt: now,
     updatedAt: now,

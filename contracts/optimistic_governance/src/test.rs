@@ -189,6 +189,8 @@ fn test_cancel_proposal() {
         .with_mut(|li| li.timestamp = 3 * 24 * 60 * 60 + 1);
     let result = client.try_execute(&proposal_id);
     match result {
+        Err(Ok(Error::ProposalCancelled)) => (),
+        _ => panic!("expected ProposalCancelled"),
         Err(Ok(Error::ProposalCancelled)) => {}
         _ => panic!("Expected ProposalCancelled"),
     }
@@ -221,12 +223,16 @@ fn test_proposal_expires_after_expiry_window() {
         &EXPIRY_WINDOW,
     );
 
+    let current_timestamp = env.ledger().timestamp();
+
     // Fast forward past both the challenge window and the expiry window.
     env.ledger()
-        .with_mut(|li| li.timestamp = challenge_window + EXPIRY_WINDOW + 1);
+        .with_mut(|li| li.timestamp = current_timestamp + challenge_window + EXPIRY_WINDOW + 1);
 
     let result = client.try_execute(&proposal_id);
     match result {
+        Err(Ok(Error::ProposalExpired)) => (),
+        _ => panic!("expected ProposalExpired"),
         Err(Ok(Error::ProposalExpired)) => {}
         _ => panic!("Expected ProposalExpired"),
     }
@@ -278,6 +284,8 @@ fn test_dispute_then_resolve_cancel() {
         .with_mut(|li| li.timestamp = challenge_window + 1);
     let result = client.try_execute(&proposal_id);
     match result {
+        Err(Ok(Error::ProposalCancelled)) => (),
+        _ => panic!("expected ProposalCancelled"),
         Err(Ok(Error::ProposalCancelled)) => {}
         _ => panic!("Expected ProposalCancelled"),
     }

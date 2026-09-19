@@ -14,7 +14,7 @@
 //!
 //! This crate provides:
 //! - **WalletFactory**: Deploys and manages proxy wallet contracts
-//! - **ProxyWallet**: Individual user wallets with WebAuthn support
+//! - **aa_proxy**: The deployable proxy wallet contract used by the factory
 //! - **Gas Sponsorship**: Transaction relaying for fee-less user experience
 //! - **Vault Integration**: Direct interaction with yield vaults
 //!
@@ -85,10 +85,9 @@
 //! ```
 
 mod factory;
-mod proxy_wallet;
 
-pub use factory::{DeploymentConfig, FactoryError, ProxyInfo, WalletFactory, WalletFactoryClient};
-pub use proxy_wallet::{
+pub use aa_proxy::{
     ExecutionResult, P256PublicKey, ProxyError, ProxyWallet, ProxyWalletClient, UserOperation,
     WebAuthnSignature,
 };
+pub use factory::{DeploymentConfig, FactoryError, ProxyInfo, WalletFactory, WalletFactoryClient};

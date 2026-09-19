@@ -84,7 +84,7 @@ function MetricCard({
 }) {
   return (
     <div className={`rounded-xl bg-gray-800/50 border border-gray-700/50 p-4 flex items-center gap-3`}>
-      <span className={`w-10 h-10 rounded-full bg-${accent}-500/20 flex items-center justify-center flex-shrink-0`}>
+      <span className={`w-10 h-10 rounded-full bg-${accent}-500/20 flex items-center justify-center shrink-0`}>
         {icon}
       </span>
       <div>

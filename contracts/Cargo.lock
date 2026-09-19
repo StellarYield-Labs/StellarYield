@@ -6,6 +6,15 @@ version = 4
 name = "aa_factory"
 version = "0.1.0"
 dependencies = [
+ "aa_proxy",
+ "p256",
+ "soroban-sdk",
+]
+
+[[package]]
+name = "aa_proxy"
+version = "0.1.0"
+dependencies = [
  "p256",
  "soroban-sdk",
 ]
