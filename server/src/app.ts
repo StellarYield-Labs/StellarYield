@@ -49,6 +49,8 @@ import relayerStatusRouter from "./routes/relayerStatus";
 import riskRouter from "./routes/risk";
 import backtestRouter from "./routes/backtest";
 import googleSheetsRouter from "./routes/googleSheets";
+import relayerStatusRouter from "./routes/relayerStatus";
+import auditReplayRouter from "./routes/auditReplay";
 
 import { createAuthChallenge, verifyAuthChallenge } from "./utils/stellarAuth";
 import {
@@ -145,6 +147,8 @@ export function createApp() {
   app.use("/api/presets", presetsRouter);
   app.use("/api/analytics", analyticsRouter);
   app.use("/api/contacts", contactsRouter);
+  app.use("/api/relayer", relayerStatusRouter);
+  app.use("/api/audit-replay", auditReplayRouter);
 
 
   // Legacy JSON metrics (internal tooling)

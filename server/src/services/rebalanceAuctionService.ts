@@ -127,6 +127,10 @@ export class RebalanceAuctionService {
 
   constructor(prismaClient: PrismaClient = new PrismaClient()) {
     this.prisma = prismaClient;
+  readonly prisma: PrismaClient;
+
+  constructor() {
+    this.prisma = prisma;
   }
 
   /**
@@ -398,6 +402,24 @@ export class RebalanceAuctionService {
     });
 
     const winner = ranked[0];
+    // Sort revealed bids in memory (handles mocked Prisma queries in unit tests)
+    revealedBids.sort((a, b) => {
+      if (b.totalOutputValue !== a.totalOutputValue) {
+        return b.totalOutputValue > a.totalOutputValue ? 1 : -1;
+      }
+      if (a.slippageBps !== b.slippageBps) {
+        return a.slippageBps - b.slippageBps;
+      }
+      if (a.priceImpactBps !== b.priceImpactBps) {
+        return a.priceImpactBps - b.priceImpactBps;
+      }
+      const tA = a.revealTimestamp ? new Date(a.revealTimestamp).getTime() : 0;
+      const tB = b.revealTimestamp ? new Date(b.revealTimestamp).getTime() : 0;
+      return tA - tB;
+    });
+
+    // Select winner
+    const winner = revealedBids[0];
 
     // Rank all bids
     await Promise.all(
@@ -517,6 +539,10 @@ export class RebalanceAuctionService {
     });
 
     return { ...(settlement as any), fillDeltas } as AuctionSettlement;
+    return {
+      ...settlement,
+      fillDeltas: fillDeltas as any,
+    };
   }
 
   /**
@@ -629,6 +655,9 @@ export class RebalanceAuctionService {
     const bids = Array.isArray((intent as any).bids) ? (intent as any).bids : [];
     const bidCount = bids.length;
     const revealedBidCount = bids.filter((b: any) => b.revealed).length;
+    const bids = intent.bids || [];
+    const bidCount = bids.length;
+    const revealedBidCount = bids.filter((b) => b.revealed).length;
 
     const timeUntilExpiry = intent.expiryLedger
       ? Math.max(0, Number(intent.expiryLedger) - Date.now())
@@ -801,6 +830,7 @@ export class RebalanceAuctionService {
         eventType,
         actor,
         details: details as Prisma.InputJsonValue,
+        details: details as any,
       },
     });
   }

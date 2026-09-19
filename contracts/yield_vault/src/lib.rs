@@ -6,14 +6,29 @@
 //! Accepts user deposits of SAC tokens (XLM, USDC, etc.), tracks ownership
 //! via LP-style vault shares, and exposes an admin-gated `rebalance`
 //! function for moving funds across liquidity pools.
+//!
+//! ## Upgrade & Migration
+//!
+//! This contract implements [`MigratableContract`] so that governance can
+//! schedule, timelock, execute, and verify Wasm upgrades without silently
+//! corrupting existing state. See [`upgrade_impl`] for the shared logic.
 
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, token, vec, Address, Bytes,
-    Env, IntoVal, Symbol, Val,
+    BytesN, Env, IntoVal, String, Symbol, Val,
 };
 #[path = "../../interfaces/vault_standard.rs"]
 mod vault_standard;
 use vault_standard::VaultStandard;
+
+// ── Upgrade / Migration Framework ───────────────────────────────────────
+
+pub const CONTRACT_NAME: &str = "yield_vault";
+pub const STORAGE_VERSION: u32 = 1;
+
+#[path = "../../interfaces/upgrade_impl.rs"]
+pub mod upgrade_impl;
+use upgrade_impl::{MigrationChunk, MigrationState};
 
 // ── Storage keys ────────────────────────────────────────────────────────
 
@@ -32,11 +47,24 @@ enum DataKey {
     TotalHarvested,
     Keeper,
     Paused,
-    Timelock(Symbol), // Key for different timelocked actions
+    Timelock(Symbol),
     PendingAdmin,
     Oracle,
     // Emergency settings
-    EmergencyPenaltyBps, // optional haircut on withdrawals during emergency
+    EmergencyPenaltyBps,
+}
+
+#[contracttype]
+enum UpgradeDataKey {
+    StorageVersion,
+    UpgradeCount,
+    PendingUpgrade(u64),
+    UpgradeStatus(u64),
+    TargetWasmHash,
+    CurrentWasmHash,
+    MigrationPlanDigest,
+    MigrationState,
+    MigrationCursor(u64),
 }
 
 mod admin;
@@ -65,11 +93,26 @@ pub enum VaultError {
     TimelockActive = 8,
     InvalidPrice = 9,
     SlippageExceeded = 10,
-    /// Invalid donation basis points — must be 0–10_000 (maps to error code 2001).
     InvalidDonationBps = 2001,
-    /// Charity address is not on the protocol whitelist (maps to error code 2002).
     CharityNotWhitelisted = 2002,
+    // Upgrade & migration errors
+    UpgradeNotFound = 3001,
+    UpgradeNotScheduled = 3002,
+    WasmHashMismatch = 3003,
+    ProposalExpired = 3004,
+    MigrationInProgress = 3005,
+    MigrationNotStarted = 3006,
+    MigrationComplete = 3007,
+    InvalidMigrationEdge = 3008,
 }
+
+impl From<VaultError> for u32 {
+    fn from(e: VaultError) -> u32 {
+        e as u32
+    }
+}
+
+type Error = VaultError;
 
 // ── Contract ────────────────────────────────────────────────────────────
 
@@ -99,6 +142,14 @@ impl YieldVault {
         env.storage().instance().set(&DataKey::TotalShares, &0i128);
         env.storage().instance().set(&DataKey::TotalAssets, &0i128);
         env.storage().instance().set(&DataKey::Initialized, &true);
+        env.storage()
+            .instance()
+            .set(&UpgradeDataKey::StorageVersion, &STORAGE_VERSION);
+
+        let wasm_hash: BytesN<32> = BytesN::from_array(&env, &[0u8; 32]);
+        env.storage()
+            .instance()
+            .set(&UpgradeDataKey::CurrentWasmHash, &wasm_hash);
 
         env.events()
             .publish((symbol_short!("init"),), (admin.clone(), token.clone()));
@@ -136,6 +187,7 @@ impl YieldVault {
         min_shares_out: i128,
     ) -> Result<i128, VaultError> {
         Self::require_init(&env)?;
+        Self::require_operational(&env)?;
         from.require_auth();
         if Self::is_paused(&env) {
             return Err(VaultError::Paused);
@@ -216,6 +268,7 @@ impl YieldVault {
         min_shares_out: i128,
     ) -> Result<i128, VaultError> {
         Self::require_init(&env)?;
+        Self::require_operational(&env)?;
         payer.require_auth();
         if Self::is_paused(&env) {
             return Err(VaultError::Paused);
@@ -284,6 +337,7 @@ impl YieldVault {
     /// Replaces standard zero-check with error. Uses secure price from oracle.
     pub fn withdraw(env: Env, to: Address, shares: i128) -> Result<i128, VaultError> {
         Self::require_init(&env)?;
+        Self::require_operational(&env)?;
         to.require_auth();
 
         if shares <= 0 {
@@ -361,6 +415,7 @@ impl YieldVault {
         amount: i128,
     ) -> Result<(), VaultError> {
         Self::require_init(&env)?;
+        Self::require_operational(&env)?;
         caller.require_auth();
         if Self::is_paused(&env) {
             return Err(VaultError::Paused);
@@ -404,6 +459,7 @@ impl YieldVault {
         to: Address,
         amount: i128,
     ) -> Result<(), VaultError> {
+        Self::require_operational(&env)?;
         from.require_auth();
         if amount <= 0 {
             return Err(VaultError::ZeroAmount);
@@ -488,6 +544,7 @@ impl YieldVault {
         keeper: Address,
     ) -> Result<(), VaultError> {
         Self::require_init(&env)?;
+        Self::require_operational(&env)?;
         Self::require_admin(&env, &admin)?;
         env.storage()
             .instance()
@@ -525,6 +582,7 @@ impl YieldVault {
     /// Re-entrancy protected via Soroban environment.
     pub fn harvest(env: Env, caller: Address, min_amount_out: i128) -> Result<i128, VaultError> {
         Self::require_init(&env)?;
+        Self::require_operational(&env)?;
         caller.require_auth();
         let admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
         let legacy_keeper: Option<Address> = env.storage().instance().get(&DataKey::Keeper);
@@ -643,6 +701,7 @@ impl YieldVault {
         amount: i128,
         params: Bytes,
     ) -> Result<i128, VaultError> {
+        Self::require_operational(&env)?;
         Self::flash_loan_impl(&env, &initiator, &receiver, amount, &params)
     }
 
@@ -664,11 +723,13 @@ impl YieldVault {
         admin: Address,
         penalty_bps: u32,
     ) -> Result<(), VaultError> {
+        Self::require_operational(&env)?;
         YieldVault::set_emergency_penalty_impl(&env, &admin, penalty_bps)
     }
 
     /// Emergency withdraw from idle reserves only; may apply penalty.
     pub fn emergency_withdraw(env: Env, to: Address, shares: i128) -> Result<i128, VaultError> {
+        Self::require_operational(&env)?;
         YieldVault::emergency_withdraw_impl(&env, &to, shares)
     }
     // ── Referral System ─────────────────────────────────────────────
@@ -727,6 +788,79 @@ impl YieldVault {
         Self::get_total_referral_rewards_view(env)
     }
 
+    // ── Upgrade & Migration ─────────────────────────────────────────
+
+    pub fn contract_version(env: Env) -> String {
+        upgrade_impl::contract_version(&env)
+    }
+
+    pub fn storage_version(env: Env) -> u32 {
+        upgrade_impl::storage_version(&env)
+    }
+
+    pub fn upgrade(
+        env: Env,
+        governance: Address,
+        target_wasm_hash: BytesN<32>,
+        migration_plan_digest: BytesN<32>,
+        migration_id: String,
+        timelock_seconds: u64,
+    ) -> Result<u64, VaultError> {
+        upgrade_impl::schedule_upgrade(
+            &env,
+            &governance,
+            target_wasm_hash,
+            migration_plan_digest,
+            migration_id,
+            timelock_seconds,
+        )
+    }
+
+    pub fn cancel_upgrade(
+        env: Env,
+        governance: Address,
+        proposal_id: u64,
+    ) -> Result<(), VaultError> {
+        upgrade_impl::cancel_upgrade(&env, &governance, proposal_id)
+    }
+
+    pub fn execute_upgrade(
+        env: Env,
+        governance: Address,
+        proposal_id: u64,
+    ) -> Result<(), VaultError> {
+        upgrade_impl::execute_upgrade(&env, &governance, proposal_id)
+    }
+
+    pub fn finalize_upgrade(env: Env, proposal_id: u64) -> Result<(), VaultError> {
+        upgrade_impl::finalize_upgrade(&env, proposal_id)
+    }
+
+    pub fn migrate(
+        env: Env,
+        from_version: u32,
+        to_version: u32,
+        cursor: u64,
+        limit: u32,
+    ) -> Result<MigrationChunk, VaultError> {
+        if from_version == 0 {
+            upgrade_impl::start_migration(&env, from_version, to_version)?;
+        }
+        upgrade_impl::advance_migration(&env, cursor, limit)
+    }
+
+    pub fn complete_migration(env: Env) -> Result<(), VaultError> {
+        upgrade_impl::complete_migration(&env)
+    }
+
+    pub fn migration_status(env: Env) -> Option<MigrationState> {
+        upgrade_impl::migration_status(&env)
+    }
+
+    pub fn is_migrating(env: Env) -> bool {
+        upgrade_impl::is_migrating(&env)
+    }
+
     // ── Internal ────────────────────────────────────────────────────
 
     fn require_init(env: &Env) -> Result<(), VaultError> {
@@ -745,6 +879,13 @@ impl YieldVault {
             .ok_or(VaultError::NotInitialized)?;
         if *caller != admin {
             return Err(VaultError::Unauthorized);
+        }
+        Ok(())
+    }
+
+    fn require_operational(env: &Env) -> Result<(), VaultError> {
+        if upgrade_impl::is_migrating(env) {
+            return Err(VaultError::MigrationInProgress);
         }
         Ok(())
     }

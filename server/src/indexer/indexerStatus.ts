@@ -27,6 +27,11 @@ export interface IndexerStatusInput {
   /** ISO timestamp of the last successful commit, when known. */
   lastIndexedAt: string | null;
   recentErrors: IndexerReplayError[];
+  streamsTracked?: number;
+  pagesProcessed?: number;
+  eventsProcessed?: number;
+  unresolvedDeadLetters?: number;
+  oldestUnresolvedDeadLetterAt?: string | null;
   now?: number;
 }
 
@@ -39,6 +44,11 @@ export interface IndexerStatus {
   lastIndexedAt: string | null;
   heartbeatAgeSeconds: number | null;
   recentErrors: IndexerReplayError[];
+  streamsTracked: number;
+  pagesProcessed: number;
+  eventsProcessed: number;
+  unresolvedDeadLetters: number;
+  oldestUnresolvedDeadLetterAt: string | null;
   generatedAt: string;
 }
 
@@ -88,6 +98,9 @@ export function classifyIndexerStatus(input: IndexerStatusInput): IndexerStatus 
   } else if (input.recentErrors.length > 0) {
     status = "degraded";
     reason = `${input.recentErrors.length} recent replay error(s)`;
+  } else if ((input.unresolvedDeadLetters ?? 0) > 0) {
+    status = "degraded";
+    reason = `${input.unresolvedDeadLetters} unresolved dead-letter event(s)`;
   }
 
   return {
@@ -99,6 +112,11 @@ export function classifyIndexerStatus(input: IndexerStatusInput): IndexerStatus 
     lastIndexedAt: input.lastIndexedAt,
     heartbeatAgeSeconds,
     recentErrors: input.recentErrors,
+    streamsTracked: input.streamsTracked ?? 0,
+    pagesProcessed: input.pagesProcessed ?? 0,
+    eventsProcessed: input.eventsProcessed ?? 0,
+    unresolvedDeadLetters: input.unresolvedDeadLetters ?? 0,
+    oldestUnresolvedDeadLetterAt: input.oldestUnresolvedDeadLetterAt ?? null,
     generatedAt: new Date(now).toISOString(),
   };
 }
@@ -125,28 +143,85 @@ export function getRecentReplayErrors(): IndexerReplayError[] {
 // ── Snapshot assembly ─────────────────────────────────────────────────────
 
 type IndexerStatePrismaClient = {
-  indexerState: {
-    findUnique(args: {
-      where: { id: string };
-    }): Promise<{ id: string; lastLedger: number } | null>;
+  indexerCheckpoint?: {
+    findMany(args: {
+      orderBy: { lastLedger: "asc" };
+      take: number;
+    }): Promise<Array<{
+      lastLedger: number;
+      lastSuccessfulBatchAt: Date | null;
+      eventsProcessed: number;
+    }>>;
+  };
+  indexerContractStream?: {
+    count(args: { where: { enabled: boolean } }): Promise<number>;
+  };
+  indexerDeadLetter?: {
+    count(args: { where: { resolvedAt: null } }): Promise<number>;
+    findFirst(args: {
+      where: { resolvedAt: null };
+      orderBy: { createdAt: "asc" };
+    }): Promise<{ createdAt: Date } | null>;
   };
 };
 
-async function loadIndexerState(): Promise<number | null> {
+async function loadIndexerState(): Promise<{
+  indexedLedger: number | null;
+  lastIndexedAt: string | null;
+  streamsTracked: number;
+  eventsProcessed: number;
+  unresolvedDeadLetters: number;
+  oldestUnresolvedDeadLetterAt: string | null;
+}> {
   try {
     const prismaModule = (await import("@prisma/client")) as unknown as {
       PrismaClient?: new () => IndexerStatePrismaClient;
     };
-    if (!prismaModule.PrismaClient) return null;
+    if (!prismaModule.PrismaClient) {
+      return emptyIndexerState();
+    }
 
     const prisma = new prismaModule.PrismaClient();
-    const state = await prisma.indexerState.findUnique({
-      where: { id: "singleton" },
+    if (!prisma.indexerCheckpoint) {
+      return emptyIndexerState();
+    }
+
+    const checkpoints = await prisma.indexerCheckpoint.findMany({
+      orderBy: { lastLedger: "asc" },
+      take: 1,
     });
-    return state ? state.lastLedger : null;
+    const checkpoint = checkpoints[0];
+    const [streamsTracked, unresolvedDeadLetters, oldestDeadLetter] = await Promise.all([
+      prisma.indexerContractStream?.count({ where: { enabled: true } }) ?? Promise.resolve(0),
+      prisma.indexerDeadLetter?.count({ where: { resolvedAt: null } }) ?? Promise.resolve(0),
+      prisma.indexerDeadLetter?.findFirst({
+        where: { resolvedAt: null },
+        orderBy: { createdAt: "asc" },
+      }) ?? Promise.resolve(null),
+    ]);
+
+    return {
+      indexedLedger: checkpoint?.lastLedger ?? null,
+      lastIndexedAt: checkpoint?.lastSuccessfulBatchAt?.toISOString() ?? null,
+      streamsTracked,
+      eventsProcessed: checkpoint?.eventsProcessed ?? 0,
+      unresolvedDeadLetters,
+      oldestUnresolvedDeadLetterAt: oldestDeadLetter?.createdAt.toISOString() ?? null,
+    };
   } catch {
-    return null;
+    return emptyIndexerState();
   }
+}
+
+function emptyIndexerState() {
+  return {
+    indexedLedger: null,
+    lastIndexedAt: null,
+    streamsTracked: 0,
+    eventsProcessed: 0,
+    unresolvedDeadLetters: 0,
+    oldestUnresolvedDeadLetterAt: null,
+  };
 }
 
 async function loadHorizonLedger(): Promise<number | null> {
@@ -168,15 +243,19 @@ async function loadHorizonLedger(): Promise<number | null> {
  * throw) when either is unavailable.
  */
 export async function getIndexerStatusSnapshot(): Promise<IndexerStatus> {
-  const indexedLedger = await loadIndexerState();
+  const state = await loadIndexerState();
 
   // Skip the network round-trip when we have no checkpoint to compare against.
-  const horizonLedger = indexedLedger === null ? null : await loadHorizonLedger();
+  const horizonLedger = state.indexedLedger === null ? null : await loadHorizonLedger();
 
   return classifyIndexerStatus({
-    indexedLedger,
+    indexedLedger: state.indexedLedger,
     horizonLedger,
-    lastIndexedAt: null, // not persisted by the current indexer schema
+    lastIndexedAt: state.lastIndexedAt,
     recentErrors: getRecentReplayErrors(),
+    streamsTracked: state.streamsTracked,
+    eventsProcessed: state.eventsProcessed,
+    unresolvedDeadLetters: state.unresolvedDeadLetters,
+    oldestUnresolvedDeadLetterAt: state.oldestUnresolvedDeadLetterAt,
   });
 }

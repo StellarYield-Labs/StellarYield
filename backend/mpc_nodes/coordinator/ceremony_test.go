@@ -1,11 +1,13 @@
 package coordinator
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
+	"github.com/stellaryield/mpc_nodes/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -59,14 +61,18 @@ func participantSet(keys map[string]*secp256k1.PrivateKey) map[string]*secp256k1
 	return pub
 }
 
-// newTestCoordinator creates a coordinator with a short timeout, 3 parties (t=2),
-// a capturing audit logger, and the given party ID / private key.
+// newTestCoordinator creates a coordinator with a short timeout and a threshold
+// derived from the supplied participant set.
 func newTestCoordinator(t *testing.T, partyID string, privKey *secp256k1.PrivateKey,
 	allPubKeys map[string]*secp256k1.PublicKey) (*CeremonyCoordinator, *capturingAuditLogger) {
 	t.Helper()
+	threshold := 2
+	if len(allPubKeys) == 1 {
+		threshold = 1
+	}
 	cfg := &CeremonyConfig{
-		Threshold:       2,
-		TotalParties:    3,
+		Threshold:       threshold,
+		TotalParties:    len(allPubKeys),
 		PartyID:         partyID,
 		Timeout:         150 * time.Millisecond,
 		ParticipantKeys: allPubKeys,
@@ -396,4 +402,62 @@ func TestAuditEvents_PhaseStartEmitted(t *testing.T) {
 
 	assert.True(t, logger.HasEventType(AuditPhaseStart),
 		"PHASE_START audit event must be emitted at the start of waitForPhase")
+}
+
+func TestCeremonyConfigValidation(t *testing.T) {
+	local := genKey(t)
+	other := genKey(t)
+	validKeys := map[string]*secp256k1.PublicKey{"party-1": local.PubKey(), "party-2": other.PubKey()}
+	tests := []struct {
+		name   string
+		mutate func(*CeremonyConfig)
+		want   string
+	}{
+		{"zero threshold", func(c *CeremonyConfig) { c.Threshold = 0 }, "threshold must be positive"},
+		{"threshold exceeds parties", func(c *CeremonyConfig) { c.Threshold = 3 }, "threshold cannot exceed total parties"},
+		{"participant count mismatch", func(c *CeremonyConfig) { delete(c.ParticipantKeys, "party-2") }, "participant key count must equal total parties"},
+		{"local party missing", func(c *CeremonyConfig) {
+			delete(c.ParticipantKeys, "party-1")
+			c.ParticipantKeys["party-3"] = other.PubKey()
+		}, "party ID must exist"},
+		{"nil participant key", func(c *CeremonyConfig) { c.ParticipantKeys["party-2"] = nil }, "public key cannot be nil"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			keys := make(map[string]*secp256k1.PublicKey, len(validKeys))
+			for id, key := range validKeys {
+				keys[id] = key
+			}
+			cfg := &CeremonyConfig{Threshold: 2, TotalParties: 2, PartyID: "party-1", Timeout: time.Second, ParticipantKeys: keys, PrivateKey: local}
+			tc.mutate(cfg)
+			require.ErrorContains(t, cfg.Validate(), tc.want)
+		})
+	}
+}
+
+func TestMissingSignatureRejectedAndAudited(t *testing.T) {
+	keys := map[string]*secp256k1.PrivateKey{"party-1": genKey(t), "party-2": genKey(t), "party-3": genKey(t)}
+	coord, logger := newTestCoordinator(t, "party-1", keys["party-1"], participantSet(keys))
+	coord.sessionID = "missing-signature-session"
+	coord.currentPhase = PhaseCommit
+	msg := buildCommitMsg(t, keys["party-2"], "party-2", coord.sessionID)
+	msg.Signature = nil
+	require.ErrorContains(t, coord.HandleMessage(msg), "signature")
+	assert.True(t, logger.HasEventType(AuditMessageRejected))
+}
+
+func TestKeyGenSuccessEmitsCompletionAudit(t *testing.T) {
+	key := genKey(t)
+	cfg := &CeremonyConfig{
+		Threshold: 1, TotalParties: 1, PartyID: "party-1", Timeout: time.Second,
+		ParticipantKeys: map[string]*secp256k1.PublicKey{"party-1": key.PubKey()},
+		PrivateKey:      key, Storage: storage.NewMemoryStorage(),
+	}
+	coord, err := NewCeremonyCoordinator(cfg)
+	require.NoError(t, err)
+	logger := &capturingAuditLogger{}
+	coord.WithAuditLogger(logger)
+	_, err = coord.StartKeyGenCeremony(context.Background())
+	require.NoError(t, err)
+	assert.True(t, logger.HasEventType(AuditCeremonyComplete))
 }

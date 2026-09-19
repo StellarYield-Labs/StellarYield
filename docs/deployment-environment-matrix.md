@@ -94,6 +94,19 @@ The `server/` backend is **not** deployed automatically by Vercel. Preview front
 
 If a Preview build succeeds but the app shows no data, check that `VITE_API_BASE_URL` under the Preview scope points to a reachable backend. The build will succeed even if the backend is unreachable — it is a runtime dependency, not a build-time one.
 
+### Preview Smoke Test Overrides
+
+When validating a preview deployment, pass the preview frontend and the backend URL explicitly so smoke tests do not accidentally target production or localhost:
+
+```bash
+FRONTEND_URL="https://stellaryield-pr-42-abc123.vercel.app" \
+PREVIEW_API_BASE_URL="https://staging-api.example.com" \
+VITE_API_BASE_URL="https://staging-api.example.com" \
+node scripts/smoke-test.js --report --markdown
+```
+
+The smoke test reads `API_BASE_URL`, `PREVIEW_API_BASE_URL`, `VITE_API_BASE_URL`, `VITE_API_URL`, then legacy `BACKEND_URL` in that order. The Node version reports compact diagnostics for missing preview API inputs, DNS/connectivity failures, CORS preflight failures, and invalid JSON responses.
+
 ---
 
 ## Vercel Production

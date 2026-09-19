@@ -2,14 +2,15 @@
 set -euo pipefail
 
 FRONTEND_URL=${FRONTEND_URL:-"http://localhost:5173"}
-BACKEND_URL=${BACKEND_URL:-"http://localhost:3001"}
+API_BASE_URL=${API_BASE_URL:-${PREVIEW_API_BASE_URL:-${VITE_API_BASE_URL:-${VITE_API_URL:-${BACKEND_URL:-"http://localhost:3001"}}}}}
+BACKEND_URL=${BACKEND_URL:-"$API_BASE_URL"}
 OUTPUT_MODE=${OUTPUT_MODE:-"text"}
 
 BACKEND_HEALTH_PATH=${BACKEND_HEALTH_PATH:-"/api/health"}
 BACKEND_YIELDS_PATH=${BACKEND_YIELDS_PATH:-"/api/yields"}
 BACKEND_SAFE_PATH=${BACKEND_SAFE_PATH:-"/api/openapi"}
 FRONTEND_ASSET_PATH=${FRONTEND_ASSET_PATH:-"/favicon.svg"}
-FRONTEND_API_BASE_URL=${VITE_API_BASE_URL:-${VITE_API_URL:-""}}
+FRONTEND_API_BASE_URL=${VITE_API_BASE_URL:-${VITE_API_URL:-${PREVIEW_API_BASE_URL:-${API_BASE_URL:-""}}}}
 
 curl_status() {
   local url="$1"
@@ -27,7 +28,7 @@ expect_200() {
     if [[ "$status" == "000" ]]; then
       echo "[FAIL] $label (unreachable)"
       echo "   URL: $url"
-      echo "   Hint: set FRONTEND_URL/BACKEND_URL to deployed URLs or start local services."
+      echo "   Hint: set FRONTEND_URL/API_BASE_URL to deployed URLs or start local services."
       exit 1
     fi
     echo "[FAIL] $label ($status)"
@@ -50,7 +51,7 @@ expect_frontend_api_config() {
 
   if [[ -z "$FRONTEND_API_BASE_URL" ]]; then
     echo "[FAIL] Frontend API env"
-    echo "   Set VITE_API_BASE_URL or VITE_API_URL for deployed frontend smoke tests."
+    echo "   Set API_BASE_URL, PREVIEW_API_BASE_URL, VITE_API_BASE_URL, or VITE_API_URL for deployed frontend smoke tests."
     exit 1
   fi
 
@@ -86,7 +87,7 @@ run_check() {
 if [[ "${1:-}" == "--json" || "$OUTPUT_MODE" == "json" ]]; then
   timestamp="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
   checks=(
-    "Frontend API env|VITE_API_BASE_URL || VITE_API_URL"
+    "Frontend API env|API_BASE_URL || PREVIEW_API_BASE_URL || VITE_API_BASE_URL || VITE_API_URL"
     "Backend ${BACKEND_HEALTH_PATH}|${BACKEND_URL}${BACKEND_HEALTH_PATH}"
     "Backend ${BACKEND_YIELDS_PATH}|${BACKEND_URL}${BACKEND_YIELDS_PATH}"
     "Backend ${BACKEND_SAFE_PATH}|${BACKEND_URL}${BACKEND_SAFE_PATH}"
@@ -122,7 +123,7 @@ echo "----------------------------------------"
 echo "StellarYield Smoke Test"
 echo "----------------------------------------"
 echo "Target Frontend: $FRONTEND_URL"
-echo "Target Backend:  $BACKEND_URL"
+echo "Target API:      $BACKEND_URL"
 echo "Frontend API:    ${FRONTEND_API_BASE_URL:-"(not set)"}"
 echo "----------------------------------------"
 

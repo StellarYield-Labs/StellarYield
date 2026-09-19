@@ -49,6 +49,14 @@ describe("extractErrorCode", () => {
     it("ignores malformed JSON gracefully", () => {
         expect(extractErrorCode("{code: broken}")).toBeUndefined();
     });
+
+    it("extracts a known code from a nested RPC payload", () => {
+        expect(extractErrorCode({ error: { data: { message: "Error(Contract, #1002)" } } })).toBe(1002);
+    });
+
+    it("extracts a nested numeric contract code", () => {
+        expect(extractErrorCode({ error: { data: { contract_code: 2002 } } })).toBe(2002);
+    });
 });
 
 // ── decodeTransactionError ───────────────────────────────────────────────
@@ -151,6 +159,44 @@ describe("decodeTransactionError", () => {
         const result = decodeTransactionError("");
         expect(result.title).toBeTruthy();
         expect(result.raw).toBe("");
+    });
+
+    it("handles unknown object-shaped errors and preserves their context", () => {
+        const payload = { error: { type: "unexpected_rpc_shape", detail: "simulation failed" } };
+        expect(() => decodeTransactionError(payload)).not.toThrow();
+        const result = decodeTransactionError(payload);
+        expect(result.title).toBe("Transaction Failed");
+        expect(result.raw).toContain("unexpected_rpc_shape");
+        expect(result.raw).toContain("simulation failed");
+    });
+
+    it("decodes known errors nested inside RPC response objects", () => {
+        const result = decodeTransactionError({
+            jsonrpc: "2.0",
+            error: { code: -32000, data: { diagnostic: "Error(Contract, #7)" } },
+        });
+        expect(result.code).toBe(7);
+        expect(result.title).toBe("Vault Paused");
+    });
+
+    it("handles null, undefined, and circular payloads without throwing", () => {
+        const circular: Record<string, unknown> = { message: "unknown Soroban failure" };
+        circular.self = circular;
+
+        for (const payload of [null, undefined, circular]) {
+            expect(() => decodeTransactionError(payload)).not.toThrow();
+            const result = decodeTransactionError(payload);
+            expect(result.title).toBe("Transaction Failed");
+            expect(typeof result.raw).toBe("string");
+        }
+        expect(decodeTransactionError(circular).raw).toContain("[Circular]");
+    });
+
+    it("handles malformed error strings with a friendly fallback", () => {
+        const result = decodeTransactionError("{error: [malformed RPC payload}");
+        expect(result.title).toBe("Transaction Failed");
+        expect(result.message).toContain("unexpected error");
+        expect(result.raw).toBe("{error: [malformed RPC payload}");
     });
 
     it("preserves raw string on known error", () => {

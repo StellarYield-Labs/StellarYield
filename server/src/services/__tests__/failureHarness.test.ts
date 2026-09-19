@@ -55,6 +55,10 @@ import { MockExecutionAdapter } from "../rebalanceExecutionAdapter";
 import { runRebalanceQueueProcessorJob } from "../../jobs/rebalanceQueueProcessorJob";
 import { REBALANCE_STATUS, EXECUTION_TYPE } from "../../queues/types";
 import type {
+import { runRebalanceQueueProcessorJob } from "../../jobs/rebalanceQueueProcessorJob";
+import { REBALANCE_STATUS, EXECUTION_TYPE } from "../../queues/types";
+import type {
+  RebalanceExecutionResult,
   RebalanceQueueEntryDTO,
 } from "../rebalanceQueueService";
 
@@ -179,6 +183,20 @@ describe("Failure class: TIMEOUT", () => {
       {
         queueService: service,
       },
+      {
+        queueService: service,
+        executeRebalance: async () => {
+          const harness = buildHarnessFor(
+            async () =>
+              new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error("Timeout after 100ms")), 100),
+              ),
+          );
+          const timedOut = await harness.inject(FailureMode.TIMEOUT, { delayMs: 25 });
+          if (timedOut.error) throw timedOut.error;
+          throw new Error("Expected timeout result.");
+        },
+      },
     );
 
     expect(result.success).toBe(false);
@@ -291,6 +309,19 @@ describe("Failure class: STALE_DATA", () => {
       },
       {
         queueService: service,
+      },
+      {
+        queueService: service,
+        executeRebalance: async () => ({
+          queueEntryId: queueEntry.id,
+          totalExecuted: 100,
+          expectedAmount: 100,
+          filledPercentage: 100,
+          executionDetails: {
+            status: "completed",
+            timestamp: new Date(Date.now() - 10 * 60_000).toISOString(),
+          },
+        }),
       },
     );
 
@@ -410,6 +441,17 @@ describe("Failure class: MALFORMED_RESPONSE", () => {
       {
         queueService: service,
       },
+      {
+        queueService: service,
+        executeRebalance: async () =>
+          ({
+            queueEntryId: "",
+            totalExecuted: Number.NaN,
+            expectedAmount: 100,
+            filledPercentage: 150,
+            executionDetails: null,
+          } as unknown as RebalanceExecutionResult),
+      },
     );
 
     expect(result.success).toBe(false);
@@ -458,6 +500,9 @@ describe("Failure class: RATE_LIMIT", () => {
       metadata: {
         retryAfter: 30,
       },
+    const rateLimitError = Object.assign(new Error("HTTP 429 Too Many Requests"), {
+      status: 429,
+      retryAfter: 30,
     });
 
     const result = await runRebalanceQueueProcessorJob(
@@ -472,6 +517,12 @@ describe("Failure class: RATE_LIMIT", () => {
       },
       {
         queueService: service,
+      },
+      {
+        queueService: service,
+        executeRebalance: async () => {
+          throw rateLimitError;
+        },
       },
     );
 
@@ -616,6 +667,14 @@ describe("Failure class: HARD_FAILURE", () => {
       },
       {
         queueService: service,
+      },
+      {
+        queueService: service,
+        executeRebalance: async () => {
+          throw Object.assign(new Error("upstream service unavailable"), {
+            code: "ECONNREFUSED",
+          });
+        },
       },
     );
 

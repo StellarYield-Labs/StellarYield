@@ -137,28 +137,72 @@ const CONTRACT_ERROR_MAP: Record<
  * @param raw - Raw error string or serialised object from the transaction result.
  * @returns The parsed error code number, or `undefined` if none found.
  */
-export function extractErrorCode(raw: string): number | undefined {
-    if (!raw) return undefined;
+function serialiseRawError(raw: unknown): string {
+    if (typeof raw === "string") return raw;
+
+    const seen = new WeakSet<object>();
+    try {
+        const serialised = JSON.stringify(raw, (_key, value: unknown) => {
+            if (typeof value === "bigint") return value.toString();
+            if (value instanceof Error) {
+                return { name: value.name, message: value.message, stack: value.stack };
+            }
+            if (value !== null && typeof value === "object") {
+                if (seen.has(value)) return "[Circular]";
+                seen.add(value);
+            }
+            return value;
+        });
+        if (serialised !== undefined) return serialised;
+    } catch {
+        // Fall through to a best-effort string representation.
+    }
+
+    try {
+        return String(raw);
+    } catch {
+        return "[Unserialisable error payload]";
+    }
+}
+
+function findNestedCode(value: unknown, depth = 0): number | undefined {
+    if (depth > 8 || value === null || typeof value !== "object") return undefined;
+
+    const record = value as Record<string, unknown>;
+    for (const key of ["contract_code", "contractCode", "code"]) {
+        const candidate = record[key];
+        if (typeof candidate === "number" && Number.isSafeInteger(candidate)) return candidate;
+        if (typeof candidate === "string" && /^\d+$/.test(candidate)) return Number(candidate);
+    }
+
+    for (const nested of Object.values(record)) {
+        if (typeof nested === "string") {
+            const match = /Error\s*\(\s*(?:Contract\s*,\s*)?#?(\d+)\s*\)|contract_code\s*:\s*(\d+)/i.exec(nested);
+            if (match) return Number(match[1] ?? match[2]);
+        }
+        const code = findNestedCode(nested, depth + 1);
+        if (code !== undefined) return code;
+    }
+
+    return undefined;
+}
+
+export function extractErrorCode(raw: unknown): number | undefined {
+    const safeRaw = serialiseRawError(raw);
+    if (!safeRaw) return undefined;
 
     // Soroban SDK format: "Error(Contract, #1001)" or "WasmVm error: Error(1001)"
-    const sorobanMatch = /Error\s*\(\s*(?:Contract\s*,\s*)?#?(\d+)\s*\)/i.exec(raw);
+    const sorobanMatch = /Error\s*\(\s*(?:Contract\s*,\s*)?#?(\d+)\s*\)/i.exec(safeRaw);
     if (sorobanMatch) return parseInt(sorobanMatch[1], 10);
 
     // Indexer / custom label: "contract_code:1001"
-    const labelMatch = /contract_code\s*:\s*(\d+)/i.exec(raw);
+    const labelMatch = /contract_code\s*:\s*(\d+)/i.exec(safeRaw);
     if (labelMatch) return parseInt(labelMatch[1], 10);
 
     // JSON structured payload
     try {
-        const parsed = JSON.parse(raw) as unknown;
-        if (
-            parsed !== null &&
-            typeof parsed === "object" &&
-            "code" in parsed &&
-            typeof (parsed as Record<string, unknown>).code === "number"
-        ) {
-            return (parsed as Record<string, number>).code;
-        }
+        const parsed = typeof raw === "string" ? JSON.parse(raw) as unknown : raw;
+        return findNestedCode(parsed);
     } catch {
         // not JSON — continue to next strategy
     }
@@ -176,9 +220,9 @@ export function extractErrorCode(raw: string): number | undefined {
  * @param raw - The raw error string from Horizon or Soroban RPC.
  * @returns A `DecodedError` with user-friendly copy and the original raw string.
  */
-export function decodeTransactionError(raw: string): DecodedError {
-    const safeRaw = typeof raw === "string" ? raw : JSON.stringify(raw);
-    const code = extractErrorCode(safeRaw);
+export function decodeTransactionError(raw: unknown): DecodedError {
+    const safeRaw = serialiseRawError(raw);
+    const code = extractErrorCode(raw);
 
     if (code !== undefined && code in CONTRACT_ERROR_MAP) {
         return {

@@ -95,6 +95,44 @@ export class ContractExecutionError extends SorobanSdkError {
   }
 }
 
+export class ContractVersionMismatchError extends SorobanSdkError {
+  public contractName: string;
+  public expectedVersion: string;
+  public actualVersion: string;
+
+  constructor(contractName: string, expectedVersion: string, actualVersion: string) {
+    super(`Contract '${contractName}' version mismatch. SDK expects '${expectedVersion}', contract reports '${actualVersion}'.`);
+    this.name = "ContractVersionMismatchError";
+    this.contractName = contractName;
+    this.expectedVersion = expectedVersion;
+    this.actualVersion = actualVersion;
+  }
+}
+
+export class StorageVersionMismatchError extends SorobanSdkError {
+  public contractName: string;
+  public expectedStorageVersion: number;
+  public actualStorageVersion: number;
+
+  constructor(contractName: string, expectedStorageVersion: number, actualStorageVersion: number) {
+    super(`Contract '${contractName}' storage version mismatch. SDK expects v${expectedStorageVersion}, contract reports v${actualStorageVersion}.`);
+    this.name = "StorageVersionMismatchError";
+    this.contractName = contractName;
+    this.expectedStorageVersion = expectedStorageVersion;
+    this.actualStorageVersion = actualStorageVersion;
+  }
+}
+
+export class MigrationInProgressError extends SorobanSdkError {
+  public contractName: string;
+
+  constructor(contractName: string) {
+    super(`Contract '${contractName}' is currently undergoing migration. State-changing methods are unavailable.`);
+    this.name = "MigrationInProgressError";
+    this.contractName = contractName;
+  }
+}
+
 export function parseContractError(code: number, rawResultXdr?: string, rawRpcResponse?: unknown): ContractExecutionError {
   const errorInfo = (VaultError as Record<number, { message: string }>)[code];
   const errorName = errorInfo ? errorInfo.message : `UnknownError_${code}`;

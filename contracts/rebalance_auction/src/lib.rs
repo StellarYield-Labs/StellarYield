@@ -29,6 +29,8 @@
 use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Bytes,
     BytesN, Env, Map, String, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Bytes, Env,
+    Map, Vec,
 };
 
 // ── Domain Separator ────────────────────────────────────────────────────
@@ -40,7 +42,7 @@ const DOMAIN_SEPARATOR: [u8; 32] = [
     0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63, 0x65, 0x41, 0x75, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x3a, 0x76,
 ];
 
-// ── Constants ───────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────
 
 const BPS_SCALE: i128 = 10_000;
 const MAX_FEE_BPS: u32 = 500; // 5% max total fee
@@ -96,6 +98,8 @@ pub enum ExecutionState {
 pub enum PartialFillPolicy {
     FullOnly,        // Must fill entire intent or fail
     ProRata,         // Allow proportional partial fills
+    FullOnly = 0,    // Must fill entire intent or fail
+    ProRata = 1,     // Allow proportional partial fills
     MinPercent(u32), // Minimum fill percentage (bps)
 }
 
@@ -204,6 +208,7 @@ pub struct SolverBid {
     pub price_impact_bps: u32,
     pub timestamp: u64,
     pub bid_hash: BytesN<32>, // For replay protection
+    pub bid_hash: Bytes, // For replay protection
 }
 
 /// Settlement result after atomic execution.
@@ -224,7 +229,7 @@ pub struct SettlementResult {
     pub filled_percentage: u32, // bps (10000 = 100%)
 }
 
-// ── Errors ──────────────────────────────────────────────────────────────
+// ── Errors ──────────────────────────────────────────────────────────
 
 #[contracterror]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -278,9 +283,9 @@ pub struct RebalanceAuction;
 #[allow(clippy::too_many_arguments)]
 #[contractimpl]
 impl RebalanceAuction {
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // INITIALIZATION
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     pub fn initialize(
         env: Env,
@@ -316,9 +321,9 @@ impl RebalanceAuction {
         Ok(())
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // INTENT CREATION
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Create a new rebalance intent. The vault authorizes this intent,
     /// locking the rebalance plan on-chain with all constraints.
@@ -449,9 +454,9 @@ impl RebalanceAuction {
         Ok(nonce)
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // COMMIT PHASE
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Solver commits a hash of their bid during the commit phase.
     /// The commit prevents bid copying and front-running.
@@ -519,9 +524,9 @@ impl RebalanceAuction {
         Ok(())
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // REVEAL PHASE
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Solver reveals their bid after the commit phase ends.
     /// The revealed bid must hash to the previously committed hash.
@@ -596,6 +601,7 @@ impl RebalanceAuction {
             fees_bps,
             slippage_bps,
             price_impact_bps,
+            price_impact_bps as i128,
         )?;
 
         // Check for duplicate reveal
@@ -637,9 +643,9 @@ impl RebalanceAuction {
         Ok(())
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // WINNER SELECTION
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Operator selects the winning bid. Uses deterministic ranking:
     /// 1. Highest net output value (after fees)
@@ -693,9 +699,9 @@ impl RebalanceAuction {
         Ok(best_solver)
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // SETTLEMENT
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Execute the winning bid atomically. All route legs must succeed
     /// or the entire settlement reverts. Records exact post-trade balances.
@@ -784,6 +790,10 @@ impl RebalanceAuction {
             fill_deltas.set(
                 token.clone(),
                 post_balance - pre_balances.get(token).unwrap_or(0),
+            post_balances.set(pos.token, post_balance);
+            fill_deltas.set(
+                pos.token,
+                post_balance - pre_balances.get(pos.token).unwrap_or(0),
             );
         }
 
@@ -851,9 +861,9 @@ impl RebalanceAuction {
         Ok(settlement)
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // CANCELLATION & EXPIRY
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Cancel an intent. Only the cancellation authority (vault) can cancel.
     pub fn cancel_intent(env: Env, caller: Address, intent_id: u64) -> Result<(), AuctionError> {
@@ -928,9 +938,9 @@ impl RebalanceAuction {
         Ok(())
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // ROUTE VALIDATION
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Validate a route against the allowlisted call graph.
     fn validate_route(
@@ -1021,9 +1031,9 @@ impl RebalanceAuction {
         Ok(())
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // ADMIN FUNCTIONS
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     /// Add a protocol to the allowlist. Admin only.
     pub fn add_allowed_protocol(
@@ -1138,9 +1148,9 @@ impl RebalanceAuction {
         Ok(())
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // VIEW FUNCTIONS
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     pub fn get_intent(env: Env, intent_id: u64) -> Result<RebalanceIntent, AuctionError> {
         env.storage()
@@ -1227,9 +1237,9 @@ impl RebalanceAuction {
         allowed.get(token).unwrap_or(false)
     }
 
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
     // INTERNAL HELPERS
-    // ═══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════
 
     fn require_init(env: &Env) -> Result<(), AuctionError> {
         if !env.storage().instance().has(&DataKey::Initialized) {
@@ -1546,7 +1556,7 @@ impl RebalanceAuction {
     }
 }
 
-// ── Tests ───────────────────────────────────────────────────────────────
+// ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -1645,6 +1655,23 @@ mod tests {
         };
 
         let intent_id = client.create_intent(&vault, &args);
+        let intent_id = client.create_intent(
+            &vault,
+            &1, // strategy_snapshot_id
+            &1, // strategy_version
+            &input_positions,
+            &constraints,
+            &500,  // max_total_loss_bps (5%)
+            &200,  // max_slippage_bps (2%)
+            &100,  // max_fees_bps (1%)
+            &300,  // max_price_impact_bps (3%)
+            &9000, // min_total_output_value
+            &allowed_tokens,
+            &allowed_protocols,
+            &route,
+            &PartialFillPolicy::FullOnly,
+            &(1000), // expiry_ledger
+        );
 
         assert_eq!(intent_id, 1);
         let intent = client.get_intent(&intent_id);
@@ -1686,6 +1713,23 @@ mod tests {
         };
 
         let intent_id = client.create_intent(&vault, &args);
+        let intent_id = client.create_intent(
+            &vault,
+            &1,
+            &1,
+            &input_positions,
+            &constraints,
+            &500,
+            &200,
+            &100,
+            &300,
+            &9000,
+            &allowed_tokens,
+            &allowed_protocols,
+            &route,
+            &PartialFillPolicy::FullOnly,
+            &1000,
+        );
 
         client.cancel_intent(&vault, &intent_id);
 
@@ -1757,6 +1801,23 @@ mod tests {
         };
 
         let intent_id = client.create_intent(&vault, &args);
+        let intent_id = client.create_intent(
+            &vault,
+            &1,
+            &1,
+            &input_positions,
+            &constraints,
+            &500,
+            &200,
+            &100,
+            &300,
+            &9000,
+            &allowed_tokens,
+            &allowed_protocols,
+            &route,
+            &PartialFillPolicy::FullOnly,
+            &1000,
+        );
 
         client.cancel_intent(&vault, &intent_id);
 
