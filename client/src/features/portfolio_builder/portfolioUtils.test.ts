@@ -3,6 +3,7 @@
  */
 
 import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
 import {
     calculateBlendedApy,
     isValidAllocation,
@@ -10,6 +11,7 @@ import {
     normalizeWeights,
     applyPreset,
 } from "./portfolioUtils";
+import PortfolioBuilder, { buildInitialAllocations } from "./PortfolioBuilder";
 import type { VaultAllocation } from "./types";
 
 describe("Portfolio Utils", () => {
@@ -125,6 +127,16 @@ describe("Portfolio Utils", () => {
 
         it("should handle empty vaults", () => {
             expect(applyPreset([], "balanced")).toEqual([]);
+        });
+    });
+
+    describe("PortfolioBuilder empty vault list state (#162)", () => {
+        it("renders empty-state copy without crashing when availableVaults is empty", () => {
+            expect(buildInitialAllocations([])).toEqual([]);
+            render(<PortfolioBuilder walletAddress="GABC123" availableVaults={[]} />);
+            expect(
+                screen.getByText("No vaults available for allocation."),
+            ).toBeTruthy();
         });
     });
 });
