@@ -22,14 +22,18 @@ export interface PortfolioBuilderProps {
   availableVaults: Array<{ contractId: string; name: string; apy: number }>;
 }
 
-function buildInitialAllocations(
+export function buildInitialAllocations(
   availableVaults: PortfolioBuilderProps["availableVaults"],
 ): VaultAllocation[] {
+  if (!Array.isArray(availableVaults) || availableVaults.length === 0) {
+    return [];
+  }
+  const count = Math.min(3, availableVaults.length);
   return availableVaults.slice(0, 3).map((v) => ({
     vaultContractId: v.contractId,
     vaultName: v.name,
     apy: v.apy,
-    weight: 100 / Math.min(3, availableVaults.length),
+    weight: 100 / count,
     amount: 0n,
   }));
 }
@@ -172,43 +176,49 @@ export default function PortfolioBuilder({
       <div className="glass-panel p-6 space-y-4">
         <h3 className="text-lg font-semibold">Vault Allocation</h3>
 
-        {allocations.map((alloc, idx) => (
-          <div key={alloc.vaultContractId} className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">{alloc.vaultName}</p>
-                <p className="text-xs text-gray-400">
-                  {alloc.apy.toFixed(2)}% APY
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="font-semibold">{alloc.weight.toFixed(1)}%</p>
-                {totalAmount && (
+        {allocations.length === 0 ? (
+          <p className="text-sm text-gray-400 italic" role="status">
+            No vaults available for allocation.
+          </p>
+        ) : (
+          allocations.map((alloc, idx) => (
+            <div key={alloc.vaultContractId} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">{alloc.vaultName}</p>
                   <p className="text-xs text-gray-400">
-                    {(BigInt(totalAmount) *
-                      BigInt(Math.round(alloc.weight * 100))) /
-                      BigInt(10000)}{" "}
-                    USDC
+                    {alloc.apy.toFixed(2)}% APY
                   </p>
-                )}
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold">{alloc.weight.toFixed(1)}%</p>
+                  {totalAmount && (
+                    <p className="text-xs text-gray-400">
+                      {(BigInt(totalAmount) *
+                        BigInt(Math.round(alloc.weight * 100))) /
+                        BigInt(10000)}{" "}
+                      USDC
+                    </p>
+                  )}
+                </div>
               </div>
+
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="0.1"
+                value={alloc.weight}
+                onChange={(e) =>
+                  handleWeightChange(idx, parseFloat(e.target.value))
+                }
+                className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+              />
             </div>
+          ))
+        )}
 
-            <input
-              type="range"
-              min="0"
-              max="100"
-              step="0.1"
-              value={alloc.weight}
-              onChange={(e) =>
-                handleWeightChange(idx, parseFloat(e.target.value))
-              }
-              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
-            />
-          </div>
-        ))}
-
-        {!isValid && (
+        {allocations.length > 0 && !isValid && (
           <div className="flex items-center gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
             <AlertCircle className="w-5 h-5 text-yellow-500" />
             <span className="text-sm text-yellow-400">
