@@ -40,19 +40,25 @@ export interface VaultOgMeta {
  * @param siteUrl     - Canonical site URL (defaults to window.location.origin)
  */
 export function useVaultOgMeta(
-  slug: string,
+  slug?: string | null,
   siteUrl?: string,
 ): VaultOgMeta {
   const origin =
     siteUrl ??
     (typeof window !== "undefined" ? window.location.origin : "https://stellaryield.app");
 
-  const vaultLabel = slug.toUpperCase();
-  const title = `${vaultLabel} Yield Vault — Stellar Yield`;
-  const description = `Earn auto-compounding yield on ${vaultLabel} via Soroban smart contracts. View live APY and TVL.`;
+  const trimmedSlug = typeof slug === "string" ? slug.trim() : "";
+  const hasSlug = trimmedSlug.length > 0 && trimmedSlug.toLowerCase() !== "undefined";
+  const normalizedSlug = hasSlug ? trimmedSlug : "default";
+  const vaultLabel = hasSlug ? trimmedSlug.toUpperCase() : "Stellar";
 
-  const ogImageUrl = `${OG_API_BASE || origin}/api/og?vault=${encodeURIComponent(slug)}`;
-  const pageUrl = `${origin}/vault/${encodeURIComponent(slug)}`;
+  const title = `${vaultLabel} Yield Vault — Stellar Yield`;
+  const description = hasSlug
+    ? `Earn auto-compounding yield on ${vaultLabel} via Soroban smart contracts. View live APY and TVL.`
+    : "Earn auto-compounding yield on Stellar via Soroban smart contracts. View live APY and TVL.";
+
+  const ogImageUrl = `${OG_API_BASE || origin}/api/og?vault=${encodeURIComponent(normalizedSlug)}`;
+  const pageUrl = `${origin}/vault/${encodeURIComponent(normalizedSlug)}`;
 
   const tags: VaultOgMeta["tags"] = [
     // Open Graph

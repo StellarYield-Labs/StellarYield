@@ -105,4 +105,15 @@ describe("useVaultOgMeta", () => {
       expect(meta.tags.length).toBeGreaterThan(0);
     }
   });
+
+  it("provides a clean fallback title and description when vault metadata/slug is missing", () => {
+    for (const missingSlug of ["", "   ", undefined, null]) {
+      const meta = useVaultOgMeta(missingSlug, SITE);
+      expect(meta.title).toBe("Stellar Yield Vault — Stellar Yield");
+      expect(meta.title).not.toContain("undefined");
+      expect(meta.description).toContain("Earn auto-compounding yield on Stellar");
+      expect(meta.description).not.toContain("undefined");
+      expect(meta.ogImageUrl).toBe(`${SITE}/api/og?vault=default`);
+    }
+  });
 });
