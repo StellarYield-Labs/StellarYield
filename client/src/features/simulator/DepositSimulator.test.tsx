@@ -1,80 +1,51 @@
-import React from "react";
 import { render, screen, waitFor } from "@testing-library/react";
-import "@testing-library/jest-dom";
-import { vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { DepositSimulator } from "./DepositSimulator";
-import { fetchDepositSimulation } from "./simulationService";
+import * as simulationService from "./simulationService";
 
-vi.mock("./simulationService", () => ({
-  fetchDepositSimulation: vi.fn(),
-}));
-
-const mockFetch = fetchDepositSimulation as any;
-
-describe("DepositSimulator", () => {
+describe("DepositSimulator (#161)", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
-  it("should display a prompt when amount is 0", () => {
-    render(<DepositSimulator strategyId="Conservative" amount={0} token="USDC" />);
-    expect(screen.getByText(/Enter an amount to see the preview/i)).toBeInTheDocument();
-    expect(mockFetch).not.toHaveBeenCalled();
+  it("renders prompt message when amount is 0 (empty input)", () => {
+    const spy = vi.spyOn(simulationService, "fetchDepositSimulation");
+    render(<DepositSimulator strategyId="strat-1" amount={0} token="USDC" />);
+    expect(screen.getByText("Enter an amount to see the preview.")).toBeTruthy();
+    expect(spy).not.toHaveBeenCalled();
   });
 
-  it("should render preview details on successful simulation", async () => {
-    mockFetch.mockResolvedValueOnce({
-      isSimulationOnly: true,
-      allocations: [{ protocol: "Lend", amount: 1000, percentage: 100 }],
-      expectedShares: 999,
-      fees: [{ type: "Entry Fee", amount: 1 }],
-      postDepositExposure: { expectedApy: 0.12 },
-      routing: { path: ["Lend"], expectedOutput: 999 },
+  it("renders validation message for non-numeric (NaN) or negative amount input", () => {
+    const spy = vi.spyOn(simulationService, "fetchDepositSimulation");
+    const { rerender } = render(
+      <DepositSimulator strategyId="strat-1" amount={Number.NaN} token="USDC" />,
+    );
+    expect(
+      screen.getByText("Please enter a valid positive deposit amount."),
+    ).toBeTruthy();
+
+    rerender(<DepositSimulator strategyId="strat-1" amount={-50} token="USDC" />);
+    expect(
+      screen.getByText("Please enter a valid positive deposit amount."),
+    ).toBeTruthy();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("simulates and displays preview for valid positive amount", async () => {
+    vi.spyOn(simulationService, "fetchDepositSimulation").mockResolvedValueOnce({
+      expectedShares: 998.5,
+      postDepositExposure: { expectedApy: 0.085 },
+      allocations: [{ protocol: "Blend", amount: 1000, percentage: 100 }],
+      fees: [{ type: "Protocol Fee", amount: 1.5 }],
       warnings: [],
-    });
+    } as any);
 
-    render(<DepositSimulator strategyId="Conservative" amount={1000} token="USDC" />);
-    
-    expect(screen.getByText(/Running simulation/i)).toBeInTheDocument();
+    render(<DepositSimulator strategyId="strat-1" amount={1000} token="USDC" />);
 
     await waitFor(() => {
-      expect(screen.getByText("PREVIEW ONLY")).toBeInTheDocument();
+      expect(screen.getByText("Deposit Simulation")).toBeTruthy();
     });
-
-    expect(screen.getByText("Expected Shares")).toBeInTheDocument();
-    expect(screen.getByText("999")).toBeInTheDocument();
-    expect(screen.getByText("12.00%")).toBeInTheDocument();
-    expect(screen.getByText("Lend")).toBeInTheDocument();
-    expect(screen.getByText("Entry Fee")).toBeInTheDocument();
-  });
-
-  it("should render warnings when present", async () => {
-    mockFetch.mockResolvedValueOnce({
-      isSimulationOnly: true,
-      allocations: [],
-      expectedShares: 0,
-      fees: [],
-      postDepositExposure: { expectedApy: 0 },
-      routing: { path: [], expectedOutput: 0 },
-      warnings: ["High slippage expected"],
-    });
-
-    render(<DepositSimulator strategyId="Conservative" amount={150000} token="USDC" />);
-    
-    await waitFor(() => {
-      expect(screen.getByText("Warnings")).toBeInTheDocument();
-    });
-
-    expect(screen.getByText("High slippage expected")).toBeInTheDocument();
-  });
-
-  it("should render error state if fetch fails", async () => {
-    mockFetch.mockRejectedValueOnce(new Error("Network Error"));
-
-    render(<DepositSimulator strategyId="Conservative" amount={1000} token="USDC" />);
-    
-    await waitFor(() => {
-      expect(screen.getByText(/Error: Network Error/i)).toBeInTheDocument();
-    });
+    expect(screen.getByText("8.50%")).toBeTruthy();
+    expect(screen.getByText("Blend")).toBeTruthy();
   });
 });

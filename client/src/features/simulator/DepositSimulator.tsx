@@ -17,10 +17,12 @@ export const DepositSimulator: React.FC<DepositSimulatorProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  const isInvalidNumber = typeof amount !== "number" || Number.isNaN(amount) || amount < 0;
+
   useEffect(() => {
     let active = true;
     const load = async () => {
-      if (!amount || amount <= 0) {
+      if (isInvalidNumber || !amount || amount <= 0) {
         if (active) setSimulation(null);
         return;
       }
@@ -39,8 +41,15 @@ export const DepositSimulator: React.FC<DepositSimulatorProps> = ({
     };
     load();
     return () => { active = false; };
-  }, [strategyId, amount, token]);
+  }, [strategyId, amount, token, isInvalidNumber]);
 
+  if (isInvalidNumber) {
+    return (
+      <div className="p-4 text-red-500 bg-red-50 rounded-md" role="alert">
+        Please enter a valid positive deposit amount.
+      </div>
+    );
+  }
   if (loading) return <div className="p-4 text-gray-500 animate-pulse">Running simulation...</div>;
   if (error) return <div className="p-4 text-red-500 bg-red-50 rounded-md">Error: {error}</div>;
   if (!simulation) return <div className="p-4 text-gray-400 italic">Enter an amount to see the preview.</div>;
