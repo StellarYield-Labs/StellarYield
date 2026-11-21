@@ -59,4 +59,11 @@ describe("useReducedMotion", () => {
     unmount();
     expect(mq.removeEventListener).toHaveBeenCalledWith("change", expect.any(Function));
   });
+
+  it("falls back safely to false when matchMedia is unavailable or returns null", () => {
+    vi.spyOn(window, "matchMedia").mockReturnValue(undefined as unknown as MediaQueryList);
+    const { result, unmount } = renderHook(() => useReducedMotion());
+    expect(result.current).toBe(false);
+    expect(() => unmount()).not.toThrow();
+  });
 });
